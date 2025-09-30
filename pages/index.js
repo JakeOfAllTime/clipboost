@@ -351,19 +351,33 @@ const ClipBoost = () => {
     setDragState({
       active: true,
       type: dragType,
-      startX: e.clientX,
+      startX: e.clientX || e.touches?.[0]?.clientX || 0,
       anchorSnapshot: { ...anchor }
     });
   };
 
-  // FIXED: Unified drag effect with correct calculation
+  const handleAnchorTouchStart = (e, anchor, dragType) => {
+    e.stopPropagation();
+    setSelectedAnchor(anchor.id);
+    setDragState({
+      active: true,
+      type: dragType,
+      startX: e.touches[0].clientX,
+      anchorSnapshot: { ...anchor }
+    });
+  };
+
+  // FIXED: Unified drag effect with touch support
   useEffect(() => {
     if (!dragState.active) return;
 
     const handleMouseMove = (e) => {
       if (!timelineRef.current) return;
+      const clientX = e.clientX || e.touches?.[0]?.clientX;
+      if (!clientX) return;
+
       const rect = timelineRef.current.getBoundingClientRect();
-      const deltaX = e.clientX - dragState.startX;
+      const deltaX = clientX - dragState.startX;
       const deltaTime = (deltaX / rect.width) * duration;
 
       if (dragState.type === 'timeline') {
@@ -403,16 +417,25 @@ const ClipBoost = () => {
       }
     };
 
+    const handleTouchMove = (e) => {
+      e.preventDefault(); // Prevent scrolling while dragging
+      handleMouseMove(e);
+    };
+
     const handleMouseUp = () => {
       setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleMouseUp);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleMouseUp);
     };
   }, [dragState, anchors, duration, selectedAnchor]);
 
@@ -460,10 +483,15 @@ const ClipBoost = () => {
   };
 
   const getPrecisionRange = (anchor) => {
-    const bufferTime = 30;
+    // Fixed 60-second viewport centered on anchor
+    const viewportDuration = 60;
+    const anchorCenter = (anchor.start + anchor.end) / 2;
+    const viewStart = Math.max(0, anchorCenter - viewportDuration / 2);
+    const viewEnd = Math.min(duration, viewStart + viewportDuration);
+    
     return {
-      start: Math.max(0, anchor.start - bufferTime),
-      end: Math.min(duration, anchor.start + bufferTime)
+      start: viewStart,
+      end: viewEnd
     };
   };
 
@@ -917,12 +945,14 @@ const ClipBoost = () => {
                             {/* Left handle */}
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-left')}
+                              onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-left')}
                               className={`absolute left-0 top-0 bottom-0 w-2 ${colors.handle} cursor-ew-resize hover:opacity-80 -ml-1 z-30`}
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Right handle */}
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-right')}
+                              onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-right')}
                               className={`absolute right-0 top-0 bottom-0 w-2 ${colors.handle} cursor-ew-resize hover:opacity-80 -mr-1 z-30`}
                               onClick={(e) => e.stopPropagation()}
                             />
