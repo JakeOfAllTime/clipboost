@@ -521,10 +521,21 @@ const ClipBoost = () => {
 
   const handlePrecisionHandleMouseDown = (e, handleType) => {
     e.stopPropagation();
+    const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
     setDragState({
       active: true,
       type: `precision-${handleType}`,
-      startX: e.clientX,
+      startX: clientX,
+      anchorSnapshot: { ...precisionAnchor }
+    });
+  };
+
+  const handlePrecisionHandleTouchStart = (e, handleType) => {
+    e.stopPropagation();
+    setDragState({
+      active: true,
+      type: `precision-${handleType}`,
+      startX: e.touches[0].clientX,
       anchorSnapshot: { ...precisionAnchor }
     });
   };
@@ -1348,6 +1359,7 @@ const ClipBoost = () => {
                     {/* Start handle */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
+                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
                       className="absolute left-0 top-0 bottom-0 w-2 bg-green-500 cursor-ew-resize hover:bg-green-400 transition -ml-1 z-30"
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -1355,6 +1367,7 @@ const ClipBoost = () => {
                     {/* End handle */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
+                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
                       className="absolute right-0 top-0 bottom-0 w-2 bg-red-500 cursor-ew-resize hover:bg-red-400 transition -mr-1 z-30"
                       onClick={(e) => e.stopPropagation()}
                     />
