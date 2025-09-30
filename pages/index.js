@@ -67,6 +67,7 @@ const ClipBoost = () => {
 
   // Platform configurations
   const platforms = {
+    original: { name: 'Original', aspect: 'original', color: 'from-slate-700 to-slate-900' },
     tiktok: { name: 'TikTok', aspect: '9:16', color: 'from-black to-gray-800' },
     instagram: { name: 'Instagram Reels', aspect: '9:16', color: 'from-pink-500 to-purple-600' },
     youtube: { name: 'YouTube Shorts', aspect: '9:16', color: 'from-red-500 to-red-700' }
@@ -367,62 +368,134 @@ const ClipBoost = () => {
     });
   };
 
-  // FIXED: Unified drag effect with touch support
+  // FIXED: Unified drag effect with requestAnimationFrame for smooth performance
   useEffect(() => {
     if (!dragState.active) return;
 
+    let rafId = null;
+    let lastClientX = dragState.startX;
+
     const handleMouseMove = (e) => {
-      if (!timelineRef.current) return;
       const clientX = e.clientX || e.touches?.[0]?.clientX;
       if (!clientX) return;
+      lastClientX = clientX;
 
-      const rect = timelineRef.current.getBoundingClientRect();
-      const deltaX = clientX - dragState.startX;
-      const deltaTime = (deltaX / rect.width) * duration;
+      // Cancel previous frame request
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
 
+      // Schedule update for next frame
+      rafId = requestAnimationFrame(() => {
+        processMouseMove(lastClientX);
+      });
+    };
+
+    const processMouseMove = (clientX) => {
       if (dragState.type === 'timeline') {
-        seekToPosition(e);
+        if (timelineRef.current && videoRef.current) {
+          const rect = timelineRef.current.getBoundingClientRect();
+          const x = clientX - rect.left;
+          const percent = Math.max(0, Math.min(1, x / rect.width));
+          const time = percent * duration;
+          videoRef.current.currentTime = time;
+          setCurrentTime(time);
+        }
+      } else if (dragState.type === 'precision-timeline') {
+        if (precisionTimelineRef.current && precisionAnchor) {
+          const rect = precisionTimelineRef.current.getBoundingClientRect();
+          const x = clientX - rect.left;
+          const percent = Math.max(0, Math.min(1, x / rect.width));
+          const range = getPrecisionRange(precisionAnchor);
+          const time = range.start + (percent * (range.end - range.start));
+          setPrecisionTime(time);
+          if (precisionVideoRef.current) {
+            precisionVideoRef.current.currentTime = time;
+          }
+        }
       } else if (dragState.type.startsWith('anchor-')) {
-        const anchor = anchors.find(a => a.id === selectedAnchor);
         const snapshot = dragState.anchorSnapshot;
-        if (!anchor || !snapshot) return;
+        if (!snapshot) return;
 
-        let newStart = anchor.start;
-        let newEnd = anchor.end;
+        const isPrecision = showPrecisionModal;
+        const rect = isPrecision 
+          ? precisionTimelineRef.current?.getBoundingClientRect()
+          : timelineRef.current?.getBoundingClientRect();
+        
+        if (!rect) return;
+
+        const deltaX = clientX - dragState.startX;
+        
+        let deltaTime;
+        if (isPrecision) {
+          const range = getPrecisionRange(snapshot);
+          deltaTime = (deltaX / rect.width) * (range.end - range.start);
+        } else {
+          deltaTime = (deltaX / rect.width) * duration;
+        }
+
+        let newStart = snapshot.start;
+        let newEnd = snapshot.end;
 
         if (dragState.type === 'anchor-left') {
           newStart = Math.max(0, Math.min(snapshot.end - 1, snapshot.start + deltaTime));
+          if (isPrecision) {
+            const range = getPrecisionRange(snapshot);
+            newStart = Math.max(range.start, newStart);
+          }
         } else if (dragState.type === 'anchor-right') {
           newEnd = Math.max(snapshot.start + 1, Math.min(duration, snapshot.end + deltaTime));
+          if (isPrecision) {
+            const range = getPrecisionRange(snapshot);
+            newEnd = Math.min(range.end, newEnd);
+          }
         } else if (dragState.type === 'anchor-move') {
           const anchorDuration = snapshot.end - snapshot.start;
           newStart = Math.max(0, Math.min(duration - anchorDuration, snapshot.start + deltaTime));
           newEnd = newStart + anchorDuration;
         }
 
-        // Check overlaps
-        const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
-        const wouldOverlap = otherAnchors.some(a =>
-          (newStart >= a.start && newStart < a.end) ||
-          (newEnd > a.start && newEnd <= a.end) ||
-          (newStart <= a.start && newEnd >= a.end)
-        );
+        if (isPrecision) {
+          if (dragState.type === 'anchor-left') {
+            // Directly update the actual anchor in main array
+            const updated = anchors.map(a =>
+              a.id === selectedAnchor ? { ...a, start: newStart } : a
+            );
+            setAnchors(updated);
+          } else if (dragState.type === 'anchor-right') {
+            // Directly update the actual anchor in main array
+            const updated = anchors.map(a =>
+              a.id === selectedAnchor ? { ...a, end: newEnd } : a
+            );
+            setAnchors(updated);
+          }
+        } else {
+          const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
+          const wouldOverlap = otherAnchors.some(a =>
+            (newStart >= a.start && newStart < a.end) ||
+            (newEnd > a.start && newEnd <= a.end) ||
+            (newStart <= a.start && newEnd >= a.end)
+          );
 
-        if (!wouldOverlap) {
-          const updated = anchors.map(a =>
-            a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
-          ).sort((a, b) => a.start - b.start);
-          setAnchors(updated);
+          if (!wouldOverlap) {
+            const updated = anchors.map(a =>
+              a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
+            ).sort((a, b) => a.start - b.start);
+            setAnchors(updated);
+          }
         }
       }
     };
 
     const handleTouchMove = (e) => {
-      e.preventDefault(); // Prevent scrolling while dragging
+      e.preventDefault();
       handleMouseMove(e);
     };
 
     const handleMouseUp = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
       setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
     };
 
@@ -432,12 +505,15 @@ const ClipBoost = () => {
     document.addEventListener('touchend', handleMouseUp);
 
     return () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleMouseUp);
     };
-  }, [dragState, anchors, duration, selectedAnchor]);
+  }, [dragState, anchors, duration, selectedAnchor, showPrecisionModal, precisionAnchor]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -475,9 +551,9 @@ const ClipBoost = () => {
     }
   };
 
-  // Precision modal handlers
+  // Precision modal handlers - isolated state
   const openPrecisionModal = (anchor) => {
-    setPrecisionAnchor({ ...anchor });
+    setPrecisionAnchor({ ...anchor }); // Create isolated copy
     setPrecisionTime(anchor.start);
     setShowPrecisionModal(true);
   };
@@ -519,48 +595,113 @@ const ClipBoost = () => {
     seekToPrecisionPosition(e);
   };
 
+  // Separate precision drag state - completely isolated
+  const [precisionDragState, setPrecisionDragState] = useState({
+    active: false,
+    type: null,
+    startX: 0,
+    startAnchor: null
+  });
+
   const handlePrecisionHandleMouseDown = (e, handleType) => {
     e.stopPropagation();
     const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
-    setDragState({
+    setPrecisionDragState({
       active: true,
-      type: `precision-${handleType}`,
+      type: handleType, // 'start' or 'end'
       startX: clientX,
-      anchorSnapshot: { ...precisionAnchor }
+      startAnchor: { ...precisionAnchor }
     });
   };
 
   const handlePrecisionHandleTouchStart = (e, handleType) => {
     e.stopPropagation();
-    setDragState({
+    setPrecisionDragState({
       active: true,
-      type: `precision-${handleType}`,
+      type: handleType,
       startX: e.touches[0].clientX,
-      anchorSnapshot: { ...precisionAnchor }
+      startAnchor: { ...precisionAnchor }
     });
   };
+
+  // Isolated precision drag effect
+  useEffect(() => {
+    if (!precisionDragState.active || !precisionDragState.startAnchor) return;
+
+    let rafId = null;
+    let lastClientX = precisionDragState.startX;
+
+    const handleMouseMove = (e) => {
+      const clientX = e.clientX || e.touches?.[0]?.clientX;
+      if (!clientX) return;
+      lastClientX = clientX;
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (!precisionTimelineRef.current) return;
+        
+        const rect = precisionTimelineRef.current.getBoundingClientRect();
+        const deltaX = lastClientX - precisionDragState.startX;
+        const range = getPrecisionRange(precisionDragState.startAnchor);
+        const deltaTime = (deltaX / rect.width) * (range.end - range.start);
+
+        const snapshot = precisionDragState.startAnchor;
+
+        if (precisionDragState.type === 'start') {
+          const newStart = Math.max(
+            range.start,
+            Math.min(snapshot.end - 1, snapshot.start + deltaTime)
+          );
+          setPrecisionAnchor(prev => ({ ...snapshot, start: newStart }));
+        } else if (precisionDragState.type === 'end') {
+          const newEnd = Math.max(
+            snapshot.start + 1,
+            Math.min(range.end, snapshot.end + deltaTime)
+          );
+          setPrecisionAnchor(prev => ({ ...snapshot, end: newEnd }));
+        }
+      });
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      handleMouseMove(e);
+    };
+
+    const handleMouseUp = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      setPrecisionDragState({ active: false, type: null, startX: 0, startAnchor: null });
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [precisionDragState, duration]);
 
   useEffect(() => {
     if (!dragState.active || !dragState.type.startsWith('precision')) return;
 
     const handleMouseMove = (e) => {
+      const clientX = e.clientX || e.touches?.[0]?.clientX;
+      if (!clientX) return;
+
       if (dragState.type === 'precision-timeline') {
         seekToPrecisionPosition(e);
-      } else if (dragState.type === 'precision-start' || dragState.type === 'precision-end') {
-        if (!precisionTimelineRef.current || !dragState.anchorSnapshot) return;
-        const rect = precisionTimelineRef.current.getBoundingClientRect();
-        const deltaX = e.clientX - dragState.startX;
-        const range = getPrecisionRange(dragState.anchorSnapshot);
-        const deltaTime = (deltaX / rect.width) * (range.end - range.start);
-
-        if (dragState.type === 'precision-start') {
-          const newStart = Math.max(0, Math.min(precisionAnchor.end - 1, dragState.anchorSnapshot.start + deltaTime));
-          setPrecisionAnchor(prev => ({ ...prev, start: newStart }));
-        } else {
-          const newEnd = Math.max(precisionAnchor.start + 1, Math.min(duration, dragState.anchorSnapshot.end + deltaTime));
-          setPrecisionAnchor(prev => ({ ...prev, end: newEnd }));
-        }
       }
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      handleMouseMove(e);
     };
 
     const handleMouseUp = () => {
@@ -569,10 +710,14 @@ const ClipBoost = () => {
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleMouseUp);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleMouseUp);
     };
   }, [dragState, precisionAnchor, duration]);
 
@@ -878,21 +1023,21 @@ const ClipBoost = () => {
             <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">Timeline</h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setShowTrimModal(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2"
+                    className="px-3 py-2 md:px-4 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
                   >
                     <Scissors size={16} />
-                    Trim
+                    <span className="hidden sm:inline">Trim</span>
                   </button>
                   <button
                     onClick={addAnchor}
                     disabled={!duration}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 md:px-4 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     <Sparkles size={16} />
-                    Add Anchor
+                    <span className="hidden sm:inline">Add Anchor</span>
                   </button>
                   {anchors.length > 0 && (
                     <button
@@ -903,10 +1048,10 @@ const ClipBoost = () => {
                           setPreviewAnchor(null);
                         }
                       }}
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
+                      className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm"
                     >
                       <Trash2 size={16} />
-                      Clear
+                      <span className="hidden sm:inline">Clear</span>
                     </button>
                   )}
                 </div>
@@ -1123,7 +1268,7 @@ const ClipBoost = () => {
             </div>
 
             {/* Export Button */}
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               {anchors.length > 0 && (
                 <button
                   onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
@@ -1138,12 +1283,15 @@ const ClipBoost = () => {
                     {isPreviewMode ? (
                       <>
                         <Pause size={20} />
-                        Stop Preview {previewAnchorIndex + 1}/{anchors.length}
+                        <span className="hidden sm:inline">Stop Preview</span>
+                        <span className="sm:hidden">Stop</span>
+                        <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
                       </>
                     ) : (
                       <>
                         <Play size={20} />
-                        Preview Mode
+                        <span className="hidden sm:inline">Preview Mode</span>
+                        <span className="sm:hidden">Preview</span>
                       </>
                     )}
                   </span>
@@ -1163,7 +1311,8 @@ const ClipBoost = () => {
                 ) : (
                   <span className="flex items-center justify-center gap-2">
                     <Download size={20} />
-                    Export Video
+                    <span className="hidden sm:inline">Export Video</span>
+                    <span className="sm:inline md:hidden">Export</span>
                   </span>
                 )}
               </button>
@@ -1311,11 +1460,54 @@ const ClipBoost = () => {
               {/* Controls */}
               <div className="flex items-center justify-center gap-4 mb-4">
                 <button
+                  onMouseDown={() => {
+                    if (!precisionVideoRef.current) return;
+                    precisionVideoRef.current.currentTime -= 1/30;
+                    setPrecisionTime(precisionVideoRef.current.currentTime);
+                    
+                    const interval = setInterval(() => {
+                      if (precisionVideoRef.current) {
+                        precisionVideoRef.current.currentTime -= 1/30;
+                        setPrecisionTime(precisionVideoRef.current.currentTime);
+                      }
+                    }, 100);
+                    
+                    const cleanup = () => clearInterval(interval);
+                    document.addEventListener('mouseup', cleanup, { once: true });
+                  }}
+                  className="p-2 bg-slate-700 rounded hover:bg-slate-600 transition"
+                >
+                  ← Frame
+                </button>
+
+                <button
                   onClick={togglePrecisionPlay}
                   className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition"
                 >
                   {precisionPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
+
+                <button
+                  onMouseDown={() => {
+                    if (!precisionVideoRef.current) return;
+                    precisionVideoRef.current.currentTime += 1/30;
+                    setPrecisionTime(precisionVideoRef.current.currentTime);
+                    
+                    const interval = setInterval(() => {
+                      if (precisionVideoRef.current) {
+                        precisionVideoRef.current.currentTime += 1/30;
+                        setPrecisionTime(precisionVideoRef.current.currentTime);
+                      }
+                    }, 100);
+                    
+                    const cleanup = () => clearInterval(interval);
+                    document.addEventListener('mouseup', cleanup, { once: true });
+                  }}
+                  className="p-2 bg-slate-700 rounded hover:bg-slate-600 transition"
+                >
+                  Frame →
+                </button>
+
                 <div className="text-sm text-gray-300">
                   {precisionPlaying ? 'Playing' : 'Paused'} • Loops anchor segment
                 </div>
@@ -1429,10 +1621,9 @@ const ClipBoost = () => {
                   <button
                     key={key}
                     onClick={() => exportVideo(key)}
-                    className={`w-full px-6 py-4 bg-gradient-to-r ${platform.color} rounded-lg font-semibold hover:scale-105 transition text-left`}
+                    className={`w-full px-6 py-4 bg-gradient-to-r ${platform.color} rounded-lg font-semibold hover:scale-105 transition text-center`}
                   >
                     <div className="text-lg">{platform.name}</div>
-                    <div className="text-sm opacity-80">{platform.aspect} format</div>
                   </button>
                 ))}
               </div>
