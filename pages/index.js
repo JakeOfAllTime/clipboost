@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, RotateCcw, RotateCw, Save, FolderOpen } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -34,11 +34,16 @@ const ClipBoost = () => {
   const [selectedAnchor, setSelectedAnchor] = useState(null);
   const [previewAnchor, setPreviewAnchor] = useState(null);
 
+  // Undo/Redo state
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
   // Precision modal state
   const [showPrecisionModal, setShowPrecisionModal] = useState(false);
   const [precisionAnchor, setPrecisionAnchor] = useState(null);
   const [precisionTime, setPrecisionTime] = useState(0);
   const [precisionPlaying, setPrecisionPlaying] = useState(false);
+  const [selectedHandle, setSelectedHandle] = useState('end'); // 'start' or 'end'
 
   // Unified drag state
   const [dragState, setDragState] = useState({
@@ -48,10 +53,23 @@ const ClipBoost = () => {
     anchorSnapshot: null
   });
 
+  // Separate precision drag state
+  const [precisionDragState, setPrecisionDragState] = useState({
+    active: false,
+    type: null,
+    startX: 0,
+    startAnchor: null
+  });
+
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
+
+  // Auto-save state
+  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
+  const [autoSaveData, setAutoSaveData] = useState(null);
+  const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -64,6 +82,7 @@ const ClipBoost = () => {
   const musicRef = useRef(null);
   const timelineRef = useRef(null);
   const precisionTimelineRef = useRef(null);
+  const loadConfigInputRef = useRef(null);
 
   // Platform configurations
   const platforms = {
@@ -98,6 +117,73 @@ const ClipBoost = () => {
     loadFFmpeg();
   }, []);
 
+  // Check for auto-save on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('clipboost-autosave');
+      if (saved) {
+        const data = JSON.parse(saved);
+        // Check if autosave is less than 7 days old
+        const daysSince = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
+        if (daysSince < 7 && data.anchors && data.anchors.length > 0) {
+          setAutoSaveData(data);
+          setShowRestorePrompt(true);
+        } else {
+          // Clear old autosave
+          localStorage.removeItem('clipboost-autosave');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading autosave:', error);
+    }
+  }, []);
+
+  // Auto-save anchors when they change
+  useEffect(() => {
+    if (anchors.length > 0 && video) {
+      try {
+        const saveData = {
+          anchors,
+          musicStartTime,
+          audioBalance,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('clipboost-autosave', JSON.stringify(saveData));
+        
+        // Show indicator briefly
+        setShowAutoSaveIndicator(true);
+        setTimeout(() => setShowAutoSaveIndicator(false), 2000);
+      } catch (error) {
+        console.error('Error auto-saving:', error);
+      }
+    }
+  }, [anchors, musicStartTime, audioBalance, video]);
+
+  // Clear autosave after successful export
+  const clearAutoSave = () => {
+    try {
+      localStorage.removeItem('clipboost-autosave');
+    } catch (error) {
+      console.error('Error clearing autosave:', error);
+    }
+  };
+
+  // Restore from autosave
+  const restoreAutoSave = () => {
+    if (autoSaveData) {
+      setAnchors(autoSaveData.anchors);
+      saveToHistory(autoSaveData.anchors);
+      if (autoSaveData.musicStartTime !== undefined) setMusicStartTime(autoSaveData.musicStartTime);
+      if (autoSaveData.audioBalance !== undefined) setAudioBalance(autoSaveData.audioBalance);
+      setShowRestorePrompt(false);
+    }
+  };
+
+  const dismissAutoSave = () => {
+    setShowRestorePrompt(false);
+    clearAutoSave();
+  };
+
   // Utility functions
   const formatTime = (seconds) => {
     if (seconds == null || isNaN(seconds)) return '0:00';
@@ -118,6 +204,78 @@ const ClipBoost = () => {
     return isSelected ? { ...color, bg: color.bg.replace('/30', '/50') } : color;
   };
 
+  // Undo/Redo functions
+  const saveToHistory = (newAnchors) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(JSON.parse(JSON.stringify(newAnchors)));
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setAnchors(JSON.parse(JSON.stringify(prevState)));
+      setHistoryIndex(historyIndex - 1);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setAnchors(JSON.parse(JSON.stringify(nextState)));
+      setHistoryIndex(historyIndex + 1);
+    }
+  };
+
+  // Save/Load functions
+  const saveConfiguration = () => {
+    const config = {
+      anchors: anchors,
+      musicStartTime: musicStartTime,
+      audioBalance: audioBalance,
+      trimStart: trimStart,
+      trimEnd: trimEnd,
+      duration: duration,
+      version: '1.0',
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clipboost-config-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const loadConfiguration = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const config = JSON.parse(event.target.result);
+        if (config.anchors) {
+          setAnchors(config.anchors);
+          saveToHistory(config.anchors);
+        }
+        if (config.musicStartTime !== undefined) setMusicStartTime(config.musicStartTime);
+        if (config.audioBalance !== undefined) setAudioBalance(config.audioBalance);
+        if (config.trimStart !== undefined) setTrimStart(config.trimStart);
+        if (config.trimEnd !== undefined) setTrimEnd(config.trimEnd);
+      } catch (error) {
+        alert('Error loading configuration file');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // Video handlers
   const handleVideoUpload = (e) => {
     const file = e.target.files[0];
@@ -133,6 +291,8 @@ const ClipBoost = () => {
     setVideo(file);
     setVideoUrl(url);
     setAnchors([]);
+    setHistory([]);
+    setHistoryIndex(-1);
     setSelectedAnchor(null);
     setPreviewAnchor(null);
     setCurrentTime(0);
@@ -176,16 +336,14 @@ const ClipBoost = () => {
     setIsPreviewMode(true);
     setPreviewAnchorIndex(0);
     
-    // Start music if available
     if (music && musicRef.current) {
       musicRef.current.currentTime = musicStartTime;
       musicRef.current.volume = audioBalance / 100;
       musicRef.current.play();
     }
 
-    // Start video at first anchor, mute original audio
     if (videoRef.current) {
-      videoRef.current.volume = 0; // Mute original video audio during preview
+      videoRef.current.volume = 0;
       videoRef.current.currentTime = anchors[0].start;
       videoRef.current.play();
     }
@@ -195,13 +353,11 @@ const ClipBoost = () => {
     setIsPreviewMode(false);
     setPreviewAnchorIndex(0);
     
-    // Stop music
     if (musicRef.current) {
       musicRef.current.pause();
       musicRef.current.currentTime = musicStartTime;
     }
 
-    // Restore video audio
     if (videoRef.current) {
       videoRef.current.volume = (100 - audioBalance) / 100;
       videoRef.current.pause();
@@ -213,7 +369,6 @@ const ClipBoost = () => {
     }
   };
 
-  // Preview mode effect - handles anchor jumping
   useEffect(() => {
     if (!isPreviewMode || anchors.length === 0) return;
 
@@ -225,22 +380,18 @@ const ClipBoost = () => {
 
       const currentTime = videoRef.current.currentTime;
 
-      // If we've reached the end of current anchor
       if (currentTime >= currentAnchor.end) {
         const nextIndex = previewAnchorIndex + 1;
         
-        // If there's another anchor, jump to it
         if (nextIndex < anchors.length) {
           setPreviewAnchorIndex(nextIndex);
           videoRef.current.currentTime = anchors[nextIndex].start;
         } else {
-          // Finished all anchors, stop preview
           stopPreviewMode();
         }
       }
     };
 
-    // Check every 100ms for smooth transitions
     previewIntervalRef.current = setInterval(checkAndJump, 100);
 
     return () => {
@@ -279,7 +430,7 @@ const ClipBoost = () => {
     }
   };
 
-  // Timeline interaction - FIXED drag calculation
+  // Timeline interaction
   const handleTimelineMouseDown = (e) => {
     if (!timelineRef.current || !videoRef.current) return;
     setDragState({
@@ -324,11 +475,14 @@ const ClipBoost = () => {
 
     const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
     setAnchors(updated);
+    saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
   };
 
   const deleteAnchor = (anchorId) => {
-    setAnchors(anchors.filter(a => a.id !== anchorId));
+    const updated = anchors.filter(a => a.id !== anchorId);
+    setAnchors(updated);
+    saveToHistory(updated);
     if (selectedAnchor === anchorId) {
       setSelectedAnchor(null);
     }
@@ -368,7 +522,7 @@ const ClipBoost = () => {
     });
   };
 
-  // FIXED: Unified drag effect with requestAnimationFrame for smooth performance
+  // Unified drag effect
   useEffect(() => {
     if (!dragState.active) return;
 
@@ -380,12 +534,10 @@ const ClipBoost = () => {
       if (!clientX) return;
       lastClientX = clientX;
 
-      // Cancel previous frame request
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
 
-      // Schedule update for next frame
       rafId = requestAnimationFrame(() => {
         processMouseMove(lastClientX);
       });
@@ -401,88 +553,41 @@ const ClipBoost = () => {
           videoRef.current.currentTime = time;
           setCurrentTime(time);
         }
-      } else if (dragState.type === 'precision-timeline') {
-        if (precisionTimelineRef.current && precisionAnchor) {
-          const rect = precisionTimelineRef.current.getBoundingClientRect();
-          const x = clientX - rect.left;
-          const percent = Math.max(0, Math.min(1, x / rect.width));
-          const range = getPrecisionRange(precisionAnchor);
-          const time = range.start + (percent * (range.end - range.start));
-          setPrecisionTime(time);
-          if (precisionVideoRef.current) {
-            precisionVideoRef.current.currentTime = time;
-          }
-        }
       } else if (dragState.type.startsWith('anchor-')) {
         const snapshot = dragState.anchorSnapshot;
         if (!snapshot) return;
 
-        const isPrecision = showPrecisionModal;
-        const rect = isPrecision 
-          ? precisionTimelineRef.current?.getBoundingClientRect()
-          : timelineRef.current?.getBoundingClientRect();
-        
+        const rect = timelineRef.current?.getBoundingClientRect();
         if (!rect) return;
 
         const deltaX = clientX - dragState.startX;
-        
-        let deltaTime;
-        if (isPrecision) {
-          const range = getPrecisionRange(snapshot);
-          deltaTime = (deltaX / rect.width) * (range.end - range.start);
-        } else {
-          deltaTime = (deltaX / rect.width) * duration;
-        }
+        const deltaTime = (deltaX / rect.width) * duration;
 
         let newStart = snapshot.start;
         let newEnd = snapshot.end;
 
         if (dragState.type === 'anchor-left') {
           newStart = Math.max(0, Math.min(snapshot.end - 1, snapshot.start + deltaTime));
-          if (isPrecision) {
-            const range = getPrecisionRange(snapshot);
-            newStart = Math.max(range.start, newStart);
-          }
         } else if (dragState.type === 'anchor-right') {
           newEnd = Math.max(snapshot.start + 1, Math.min(duration, snapshot.end + deltaTime));
-          if (isPrecision) {
-            const range = getPrecisionRange(snapshot);
-            newEnd = Math.min(range.end, newEnd);
-          }
         } else if (dragState.type === 'anchor-move') {
           const anchorDuration = snapshot.end - snapshot.start;
           newStart = Math.max(0, Math.min(duration - anchorDuration, snapshot.start + deltaTime));
           newEnd = newStart + anchorDuration;
         }
 
-        if (isPrecision) {
-          if (dragState.type === 'anchor-left') {
-            // Directly update the actual anchor in main array
-            const updated = anchors.map(a =>
-              a.id === selectedAnchor ? { ...a, start: newStart } : a
-            );
-            setAnchors(updated);
-          } else if (dragState.type === 'anchor-right') {
-            // Directly update the actual anchor in main array
-            const updated = anchors.map(a =>
-              a.id === selectedAnchor ? { ...a, end: newEnd } : a
-            );
-            setAnchors(updated);
-          }
-        } else {
-          const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
-          const wouldOverlap = otherAnchors.some(a =>
-            (newStart >= a.start && newStart < a.end) ||
-            (newEnd > a.start && newEnd <= a.end) ||
-            (newStart <= a.start && newEnd >= a.end)
-          );
+        const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
+        const wouldOverlap = otherAnchors.some(a =>
+          (newStart >= a.start && newStart < a.end) ||
+          (newEnd > a.start && newEnd <= a.end) ||
+          (newStart <= a.start && newEnd >= a.end)
+        );
 
-          if (!wouldOverlap) {
-            const updated = anchors.map(a =>
-              a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
-            ).sort((a, b) => a.start - b.start);
-            setAnchors(updated);
-          }
+        if (!wouldOverlap) {
+          const updated = anchors.map(a =>
+            a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
+          ).sort((a, b) => a.start - b.start);
+          setAnchors(updated);
         }
       }
     };
@@ -495,6 +600,9 @@ const ClipBoost = () => {
     const handleMouseUp = () => {
       if (rafId) {
         cancelAnimationFrame(rafId);
+      }
+      if (dragState.type.startsWith('anchor-')) {
+        saveToHistory(anchors);
       }
       setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
     };
@@ -513,7 +621,7 @@ const ClipBoost = () => {
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleMouseUp);
     };
-  }, [dragState, anchors, duration, selectedAnchor, showPrecisionModal, precisionAnchor]);
+  }, [dragState, anchors, duration, selectedAnchor]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -551,16 +659,20 @@ const ClipBoost = () => {
     }
   };
 
-  // Precision modal handlers - isolated state
+  // Precision modal handlers
   const openPrecisionModal = (anchor) => {
-    setPrecisionAnchor({ ...anchor }); // Create isolated copy
-    setPrecisionTime(anchor.start);
+    setPrecisionAnchor({ ...anchor });
+    setPrecisionTime(anchor.end); // Start at end position (red handle)
+    setSelectedHandle('end'); // Red handle selected by default
     setShowPrecisionModal(true);
+    if (precisionVideoRef.current) {
+      precisionVideoRef.current.currentTime = anchor.end;
+    }
   };
 
   const getPrecisionRange = (anchor) => {
-    // Fixed 60-second viewport centered on anchor
-    const viewportDuration = 60;
+    const anchorDuration = anchor.end - anchor.start;
+    const viewportDuration = Math.max(60, anchorDuration + 20);
     const anchorCenter = (anchor.start + anchor.end) / 2;
     const viewStart = Math.max(0, anchorCenter - viewportDuration / 2);
     const viewEnd = Math.min(duration, viewStart + viewportDuration);
@@ -595,20 +707,12 @@ const ClipBoost = () => {
     seekToPrecisionPosition(e);
   };
 
-  // Separate precision drag state - completely isolated
-  const [precisionDragState, setPrecisionDragState] = useState({
-    active: false,
-    type: null,
-    startX: 0,
-    startAnchor: null
-  });
-
   const handlePrecisionHandleMouseDown = (e, handleType) => {
     e.stopPropagation();
     const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
     setPrecisionDragState({
       active: true,
-      type: handleType, // 'start' or 'end'
+      type: handleType,
       startX: clientX,
       startAnchor: { ...precisionAnchor }
     });
@@ -755,6 +859,7 @@ const ClipBoost = () => {
         : a
     ).sort((a, b) => a.start - b.start);
     setAnchors(updated);
+    saveToHistory(updated);
     setShowPrecisionModal(false);
     setPrecisionAnchor(null);
   };
@@ -787,6 +892,8 @@ const ClipBoost = () => {
       setShowTrimModal(false);
       setCurrentTime(0);
       setAnchors([]);
+      setHistory([]);
+      setHistoryIndex(-1);
 
     } catch (error) {
       console.error('Trim error:', error);
@@ -808,7 +915,6 @@ const ClipBoost = () => {
     try {
       await ffmpeg.writeFile('input.mp4', await fetchFile(video));
 
-      // Generate clip plan
       let clips = [];
       if (anchors.length > 0) {
         clips = anchors.map(a => ({ start: a.start, end: a.end }));
@@ -816,7 +922,6 @@ const ClipBoost = () => {
         clips = [{ start: 0, end: Math.min(60, duration) }];
       }
 
-      // Extract clips - OPTIMIZED: seek before input for speed
       const clipFiles = [];
       for (let i = 0; i < clips.length; i++) {
         const clip = clips[i];
@@ -836,11 +941,9 @@ const ClipBoost = () => {
         clipFiles.push(outputName);
       }
 
-      // Concatenate clips
       const concatList = clipFiles.map(f => `file '${f}'`).join('\n');
       await ffmpeg.writeFile('concat.txt', new TextEncoder().encode(concatList));
 
-      // Mix with music if present
       if (music) {
         await ffmpeg.writeFile('music.mp3', await fetchFile(music));
 
@@ -873,7 +976,6 @@ const ClipBoost = () => {
         ]);
       }
 
-      // Apply platform formatting
       const platform = platforms[platformKey];
       let finalFile = 'output.mp4';
 
@@ -889,7 +991,6 @@ const ClipBoost = () => {
         finalFile = 'formatted.mp4';
       }
 
-      // Download
       const data = await ffmpeg.readFile(finalFile);
       const blob = new Blob([data.buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
@@ -904,6 +1005,9 @@ const ClipBoost = () => {
 
       setProgress(100);
       setTimeout(() => setProgress(0), 1000);
+      
+      // Clear autosave after successful export
+      clearAutoSave();
 
     } catch (error) {
       console.error('Export error:', error);
@@ -919,6 +1023,48 @@ const ClipBoost = () => {
       if (!video) return;
       if (e.target.tagName === 'INPUT') return;
 
+      // Check if precision modal is open
+      if (showPrecisionModal) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          togglePrecisionPlay();
+        } else if (e.code === 'ArrowLeft' && precisionVideoRef.current && precisionAnchor) {
+          e.preventDefault();
+          const newTime = precisionAnchor[selectedHandle] - 1/30;
+          const range = getPrecisionRange(precisionAnchor);
+          
+          if (selectedHandle === 'start') {
+            const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+            setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+            setPrecisionTime(constrainedTime);
+            precisionVideoRef.current.currentTime = constrainedTime;
+          } else {
+            const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+            setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+            setPrecisionTime(constrainedTime);
+            precisionVideoRef.current.currentTime = constrainedTime;
+          }
+        } else if (e.code === 'ArrowRight' && precisionVideoRef.current && precisionAnchor) {
+          e.preventDefault();
+          const newTime = precisionAnchor[selectedHandle] + 1/30;
+          const range = getPrecisionRange(precisionAnchor);
+          
+          if (selectedHandle === 'start') {
+            const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+            setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+            setPrecisionTime(constrainedTime);
+            precisionVideoRef.current.currentTime = constrainedTime;
+          } else {
+            const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+            setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+            setPrecisionTime(constrainedTime);
+            precisionVideoRef.current.currentTime = constrainedTime;
+          }
+        }
+        return;
+      }
+
+      // Main timeline controls
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
@@ -931,14 +1077,19 @@ const ClipBoost = () => {
       } else if ((e.code === 'Delete' || e.code === 'Backspace') && selectedAnchor) {
         e.preventDefault();
         deleteAnchor(selectedAnchor);
+      } else if (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.ctrlKey && e.shiftKey && e.code === 'KeyZ') || (e.ctrlKey && e.code === 'KeyY')) {
+        e.preventDefault();
+        redo();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [video, selectedAnchor, currentTime, duration, isPlaying]);
+  }, [video, selectedAnchor, currentTime, duration, isPlaying, showPrecisionModal, precisionPlaying, historyIndex, selectedHandle, precisionAnchor]);
 
-  // Calculate stats
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
@@ -953,7 +1104,44 @@ const ClipBoost = () => {
           {!ffmpegLoaded && (
             <p className="text-sm text-yellow-400 mt-2">Loading video processor...</p>
           )}
+          
+          {/* Auto-save indicator */}
+          {showAutoSaveIndicator && (
+            <div className="mt-2 inline-block px-3 py-1 bg-green-600/20 border border-green-600/50 rounded-lg text-xs text-green-400">
+              ✓ Auto-saved
+            </div>
+          )}
         </div>
+
+        {/* Restore prompt */}
+        {showRestorePrompt && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md mx-4">
+              <h3 className="text-xl font-semibold mb-4">Restore Previous Work?</h3>
+              <p className="text-gray-300 mb-2">
+                We found {autoSaveData?.anchors?.length || 0} anchor{autoSaveData?.anchors?.length === 1 ? '' : 's'} from your previous session.
+              </p>
+              <p className="text-sm text-gray-400 mb-6">
+                Saved {autoSaveData ? Math.floor((Date.now() - autoSaveData.timestamp) / (1000 * 60)) : 0} minutes ago
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={dismissAutoSave}
+                  className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+                >
+                  Start Fresh
+                </button>
+                <button
+                  onClick={restoreAutoSave}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition"
+                >
+                  Restore Work
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Upload */}
         {!video && (
@@ -976,25 +1164,114 @@ const ClipBoost = () => {
         {/* Main Interface */}
         {video && (
           <div className="space-y-6">
-            {/* Video Preview */}
+            {/* Top Controls - Music & Change Video */}
             <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">Video Preview</h3>
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                {/* Music Section */}
+                <div className="flex-1 w-full">
+                  {!music ? (
+                    <div>
+                      <label className="block px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition text-center text-sm">
+                        🎵 Add Music (Optional)
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={handleMusicUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-xs text-gray-400 text-center mt-2">Add music to access volume and timing controls</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-300">🎵 {music.name}</span>
+                        <button
+                          onClick={() => {
+                            setMusic(null);
+                            setMusicUrl(null);
+                          }}
+                          className="text-gray-400 hover:text-white"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <audio
+                        ref={musicRef}
+                        src={musicUrl}
+                        onLoadedMetadata={handleMusicLoadedMetadata}
+                        onEnded={() => setIsMusicPlaying(false)}
+                        className="hidden"
+                      />
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs text-gray-300">Audio Balance</label>
+                          <span className="text-xs text-gray-400">
+                            Video: {100 - audioBalance}% • Music: {audioBalance}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={audioBalance}
+                          onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs text-gray-300">Music Start Position</label>
+                          <span className="text-xs text-gray-400">{formatTime(musicStartTime)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max={musicDuration}
+                          step="0.1"
+                          value={musicStartTime}
+                          onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
+                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="flex justify-center">
+                        <button
+                          onClick={toggleMusicPreview}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 text-sm"
+                        >
+                          {isMusicPlaying ? <Pause size={16} /> : <Play size={16} />}
+                          {isMusicPlaying ? 'Pause' : 'Preview'} Music
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Change Video Button */}
                 <button
                   onClick={() => {
                     if (videoUrl) URL.revokeObjectURL(videoUrl);
                     setVideo(null);
                     setVideoUrl(null);
                     setAnchors([]);
+                    setHistory([]);
+                    setHistoryIndex(-1);
                     setMusic(null);
                     setMusicUrl(null);
                   }}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm whitespace-nowrap"
                 >
                   Change Video
                 </button>
               </div>
+            </div>
 
+            {/* Video Preview */}
+            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
               <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4">
                 <video
                   ref={videoRef}
@@ -1006,16 +1283,67 @@ const ClipBoost = () => {
                 />
               </div>
 
-              <div className="flex items-center gap-4">
+              {/* Playback Controls + Preview/Export */}
+              <div className="flex items-center gap-2 mb-2">
                 <button
                   onClick={togglePlay}
-                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition"
+                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition flex-shrink-0"
                 >
-                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
-                <div className="text-sm text-gray-300">
+                <div className="text-sm text-gray-300 flex-shrink-0">
                   {formatTime(currentTime)} / {formatTime(duration)}
                 </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
+                  disabled={isProcessing || anchors.length === 0}
+                  className={`flex-1 py-3 rounded-xl font-semibold text-base transition-all ${
+                    anchors.length === 0
+                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                      : isPreviewMode 
+                        ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
+                        : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
+                  } shadow-lg disabled:hover:scale-100`}
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {isPreviewMode ? (
+                      <>
+                        <Pause size={18} />
+                        <span className="hidden sm:inline">Stop Preview</span>
+                        <span className="sm:hidden">Stop</span>
+                        <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={18} />
+                        <span className="hidden sm:inline">Preview Mode</span>
+                        <span className="sm:hidden">Preview</span>
+                      </>
+                    )}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setShowExportModal(true)}
+                  disabled={!ffmpegLoaded || isProcessing || isPreviewMode}
+                  className="flex-1 py-3 rounded-xl font-semibold text-base transition-all relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <span>Processing...</span>
+                      <span className="text-sm">{progress}%</span>
+                    </div>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <Download size={18} />
+                      <span className="hidden sm:inline">Export Video</span>
+                      <span className="sm:inline md:hidden">Export</span>
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -1024,6 +1352,26 @@ const ClipBoost = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">Timeline</h3>
                 <div className="flex flex-wrap gap-2">
+                  {/* Undo/Redo */}
+                  <button
+                    onClick={undo}
+                    disabled={historyIndex <= 0}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <RotateCcw size={16} />
+                    <span className="hidden sm:inline">Undo</span>
+                  </button>
+                  <button
+                    onClick={redo}
+                    disabled={historyIndex >= history.length - 1}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <RotateCw size={16} />
+                    <span className="hidden sm:inline">Redo</span>
+                  </button>
+
                   <button
                     onClick={() => setShowTrimModal(true)}
                     className="px-3 py-2 md:px-4 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
@@ -1039,21 +1387,24 @@ const ClipBoost = () => {
                     <Sparkles size={16} />
                     <span className="hidden sm:inline">Add Anchor</span>
                   </button>
-                  {anchors.length > 0 && (
-                    <button
-                      onClick={() => {
-                        if (confirm('Remove all anchors?')) {
-                          setAnchors([]);
+                  <button
+                    onClick={() => {
+                      if (anchors.length > 0) {
+                        if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+                          const emptyAnchors = [];
+                          setAnchors(emptyAnchors);
+                          saveToHistory(emptyAnchors);
                           setSelectedAnchor(null);
                           setPreviewAnchor(null);
                         }
-                      }}
-                      className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm"
-                    >
-                      <Trash2 size={16} />
-                      <span className="hidden sm:inline">Clear</span>
-                    </button>
-                  )}
+                      }
+                    }}
+                    disabled={anchors.length === 0}
+                    className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 size={16} />
+                    <span className="hidden sm:inline">Clear</span>
+                  </button>
                 </div>
               </div>
 
@@ -1112,7 +1463,7 @@ const ClipBoost = () => {
                               className={`absolute right-0 top-0 bottom-0 w-2 ${colors.handle} cursor-ew-resize hover:opacity-80 -mr-1 z-30`}
                               onClick={(e) => e.stopPropagation()}
                             />
-                            {/* Precision button - smart positioning to avoid overlap */}
+                            {/* Precision button */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1179,156 +1530,64 @@ const ClipBoost = () => {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="bg-slate-900/50 p-3 rounded-lg">
+              <div className="grid grid-cols-3 gap-3 text-sm mb-4">
+                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
                   <div className="text-gray-400 text-xs">Total Anchors</div>
                   <div className="text-lg font-semibold text-white">{formatTime(anchorTime)}</div>
                 </div>
-                <div className="bg-slate-900/50 p-3 rounded-lg">
+                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
                   <div className="text-gray-400 text-xs">Video Duration</div>
                   <div className="text-lg font-semibold text-blue-400">{formatTime(duration)}</div>
                 </div>
-                <div className="bg-slate-900/50 p-3 rounded-lg">
+                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
                   <div className="text-gray-400 text-xs">Selected</div>
                   <div className="text-lg font-semibold text-purple-400">
                     {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Music */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-              <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <MusicIcon size={20} />
-                Music (Optional)
-              </h3>
-
-              <label className="inline-block px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition mb-4">
-                {music ? `📁 ${music.name}` : '🎵 Choose Music'}
+              {/* Save/Load Anchor Config */}
+              <div className="flex gap-2">
+                <button
+                  onClick={saveConfiguration}
+                  disabled={anchors.length === 0}
+                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                >
+                  <Save size={16} />
+                  <span className="hidden sm:inline">Save Anchor Config</span>
+                  <span className="sm:hidden">Save</span>
+                </button>
+                <button
+                  onClick={() => loadConfigInputRef.current?.click()}
+                  className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <FolderOpen size={16} />
+                  <span className="hidden sm:inline">Load Anchor Config</span>
+                  <span className="sm:hidden">Load</span>
+                </button>
                 <input
+                  ref={loadConfigInputRef}
                   type="file"
-                  accept="audio/*"
-                  onChange={handleMusicUpload}
+                  accept=".json"
+                  onChange={loadConfiguration}
                   className="hidden"
                 />
-              </label>
-
-              {music && (
-                <div className="space-y-4">
-                  <audio
-                    ref={musicRef}
-                    src={musicUrl}
-                    onLoadedMetadata={handleMusicLoadedMetadata}
-                    onEnded={() => setIsMusicPlaying(false)}
-                    className="hidden"
-                  />
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-sm text-gray-300">Audio Balance</label>
-                      <span className="text-xs text-gray-400">
-                        Video: {100 - audioBalance}% • Music: {audioBalance}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={audioBalance}
-                      onChange={(e) => setAudioBalance(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-sm text-gray-300">Music Start Position</label>
-                      <span className="text-xs text-gray-400">{formatTime(musicStartTime)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max={musicDuration}
-                      step="0.1"
-                      value={musicStartTime}
-                      onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <button
-                      onClick={toggleMusicPreview}
-                      className="mt-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2"
-                    >
-                      {isMusicPlaying ? <Pause size={16} /> : <Play size={16} />}
-                      {isMusicPlaying ? 'Pause' : 'Preview'} Music
-                    </button>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
-
-            {/* Export Button */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              {anchors.length > 0 && (
-                <button
-                  onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
-                  disabled={isProcessing}
-                  className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${
-                    isPreviewMode 
-                      ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
-                      : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
-                  } shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    {isPreviewMode ? (
-                      <>
-                        <Pause size={20} />
-                        <span className="hidden sm:inline">Stop Preview</span>
-                        <span className="sm:hidden">Stop</span>
-                        <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={20} />
-                        <span className="hidden sm:inline">Preview Mode</span>
-                        <span className="sm:hidden">Preview</span>
-                      </>
-                    )}
-                  </span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setShowExportModal(true)}
-                disabled={!ffmpegLoaded || isProcessing || isPreviewMode}
-                className={`${anchors.length > 0 ? 'flex-1' : 'w-full'} py-4 rounded-xl font-bold text-lg transition-all relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
-              >
-                {isProcessing ? (
-                  <div className="flex flex-col items-center gap-1">
-                    <span>Processing...</span>
-                    <span className="text-sm">{progress}%</span>
-                  </div>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <Download size={20} />
-                    <span className="hidden sm:inline">Export Video</span>
-                    <span className="sm:inline md:hidden">Export</span>
-                  </span>
-                )}
-              </button>
-            </div>
-
             {/* Keyboard Shortcuts Help */}
             <div className="bg-slate-800/30 rounded-lg p-4 text-xs text-gray-400">
               <div className="font-semibold mb-2">Keyboard Shortcuts:</div>
               <div className="grid grid-cols-2 gap-2">
                 <div><kbd className="bg-slate-700 px-2 py-1 rounded">Space</kbd> Play/Pause</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">←/→</kbd> Skip 1s</div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">←/→</kbd> Skip 1s (or frame in precision)</div>
                 <div><kbd className="bg-slate-700 px-2 py-1 rounded">Delete</kbd> Remove selected anchor</div>
-              </div>
-            </div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Z</kbd> Undo</div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Y</kbd> Redo</div>
+             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Trim Modal */}
         {showTrimModal && (
@@ -1458,59 +1717,110 @@ const ClipBoost = () => {
               </div>
 
               {/* Controls */}
-              <div className="flex items-center justify-center gap-4 mb-4">
+              <div className="flex items-center justify-center gap-3 mb-4">
                 <button
                   onMouseDown={() => {
-                    if (!precisionVideoRef.current) return;
-                    precisionVideoRef.current.currentTime -= 1/30;
-                    setPrecisionTime(precisionVideoRef.current.currentTime);
+                    if (!precisionVideoRef.current || !precisionAnchor) return;
+                    const newTime = precisionAnchor[selectedHandle] - 1/30;
+                    const range = getPrecisionRange(precisionAnchor);
+                    
+                    if (selectedHandle === 'start') {
+                      const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+                      setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+                      setPrecisionTime(constrainedTime);
+                      precisionVideoRef.current.currentTime = constrainedTime;
+                    } else {
+                      const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+                      setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+                      setPrecisionTime(constrainedTime);
+                      precisionVideoRef.current.currentTime = constrainedTime;
+                    }
                     
                     const interval = setInterval(() => {
-                      if (precisionVideoRef.current) {
-                        precisionVideoRef.current.currentTime -= 1/30;
-                        setPrecisionTime(precisionVideoRef.current.currentTime);
+                      if (precisionVideoRef.current && precisionAnchor) {
+                        const currentTime = precisionAnchor[selectedHandle] - 1/30;
+                        const range = getPrecisionRange(precisionAnchor);
+                        
+                        if (selectedHandle === 'start') {
+                          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, currentTime));
+                          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+                          setPrecisionTime(constrainedTime);
+                          precisionVideoRef.current.currentTime = constrainedTime;
+                        } else {
+                          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, currentTime));
+                          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+                          setPrecisionTime(constrainedTime);
+                          precisionVideoRef.current.currentTime = constrainedTime;
+                        }
                       }
                     }, 100);
                     
                     const cleanup = () => clearInterval(interval);
                     document.addEventListener('mouseup', cleanup, { once: true });
                   }}
-                  className="p-2 bg-slate-700 rounded hover:bg-slate-600 transition"
+                  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
                 >
                   ← Frame
                 </button>
 
                 <button
                   onClick={togglePrecisionPlay}
-                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition"
+                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
                 >
                   {precisionPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
 
                 <button
                   onMouseDown={() => {
-                    if (!precisionVideoRef.current) return;
-                    precisionVideoRef.current.currentTime += 1/30;
-                    setPrecisionTime(precisionVideoRef.current.currentTime);
+                    if (!precisionVideoRef.current || !precisionAnchor) return;
+                    const newTime = precisionAnchor[selectedHandle] + 1/30;
+                    const range = getPrecisionRange(precisionAnchor);
+                    
+                    if (selectedHandle === 'start') {
+                      const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+                      setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+                      setPrecisionTime(constrainedTime);
+                      precisionVideoRef.current.currentTime = constrainedTime;
+                    } else {
+                      const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+                      setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+                      setPrecisionTime(constrainedTime);
+                      precisionVideoRef.current.currentTime = constrainedTime;
+                    }
                     
                     const interval = setInterval(() => {
-                      if (precisionVideoRef.current) {
-                        precisionVideoRef.current.currentTime += 1/30;
-                        setPrecisionTime(precisionVideoRef.current.currentTime);
+                      if (precisionVideoRef.current && precisionAnchor) {
+                        const currentTime = precisionAnchor[selectedHandle] + 1/30;
+                        const range = getPrecisionRange(precisionAnchor);
+                        
+                        if (selectedHandle === 'start') {
+                          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, currentTime));
+                          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+                          setPrecisionTime(constrainedTime);
+                          precisionVideoRef.current.currentTime = constrainedTime;
+                        } else {
+                          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, currentTime));
+                          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+                          setPrecisionTime(constrainedTime);
+                          precisionVideoRef.current.currentTime = constrainedTime;
+                        }
                       }
                     }, 100);
                     
                     const cleanup = () => clearInterval(interval);
                     document.addEventListener('mouseup', cleanup, { once: true });
                   }}
-                  className="p-2 bg-slate-700 rounded hover:bg-slate-600 transition"
+                  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
                 >
                   Frame →
                 </button>
+              </div>
 
-                <div className="text-sm text-gray-300">
-                  {precisionPlaying ? 'Playing' : 'Paused'} • Loops anchor segment
-                </div>
+              {/* Hint */}
+              <div className="text-center mb-4">
+                <p className="text-xs text-gray-400">
+                  Click a handle (green start or red end) then use frame arrows to adjust it
+                </p>
               </div>
 
               {/* Time Display */}
@@ -1519,7 +1829,7 @@ const ClipBoost = () => {
                   {formatTime(precisionTime)}
                 </div>
                 <div className="text-sm text-gray-400 mt-1">
-                  Showing ±30s around anchor
+                  Dynamic viewport based on anchor length
                 </div>
               </div>
 
@@ -1552,16 +1862,38 @@ const ClipBoost = () => {
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
                       onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
-                      className="absolute left-0 top-0 bottom-0 w-2 bg-green-500 cursor-ew-resize hover:bg-green-400 transition -ml-1 z-30"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedHandle('start');
+                        setPrecisionTime(precisionAnchor.start);
+                        if (precisionVideoRef.current) {
+                          precisionVideoRef.current.currentTime = precisionAnchor.start;
+                        }
+                      }}
+                      className={`absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize transition -ml-1 z-30 ${
+                        selectedHandle === 'start' 
+                          ? 'bg-green-400 shadow-lg shadow-green-400/50' 
+                          : 'bg-green-500 hover:bg-green-400'
+                      }`}
                     />
 
                     {/* End handle */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
                       onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
-                      className="absolute right-0 top-0 bottom-0 w-2 bg-red-500 cursor-ew-resize hover:bg-red-400 transition -mr-1 z-30"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedHandle('end');
+                        setPrecisionTime(precisionAnchor.end);
+                        if (precisionVideoRef.current) {
+                          precisionVideoRef.current.currentTime = precisionAnchor.end;
+                        }
+                      }}
+                      className={`absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize transition -mr-1 z-30 ${
+                        selectedHandle === 'end' 
+                          ? 'bg-red-400 shadow-lg shadow-red-400/50' 
+                          : 'bg-red-500 hover:bg-red-400'
+                      }`}
                     />
 
                     {/* Duration label */}
@@ -1614,7 +1946,7 @@ const ClipBoost = () => {
         {showExportModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md mx-4">
-              <h3 className="text-xl font-semibold mb-4">Choose Platform</h3>
+              <h3 className="text-xl font-semibold mb-4 text-center">Choose Platform</h3>
 
               <div className="space-y-3 mb-4">
                 {Object.entries(platforms).map(([key, platform]) => (
