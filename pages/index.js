@@ -67,8 +67,8 @@ const ClipBoost = () => {
   const [showExportModal, setShowExportModal] = useState(false);
 
   // Auto-save state
-  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-  const [autoSaveData, setAutoSaveData] = useState(null);
+  const [showRestoreToast, setShowRestoreToast] = useState(false);
+  const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
   const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
 
   // FFmpeg state
@@ -117,27 +117,6 @@ const ClipBoost = () => {
     loadFFmpeg();
   }, []);
 
-  // Check for auto-save on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('clipboost-autosave');
-      if (saved) {
-        const data = JSON.parse(saved);
-        // Check if autosave is less than 7 days old
-        const daysSince = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
-        if (daysSince < 7 && data.anchors && data.anchors.length > 0) {
-          setAutoSaveData(data);
-          setShowRestorePrompt(true);
-        } else {
-          // Clear old autosave
-          localStorage.removeItem('clipboost-autosave');
-        }
-      }
-    } catch (error) {
-      console.error('Error loading autosave:', error);
-    }
-  }, []);
-
   // Auto-save anchors when they change
   useEffect(() => {
     if (anchors.length > 0 && video) {
@@ -170,19 +149,25 @@ const ClipBoost = () => {
 
   // Restore from autosave
   const restoreAutoSave = () => {
-    if (autoSaveData) {
-      setAnchors(autoSaveData.anchors);
-      saveToHistory(autoSaveData.anchors);
-      if (autoSaveData.musicStartTime !== undefined) setMusicStartTime(autoSaveData.musicStartTime);
-      if (autoSaveData.audioBalance !== undefined) setAudioBalance(autoSaveData.audioBalance);
-      setShowRestorePrompt(false);
+  try {
+    const saved = localStorage.getItem('clipboost-autosave');
+    if (saved) {
+      const data = JSON.parse(saved);
+      setAnchors(data.anchors);
+      saveToHistory(data.anchors);
+      if (data.musicStartTime !== undefined) setMusicStartTime(data.musicStartTime);
+      if (data.audioBalance !== undefined) setAudioBalance(data.audioBalance);
+      setShowRestoreToast(false);
     }
-  };
+  } catch (error) {
+    console.error('Error restoring autosave:', error);
+  }
+};
 
-  const dismissAutoSave = () => {
-    setShowRestorePrompt(false);
-    clearAutoSave();
-  };
+const dismissRestoreToast = () => {
+  setShowRestoreToast(false);
+  clearAutoSave();
+};
 
   // Utility functions
   const formatTime = (seconds) => {
@@ -298,6 +283,22 @@ const ClipBoost = () => {
     setCurrentTime(0);
     setMusic(null);
     setMusicUrl(null);
+ try {
+    const saved = localStorage.getItem('clipboost-autosave');
+    if (saved) {
+      const data = JSON.parse(saved);
+      const daysSince = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
+      if (daysSince < 7 && data.anchors && data.anchors.length > 0) {
+        setRestoredAnchorCount(data.anchors.length);
+        setShowRestoreToast(true);
+        setTimeout(() => setShowRestoreToast(false), 10000);
+      } else {
+        localStorage.removeItem('clipboost-autosave');
+      }
+    }
+  } catch (error) {
+    console.error('Error checking autosave:', error);
+  }
   };
 
   const handleLoadedMetadata = () => {
@@ -1112,37 +1113,39 @@ const ClipBoost = () => {
             </div>
           )}
         </div>
-
-        {/* Restore prompt */}
-        {showRestorePrompt && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md mx-4">
-              <h3 className="text-xl font-semibold mb-4">Restore Previous Work?</h3>
-              <p className="text-gray-300 mb-2">
-                We found {autoSaveData?.anchors?.length || 0} anchor{autoSaveData?.anchors?.length === 1 ? '' : 's'} from your previous session.
-              </p>
-              <p className="text-sm text-gray-400 mb-6">
-                Saved {autoSaveData ? Math.floor((Date.now() - autoSaveData.timestamp) / (1000 * 60)) : 0} minutes ago
-              </p>
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={dismissAutoSave}
-                  className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
-                >
-                  Start Fresh
-                </button>
-                <button
-                  onClick={restoreAutoSave}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition"
-                >
-                  Restore Work
-                </button>
+{/* Restore Toast Notification */}
+        {showRestoreToast && (
+          <div className="fixed top-4 right-4 bg-slate-800 border-2 border-purple-500 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <div className="font-semibold mb-1">Previous Work Found</div>
+                <div className="text-sm text-gray-300 mb-3">
+                  Found {restoredAnchorCount} anchor{restoredAnchorCount === 1 ? '' : 's'} from your last session
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={restoreAutoSave}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold transition"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    onClick={dismissRestoreToast}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
+              <button
+                onClick={() => setShowRestoreToast(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
             </div>
           </div>
         )}
-
         {/* Upload */}
         {!video && (
           <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-12 text-center border border-slate-700">
@@ -1380,13 +1383,13 @@ const ClipBoost = () => {
                     <span className="hidden sm:inline">Trim</span>
                   </button>
                   <button
-                    onClick={addAnchor}
-                    disabled={!duration}
-                    className="px-3 py-2 md:px-4 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    <Sparkles size={16} />
-                    <span className="hidden sm:inline">Add Anchor</span>
-                  </button>
+  onClick={addAnchor}
+  disabled={!duration}
+  className="px-4 py-3 md:px-4 md:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
+>
+  <Sparkles size={20} className="md:w-4 md:h-4" />
+  <span>Add Anchor</span>
+</button>
                   <button
                     onClick={() => {
                       if (anchors.length > 0) {
