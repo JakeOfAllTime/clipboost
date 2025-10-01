@@ -1276,7 +1276,7 @@ const ClipBoost = () => {
                 <video
                   ref={videoRef}
                   src={videoUrl}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onEnded={() => setIsPlaying(false)}
@@ -1718,102 +1718,131 @@ const ClipBoost = () => {
 
               {/* Controls */}
               <div className="flex items-center justify-center gap-3 mb-4">
-                <button
-                  onMouseDown={() => {
-                    if (!precisionVideoRef.current || !precisionAnchor) return;
-                    const newTime = precisionAnchor[selectedHandle] - 1/30;
-                    const range = getPrecisionRange(precisionAnchor);
-                    
-                    if (selectedHandle === 'start') {
-                      const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-                      setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-                      setPrecisionTime(constrainedTime);
-                      precisionVideoRef.current.currentTime = constrainedTime;
-                    } else {
-                      const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-                      setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-                      setPrecisionTime(constrainedTime);
-                      precisionVideoRef.current.currentTime = constrainedTime;
-                    }
-                    
-                    const interval = setInterval(() => {
-                      if (precisionVideoRef.current && precisionAnchor) {
-                        const currentTime = precisionAnchor[selectedHandle] - 1/30;
-                        const range = getPrecisionRange(precisionAnchor);
-                        
-                        if (selectedHandle === 'start') {
-                          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, currentTime));
-                          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-                          setPrecisionTime(constrainedTime);
-                          precisionVideoRef.current.currentTime = constrainedTime;
-                        } else {
-                          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, currentTime));
-                          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-                          setPrecisionTime(constrainedTime);
-                          precisionVideoRef.current.currentTime = constrainedTime;
-                        }
-                      }
-                    }, 100);
-                    
-                    const cleanup = () => clearInterval(interval);
-                    document.addEventListener('mouseup', cleanup, { once: true });
-                  }}
-                  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
-                >
-                  ← Frame
-                </button>
+                {/* Left Frame Button */}
+<button
+  onMouseDown={(e) => {
+    e.preventDefault();
+    if (!precisionVideoRef.current || !precisionAnchor) return;
+    
+    const step = () => {
+      const newTime = precisionAnchor[selectedHandle] - 1/30;
+      const range = getPrecisionRange(precisionAnchor);
+      
+      if (selectedHandle === 'start') {
+        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      } else {
+        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      }
+    };
+    
+    step(); // Execute once immediately
+    const interval = setInterval(step, 100);
+    
+    const cleanup = () => clearInterval(interval);
+    document.addEventListener('mouseup', cleanup, { once: true });
+    document.addEventListener('touchend', cleanup, { once: true });
+  }}
+  onTouchStart={(e) => {
+    e.preventDefault();
+    if (!precisionVideoRef.current || !precisionAnchor) return;
+    
+    const step = () => {
+      const newTime = precisionAnchor[selectedHandle] - 1/30;
+      const range = getPrecisionRange(precisionAnchor);
+      
+      if (selectedHandle === 'start') {
+        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      } else {
+        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      }
+    };
+    
+    step();
+    const interval = setInterval(step, 100);
+    
+    const cleanup = () => clearInterval(interval);
+    document.addEventListener('mouseup', cleanup, { once: true });
+    document.addEventListener('touchend', cleanup, { once: true });
+  }}
+  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
+>
+  ← Frame
+</button>
 
-                <button
-                  onClick={togglePrecisionPlay}
-                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
-                >
-                  {precisionPlaying ? <Pause size={20} /> : <Play size={20} />}
-                </button>
-
-                <button
-                  onMouseDown={() => {
-                    if (!precisionVideoRef.current || !precisionAnchor) return;
-                    const newTime = precisionAnchor[selectedHandle] + 1/30;
-                    const range = getPrecisionRange(precisionAnchor);
-                    
-                    if (selectedHandle === 'start') {
-                      const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-                      setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-                      setPrecisionTime(constrainedTime);
-                      precisionVideoRef.current.currentTime = constrainedTime;
-                    } else {
-                      const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-                      setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-                      setPrecisionTime(constrainedTime);
-                      precisionVideoRef.current.currentTime = constrainedTime;
-                    }
-                    
-                    const interval = setInterval(() => {
-                      if (precisionVideoRef.current && precisionAnchor) {
-                        const currentTime = precisionAnchor[selectedHandle] + 1/30;
-                        const range = getPrecisionRange(precisionAnchor);
-                        
-                        if (selectedHandle === 'start') {
-                          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, currentTime));
-                          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-                          setPrecisionTime(constrainedTime);
-                          precisionVideoRef.current.currentTime = constrainedTime;
-                        } else {
-                          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, currentTime));
-                          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-                          setPrecisionTime(constrainedTime);
-                          precisionVideoRef.current.currentTime = constrainedTime;
-                        }
-                      }
-                    }, 100);
-                    
-                    const cleanup = () => clearInterval(interval);
-                    document.addEventListener('mouseup', cleanup, { once: true });
-                  }}
-                  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
-                >
-                  Frame →
-                </button>
+{/* Right Frame Button */}
+<button
+  onMouseDown={(e) => {
+    e.preventDefault();
+    if (!precisionVideoRef.current || !precisionAnchor) return;
+    
+    const step = () => {
+      const newTime = precisionAnchor[selectedHandle] + 1/30;
+      const range = getPrecisionRange(precisionAnchor);
+      
+      if (selectedHandle === 'start') {
+        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      } else {
+        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      }
+    };
+    
+    step();
+    const interval = setInterval(step, 100);
+    
+    const cleanup = () => clearInterval(interval);
+    document.addEventListener('mouseup', cleanup, { once: true });
+    document.addEventListener('touchend', cleanup, { once: true });
+  }}
+  onTouchStart={(e) => {
+    e.preventDefault();
+    if (!precisionVideoRef.current || !precisionAnchor) return;
+    
+    const step = () => {
+      const newTime = precisionAnchor[selectedHandle] + 1/30;
+      const range = getPrecisionRange(precisionAnchor);
+      
+      if (selectedHandle === 'start') {
+        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      } else {
+        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+        setPrecisionTime(constrainedTime);
+        precisionVideoRef.current.currentTime = constrainedTime;
+      }
+    };
+    
+    step();
+    const interval = setInterval(step, 100);
+    
+    const cleanup = () => clearInterval(interval);
+    document.addEventListener('mouseup', cleanup, { once: true });
+    document.addEventListener('touchend', cleanup, { once: true });
+  }}
+  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
+>
+  Frame →
+</button>
               </div>
 
               {/* Hint */}
