@@ -65,7 +65,12 @@ const ClipBoost = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
-
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['vertical']);
+  const [videoAnalysis, setVideoAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [targetDuration, setTargetDuration] = useState(60);
+  const [musicAnalysis, setMusicAnalysis] = useState(null);
+  const [useBeatSync, setUseBeatSync] = useState(false);
   // Auto-save state
   const [showRestoreToast, setShowRestoreToast] = useState(false);
   const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
@@ -85,12 +90,37 @@ const ClipBoost = () => {
   const loadConfigInputRef = useRef(null);
 
   // Platform configurations
-  const platforms = {
-    original: { name: 'Original', aspect: 'original', color: 'from-slate-700 to-slate-900' },
-    tiktok: { name: 'TikTok', aspect: '9:16', color: 'from-black to-gray-800' },
-    instagram: { name: 'Instagram Reels', aspect: '9:16', color: 'from-pink-500 to-purple-600' },
-    youtube: { name: 'YouTube Shorts', aspect: '9:16', color: 'from-red-500 to-red-700' }
-  };
+const platforms = {
+  vertical: { 
+    name: '9:16 Vertical', 
+    subtitle: 'TikTok • Reels • Shorts',
+    aspect: '9:16', 
+    color: 'from-black via-pink-500 to-red-600',
+    width: 1080,
+    height: 1920
+  },
+  instagram: { 
+    name: '4:5 Instagram Feed', 
+    aspect: '4:5', 
+    color: 'from-pink-500 to-purple-600',
+    width: 1080,
+    height: 1350
+  },
+  horizontal: { 
+    name: '16:9 Horizontal', 
+    subtitle: 'Twitter/X',
+    aspect: '16:9', 
+    color: 'from-gray-900 to-gray-700',
+    width: 1920,
+    height: 1080
+  },
+  original: { 
+    name: 'Original', 
+    subtitle: 'No crop',
+    aspect: 'original', 
+    color: 'from-blue-600 to-blue-800'
+  }
+};
 
   // Load FFmpeg
   useEffect(() => {
@@ -260,6 +290,220 @@ const dismissRestoreToast = () => {
     reader.readAsText(file);
     e.target.value = '';
   };
+
+  // Motion Detection System
+// Motion Detection System
+// (Replaced: defines music & video analyzers as two separate top-level functions)
+
+// Beat-Sync / Music Analysis System
+const analyzeMusicStructure = async (audioFile) => {
+  return new Promise((resolve, reject) => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const fileReader = new FileReader();
+
+    fileReader.onload = async (e) => {
+      try {
+        const audioBuffer = await audioContext.decodeAudioData(e.target.result);
+        const duration = audioBuffer.duration;
+        const sampleRate = audioBuffer.sampleRate;
+        const channelData = audioBuffer.getChannelData(0); // Use first channel
+
+        // Analyze in chunks
+        const chunkSize = sampleRate * 0.1; // 100ms chunks
+        const chunks = Math.floor(channelData.length / chunkSize);
+
+        const energyData = [];
+
+        // Calculate energy envelope
+        for (let i = 0; i < chunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, channelData.length);
+
+          let energy = 0;
+          for (let j = start; j < end; j++) {
+            energy += Math.abs(channelData[j]);
+          }
+          energy /= (end - start);
+
+          const timestamp = (i * chunkSize) / sampleRate;
+          energyData.push({ time: timestamp, energy });
+        }
+
+        // Detect tempo by finding peaks in energy
+        const avgEnergy = energyData.reduce((sum, d) => sum + d.energy, 0) / energyData.length;
+        const threshold = avgEnergy * 1.3;
+
+        const peaks = [];
+        for (let i = 1; i < energyData.length - 1; i++) {
+          if (
+            energyData[i].energy > threshold &&
+            energyData[i].energy > energyData[i - 1].energy &&
+            energyData[i].energy > energyData[i + 1].energy
+          ) {
+            peaks.push(energyData[i]);
+          }
+        }
+
+        // Estimate BPM from peak intervals (guard against no peaks)
+        let bpm = 0;
+        let beatInterval = 0;
+        if (peaks.length >= 2) {
+          const intervals = [];
+          for (let i = 1; i < peaks.length && i < 20; i++) {
+            intervals.push(peaks[i].time - peaks[i - 1].time);
+          }
+          const avgInterval = intervals.reduce((sum, v) => sum + v, 0) / intervals.length || 0.5;
+          beatInterval = avgInterval;
+          bpm = 60 / avgInterval;
+        } else {
+          // fallback defaults if detection fails
+          beatInterval = 0.5;
+          bpm = 120;
+        }
+
+        // Generate beat grid
+        const beatGrid = [];
+        for (let time = 0; time < duration; time += beatInterval) {
+          beatGrid.push(time);
+        }
+
+        // Score musical moments
+        const musicalMoments = [];
+        for (let i = 0; i < beatGrid.length; i++) {
+          const time = beatGrid[i];
+          const isPhraseBoundary = i % 8 === 0; // Every 8th beat
+
+          const energyIndex = Math.floor((time / duration) * energyData.length);
+          const currentEnergy = energyData[energyIndex]?.energy || 0;
+          const prevEnergy = energyData[Math.max(0, energyIndex - 1)]?.energy || 0;
+          const energyIncrease = Math.max(0, currentEnergy - prevEnergy);
+
+          const spectralChange = energyIncrease > avgEnergy * 0.2 ? 0.7 : 0;
+
+          if (isPhraseBoundary || energyIncrease > avgEnergy * 0.3) {
+            const strength =
+              (isPhraseBoundary ? 1.0 : 0) +
+              (avgEnergy ? (energyIncrease / avgEnergy) * 0.7 : 0) +
+              spectralChange;
+
+            musicalMoments.push({
+              time,
+              onPhraseBoundary: isPhraseBoundary,
+              energyIncrease: avgEnergy ? energyIncrease / avgEnergy : 0,
+              spectralChange,
+              strength: Math.min(1, strength),
+            });
+          }
+        }
+
+        audioContext.close();
+        resolve({ moments: musicalMoments, bpm });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    fileReader.onerror = () => reject(new Error("Error reading audio file"));
+    fileReader.readAsArrayBuffer(audioFile);
+  });
+};
+
+// Motion Detection / Video Analysis System
+const analyzeVideo = async (videoFile) => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    video.src = URL.createObjectURL(videoFile);
+    video.muted = true;
+
+    const results = [];
+    let previousFrame = null;
+    let frameCount = 0;
+
+    video.onloadedmetadata = () => {
+      canvas.width = 320; // reduced size for speed
+      canvas.height = 180;
+      const videoDuration = video.duration;
+
+      // Adaptive sampling
+      let sampleInterval;
+      if (videoDuration < 300) sampleInterval = 0.5; // under 5 min
+      else if (videoDuration < 1800) sampleInterval = 2;
+      else if (videoDuration < 3600) sampleInterval = 5;
+      else sampleInterval = 10;
+
+      const totalSamples = Math.floor(videoDuration / sampleInterval);
+      let currentSample = 0;
+
+      const processFrame = () => {
+        if (currentSample >= totalSamples) {
+          URL.revokeObjectURL(video.src);
+          resolve(results);
+          return;
+        }
+        const timestamp = currentSample * sampleInterval;
+        video.currentTime = timestamp;
+      };
+
+      // Use onseeked to capture frames after seeking
+      video.onseeked = () => {
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          if (previousFrame) {
+            let diffSum = 0;
+            const totalPixels = currentFrame.data.length / 4;
+
+            for (let i = 0; i < currentFrame.data.length; i += 4) {
+              const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
+              const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
+              const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
+              diffSum += (rDiff + gDiff + bDiff) / 3;
+            }
+
+            const motionScore = diffSum / totalPixels / 255;
+            const isSceneChange = motionScore > 0.4;
+
+            if (motionScore > 0.15) {
+              results.push({
+                time: video.currentTime,
+                motionScore,
+                sceneChange: isSceneChange,
+              });
+            }
+          }
+
+          previousFrame = currentFrame;
+          currentSample++;
+          frameCount++;
+
+          // yield a tick to avoid locking the UI on very long videos
+          if (currentSample % 5 === 0) {
+            setTimeout(processFrame, 0);
+          } else {
+            processFrame();
+          }
+        } catch (err) {
+          // If reading pixels fails for any reason, continue gracefully
+          currentSample++;
+          if (currentSample < totalSamples) processFrame();
+          else {
+            URL.revokeObjectURL(video.src);
+            resolve(results);
+          }
+        }
+      };
+
+      // start processing
+      processFrame();
+    };
+
+    video.onerror = () => reject(new Error("Error loading video for analysis"));
+  });
+};
 
   // Video handlers
   const handleVideoUpload = (e) => {
@@ -662,15 +906,36 @@ const dismissRestoreToast = () => {
 
   // Precision modal handlers
   const openPrecisionModal = (anchor) => {
-    setPrecisionAnchor({ ...anchor });
-    setPrecisionTime(anchor.end); // Start at end position (red handle)
-    setSelectedHandle('end'); // Red handle selected by default
-    setShowPrecisionModal(true);
-    if (precisionVideoRef.current) {
-      precisionVideoRef.current.currentTime = anchor.end;
-    }
-  };
+  const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
+  setPrecisionAnchor({ ...anchor, _index: anchorIndex });
+  setPrecisionTime(anchor.end);
+  setSelectedHandle('end');
+  setShowPrecisionModal(true);
+  if (precisionVideoRef.current) {
+    precisionVideoRef.current.currentTime = anchor.end;
+  }
+};
+const goToPreviousAnchor = () => {
+  if (!precisionAnchor || precisionAnchor._index <= 0) return;
+  const prevAnchor = anchors[precisionAnchor._index - 1];
+  setPrecisionAnchor({ ...prevAnchor, _index: precisionAnchor._index - 1 });
+  setPrecisionTime(prevAnchor.end);
+  setSelectedHandle('end');
+  if (precisionVideoRef.current) {
+    precisionVideoRef.current.currentTime = prevAnchor.end;
+  }
+};
 
+const goToNextAnchor = () => {
+  if (!precisionAnchor || precisionAnchor._index >= anchors.length - 1) return;
+  const nextAnchor = anchors[precisionAnchor._index + 1];
+  setPrecisionAnchor({ ...nextAnchor, _index: precisionAnchor._index + 1 });
+  setPrecisionTime(nextAnchor.end);
+  setSelectedHandle('end');
+  if (precisionVideoRef.current) {
+    precisionVideoRef.current.currentTime = nextAnchor.end;
+  }
+};
   const getPrecisionRange = (anchor) => {
     const anchorDuration = anchor.end - anchor.start;
     const viewportDuration = Math.max(60, anchorDuration + 20);
@@ -906,90 +1171,101 @@ const dismissRestoreToast = () => {
   };
 
   // Export processing
-  const exportVideo = async (platformKey) => {
-    if (!ffmpegLoaded || !video) return;
+const exportVideo = async () => {
+  if (!ffmpegLoaded || !video || selectedPlatforms.length === 0) return;
 
-    setIsProcessing(true);
-    setProgress(0);
-    setShowExportModal(false);
+  setIsProcessing(true);
+  setProgress(0);
+  setShowExportModal(false);
 
-    try {
-      await ffmpeg.writeFile('input.mp4', await fetchFile(video));
+  try {
+    await ffmpeg.writeFile('input.mp4', await fetchFile(video));
 
-      let clips = [];
-      if (anchors.length > 0) {
-        clips = anchors.map(a => ({ start: a.start, end: a.end }));
-      } else {
-        clips = [{ start: 0, end: Math.min(60, duration) }];
-      }
+    // Process clips
+    let clips = [];
+    if (anchors.length > 0) {
+      clips = anchors.map(a => ({ start: a.start, end: a.end }));
+    } else {
+      clips = [{ start: 0, end: Math.min(60, duration) }];
+    }
 
-      const clipFiles = [];
-      for (let i = 0; i < clips.length; i++) {
-        const clip = clips[i];
-        const outputName = `clip_${i}.mp4`;
-        const clipDuration = clip.end - clip.start;
+    // Create clip files
+    const clipFiles = [];
+    for (let i = 0; i < clips.length; i++) {
+      const clip = clips[i];
+      const outputName = `clip_${i}.mp4`;
+      const clipDuration = clip.end - clip.start;
 
-        await ffmpeg.exec([
-          '-ss', clip.start.toFixed(3),
-          '-i', 'input.mp4',
-          '-t', clipDuration.toFixed(3),
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-c:a', 'aac',
-          outputName
-        ]);
+      await ffmpeg.exec([
+        '-ss', clip.start.toFixed(3),
+        '-i', 'input.mp4',
+        '-t', clipDuration.toFixed(3),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-c:a', 'aac',
+        outputName
+      ]);
 
-        clipFiles.push(outputName);
-      }
+      clipFiles.push(outputName);
+    }
 
-      const concatList = clipFiles.map(f => `file '${f}'`).join('\n');
-      await ffmpeg.writeFile('concat.txt', new TextEncoder().encode(concatList));
+    // Concatenate clips
+    const concatList = clipFiles.map(f => `file '${f}'`).join('\n');
+    await ffmpeg.writeFile('concat.txt', new TextEncoder().encode(concatList));
 
-      if (music) {
-        await ffmpeg.writeFile('music.mp3', await fetchFile(music));
+    // Add music if present
+    if (music) {
+      await ffmpeg.writeFile('music.mp3', await fetchFile(music));
 
-        const videoVolume = (100 - audioBalance) / 100;
-        const musicVolume = audioBalance / 100;
+      const videoVolume = (100 - audioBalance) / 100;
+      const musicVolume = audioBalance / 100;
 
-        await ffmpeg.exec([
-          '-f', 'concat',
-          '-safe', '0',
-          '-i', 'concat.txt',
-          '-ss', musicStartTime.toFixed(3),
-          '-i', 'music.mp3',
-          '-filter_complex',
-          `[0:a]volume=${videoVolume}[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]`,
-          '-map', '0:v',
-          '-map', '[aout]',
-          '-c:v', 'copy',
-          '-c:a', 'aac',
-          'output.mp4'
-        ]);
-      } else {
-        await ffmpeg.exec([
-          '-f', 'concat',
-          '-safe', '0',
-          '-i', 'concat.txt',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-c:a', 'aac',
-          'output.mp4'
-        ]);
-      }
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-ss', musicStartTime.toFixed(3),
+        '-i', 'music.mp3',
+        '-filter_complex',
+        `[0:a]volume=${videoVolume}[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]`,
+        '-map', '0:v',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        'output.mp4'
+      ]);
+    } else {
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-c:a', 'aac',
+        'output.mp4'
+      ]);
+    }
 
+    // Export for each selected platform
+    for (let i = 0; i < selectedPlatforms.length; i++) {
+      const platformKey = selectedPlatforms[i];
       const platform = platforms[platformKey];
+      
+      setProgress(Math.round(((i + 1) / selectedPlatforms.length) * 100));
+
       let finalFile = 'output.mp4';
 
-      if (platform.aspect === '9:16') {
+      if (platform.aspect !== 'original') {
+        const outputName = `formatted_${platformKey}.mp4`;
         await ffmpeg.exec([
           '-i', 'output.mp4',
-          '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2',
+          '-vf', `scale=${platform.width}:${platform.height}:force_original_aspect_ratio=decrease,pad=${platform.width}:${platform.height}:(ow-iw)/2:(oh-ih)/2`,
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
           '-c:a', 'copy',
-          'formatted.mp4'
+          outputName
         ]);
-        finalFile = 'formatted.mp4';
+        finalFile = outputName;
       }
 
       const data = await ffmpeg.readFile(finalFile);
@@ -1003,20 +1279,19 @@ const dismissRestoreToast = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
-      setProgress(100);
-      setTimeout(() => setProgress(0), 1000);
-      
-      // Clear autosave after successful export
-      clearAutoSave();
-
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('Error exporting video');
-    } finally {
-      setIsProcessing(false);
     }
-  };
+
+    setProgress(100);
+    setTimeout(() => setProgress(0), 1000);
+    clearAutoSave();
+
+  } catch (error) {
+    console.error('Export error:', error);
+    alert('Error exporting video');
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1108,7 +1383,7 @@ const dismissRestoreToast = () => {
           
           {/* Auto-save indicator */}
           {showAutoSaveIndicator && (
-            <div className="mt-2 inline-block px-3 py-1 bg-green-600/20 border border-green-600/50 rounded-lg text-xs text-green-400">
+            <div className="fixed top-20 right-4 px-3 py-1... z-50">
               ✓ Auto-saved
             </div>
           )}
@@ -1350,74 +1625,187 @@ const dismissRestoreToast = () => {
               </div>
             </div>
 
-            {/* Timeline */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">Timeline</h3>
-                <div className="flex flex-wrap gap-2">
-                  {/* Undo/Redo */}
-                  <button
-                    onClick={undo}
-                    disabled={historyIndex <= 0}
-                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-                    title="Undo (Ctrl+Z)"
-                  >
-                    <RotateCcw size={16} />
-                    <span className="hidden sm:inline">Undo</span>
-                  </button>
-                  <button
-                    onClick={redo}
-                    disabled={historyIndex >= history.length - 1}
-                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-                    title="Redo (Ctrl+Y)"
-                  >
-                    <RotateCw size={16} />
-                    <span className="hidden sm:inline">Redo</span>
-                  </button>
+     {/* Timeline */}
+<div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-xl font-semibold">Timeline</h3>
+  </div>
+  
+  <div className="flex flex-wrap gap-2">
+    {/* Undo/Redo */}
+  <button
+    onClick={undo}
+    disabled={historyIndex <= 0}
+    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    title="Undo (Ctrl+Z)"
+  >
+    <RotateCcw size={16} />
+    <span className="hidden sm:inline">Undo</span>
+  </button>
+  <button
+    onClick={redo}
+    disabled={historyIndex >= history.length - 1}
+    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    title="Redo (Ctrl+Y)"
+  >
+    <RotateCcw size={16} />
+    <span className="hidden sm:inline">Redo</span>
+  </button>
 
-                  <button
-                    onClick={() => setShowTrimModal(true)}
-                    className="px-3 py-2 md:px-4 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
-                  >
-                    <Scissors size={16} />
-                    <span className="hidden sm:inline">Trim</span>
-                  </button>
-                  <button
-  onClick={addAnchor}
-  disabled={!duration}
-  className="px-4 py-3 md:px-4 md:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
+  <button
+    onClick={() => setShowTrimModal(true)}
+    className="px-3 py-2 md:px-4 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
+  >
+    <Scissors size={16} />
+    <span className="hidden sm:inline">Trim</span>
+  </button>
+  
+  <button
+    onClick={addAnchor}
+    disabled={!duration}
+    className="px-4 py-3 md:px-4 md:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
+  >
+    <Sparkles size={20} className="md:w-4 md:h-4" />
+    <span>Add Anchor</span>
+  </button>
+
+  {/* Target Duration Slider */}
+  <div className="flex items-center gap-2">
+    <label className="text-sm text-gray-300 whitespace-nowrap">Target:</label>
+    <input
+      type="range"
+      min="15"
+      max="120"
+      step="5"
+      value={targetDuration}
+      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+      className="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+    />
+    <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
+  </div>
+
+  {/* Beat-Sync Toggle */}
+  {music && (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={useBeatSync}
+        onChange={(e) => setUseBeatSync(e.target.checked)}
+        className="w-4 h-4 rounded border-2 border-purple-500 bg-slate-800 checked:bg-white checked:border-purple-500 cursor-pointer"
+      />
+      <span className="text-sm text-gray-300">Beat-Sync</span>
+    </label>
+  )}
+
+  {/* Auto-Generate Button */}
+  <button
+    onClick={async () => {
+      if (!video || isAnalyzing) return;
+      
+      try {
+        setIsAnalyzing(true);
+        
+        const videoAnalysisResult = await analyzeVideo(video);
+        setVideoAnalysis(videoAnalysisResult);
+        
+        let musicAnalysisResult = null;
+        if (useBeatSync && music) {
+          musicAnalysisResult = await analyzeMusicStructure(music);
+          setMusicAnalysis(musicAnalysisResult);
+        }
+        
+        const scoredMoments = [];
+        
+        for (const moment of videoAnalysisResult) {
+          let score = moment.motionScore * 0.8;
+          if (moment.sceneChange) score += 0.6;
+          
+          if (musicAnalysisResult) {
+            const nearbyBeat = musicAnalysisResult.moments.find(
+              m => Math.abs(m.time - moment.time) < 0.5
+            );
+            
+            if (nearbyBeat) {
+              if (nearbyBeat.onPhraseBoundary) score += 1.0;
+              score += nearbyBeat.energyIncrease * 0.7;
+              score += nearbyBeat.spectralChange * 0.5;
+            }
+          }
+          
+          scoredMoments.push({ ...moment, score });
+        }
+        
+        const sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
+        const targetLength = targetDuration;
+        const avgAnchorLength = 2.5;
+        const numAnchors = Math.min(20, Math.floor(targetLength / avgAnchorLength));
+        
+        const newAnchors = [];
+        for (let i = 0; i < numAnchors && i < sortedMoments.length; i++) {
+          const moment = sortedMoments[i];
+          const start = Math.max(0, moment.time - 0.5);
+          const end = Math.min(duration, moment.time + 2);
+          
+          const hasOverlap = newAnchors.some(a =>
+            (start >= a.start && start < a.end) ||
+            (end > a.start && end <= a.end) ||
+            (start <= a.start && end >= a.end)
+          );
+          
+          if (!hasOverlap) {
+            newAnchors.push({
+              id: Date.now() + i,
+              start: start,
+              end: end
+            });
+          }
+        }
+        
+        const sorted = newAnchors.sort((a, b) => a.start - b.start);
+        setAnchors(sorted);
+        saveToHistory(sorted);
+        
+      } catch (error) {
+        console.error('Auto-generate error:', error);
+        alert('Error analyzing video');
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }}
+    disabled={!duration || isAnalyzing}
+    className="px-4 py-3 md:px-4 md:py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
+  >
+    <Sparkles size={20} className="md:w-4 md:h-4" />
+    <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
+  </button>
+
+  <button
+    onClick={() => {
+      if (anchors.length > 0) {
+        if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+          const emptyAnchors = [];
+          setAnchors(emptyAnchors);
+          saveToHistory(emptyAnchors);
+          setSelectedAnchor(null);
+          setPreviewAnchor(null);
+        }
+      }
+    }}
+    disabled={anchors.length === 0}
+    className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+  >
+    <Trash2 size={16} />
+    <span className="hidden sm:inline">Clear</span>
+  </button>
+</div>
+
+{/* Timeline visualization */}
+<div
+  ref={timelineRef}
+  onMouseDown={handleTimelineMouseDown}
+  className="relative h-24 bg-slate-900 rounded-lg cursor-pointer mb-4"
 >
-  <Sparkles size={20} className="md:w-4 md:h-4" />
-  <span>Add Anchor</span>
-</button>
-                  <button
-                    onClick={() => {
-                      if (anchors.length > 0) {
-                        if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
-                          const emptyAnchors = [];
-                          setAnchors(emptyAnchors);
-                          saveToHistory(emptyAnchors);
-                          setSelectedAnchor(null);
-                          setPreviewAnchor(null);
-                        }
-                      }
-                    }}
-                    disabled={anchors.length === 0}
-                    className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 size={16} />
-                    <span className="hidden sm:inline">Clear</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Timeline visualization */}
-              <div
-                ref={timelineRef}
-                onMouseDown={handleTimelineMouseDown}
-                className="relative h-24 bg-slate-900 rounded-lg cursor-pointer mb-4"
-              >
-                {/* Current time indicator */}
+  {/* Current time indicator */}
                 <div
                   className="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none"
                   style={{ left: `${(currentTime / duration) * 100}%` }}
@@ -1696,17 +2084,42 @@ const dismissRestoreToast = () => {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-semibold flex items-center gap-3">
-                  <ZoomIn size={24} />
-                  Precision Timeline
-                </h3>
-                <button
-                  onClick={() => setShowPrecisionModal(false)}
-                  className="text-gray-400 hover:text-white p-2"
-                >
-                  <X size={24} />
-                </button>
-              </div>
+  <div className="flex items-center gap-3">
+    <h3 className="text-2xl font-semibold flex items-center gap-3">
+      <ZoomIn size={24} />
+      Precision Timeline
+    </h3>
+    {precisionAnchor && (
+      <span className="text-sm text-gray-400">
+        Anchor {(precisionAnchor._index || 0) + 1} of {anchors.length}
+      </span>
+    )}
+  </div>
+  <div className="flex items-center gap-2">
+    <button
+      onClick={goToPreviousAnchor}
+      disabled={!precisionAnchor || precisionAnchor._index === 0}
+      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+      title="Previous Anchor"
+    >
+      ← Prev
+    </button>
+    <button
+      onClick={goToNextAnchor}
+      disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
+      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+      title="Next Anchor"
+    >
+      Next →
+    </button>
+    <button
+      onClick={() => setShowPrecisionModal(false)}
+      className="text-gray-400 hover:text-white p-2"
+    >
+      <X size={24} />
+    </button>
+  </div>
+</div>
 
               {/* Video Preview */}
               <div className="bg-black rounded-lg overflow-hidden mb-4">
@@ -1723,6 +2136,7 @@ const dismissRestoreToast = () => {
               <div className="flex items-center justify-center gap-3 mb-4">
                 {/* Left Frame Button */}
 <button
+  
   onMouseDown={(e) => {
     e.preventDefault();
     if (!precisionVideoRef.current || !precisionAnchor) return;
@@ -1783,7 +2197,12 @@ const dismissRestoreToast = () => {
 >
   ← Frame
 </button>
-
+<button
+  onClick={togglePrecisionPlay}
+  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
+>
+  {precisionPlaying ? <Pause size={20} /> : <Play size={20} />}
+</button>
 {/* Right Frame Button */}
 <button
   onMouseDown={(e) => {
@@ -1975,32 +2394,57 @@ const dismissRestoreToast = () => {
         )}
 
         {/* Export Platform Modal */}
-        {showExportModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md mx-4">
-              <h3 className="text-xl font-semibold mb-4 text-center">Choose Platform</h3>
+{/* Export Platform Modal */}
+{showExportModal && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-lg w-full mx-4">
+      <h3 className="text-xl font-semibold mb-6 text-center">Select Export Platforms</h3>
 
-              <div className="space-y-3 mb-4">
-                {Object.entries(platforms).map(([key, platform]) => (
-                  <button
-                    key={key}
-                    onClick={() => exportVideo(key)}
-                    className={`w-full px-6 py-4 bg-gradient-to-r ${platform.color} rounded-lg font-semibold hover:scale-105 transition text-center`}
-                  >
-                    <div className="text-lg">{platform.name}</div>
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="w-full px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
-              >
-                Cancel
-              </button>
+      <div className="space-y-3 mb-6">
+        {Object.entries(platforms).map(([key, platform]) => (
+          <label
+            key={key}
+            className="flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition group"
+          >
+            <input
+              type="checkbox"
+              checked={selectedPlatforms.includes(key)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedPlatforms([...selectedPlatforms, key]);
+                } else {
+                  setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
+                }
+              }}
+            className="w-5 h-5 rounded border-2 border-purple-500 bg-slate-800 checked:bg-white checked:border-purple-500 focus:ring-2 focus:ring-purple-500 cursor-pointer"/>
+            <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
+              <div className="text-lg">{platform.name}</div>
+              {platform.subtitle && (
+                <div className="text-sm opacity-90 mt-1">{platform.subtitle}</div>
+              )}
             </div>
-          </div>
-        )}
+          </label>
+        ))}
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => setShowExportModal(false)}
+          className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={exportVideo}
+          disabled={selectedPlatforms.length === 0}
+          className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
+        >
+          Export {selectedPlatforms.length > 1 ? `(${selectedPlatforms.length})` : ''}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </div>
     </div>
   );
