@@ -742,11 +742,17 @@ if (motionScore > 0.15) {
 const handleAnchorClick = (e, anchor) => {
   e.stopPropagation();
   setSelectedAnchor(anchor.id);
+  setHoveredAnchor(null); // Clear hover state first
+  
+  // Set preview anchor and ensure video seeks
   setPreviewAnchor(anchor);
-  setHoveredAnchor(null); // Clear hover state when clicking
-  if (previewVideoRef.current) {
-    previewVideoRef.current.currentTime = anchor.start;
-  }
+  
+  // Use setTimeout to ensure state updates before seeking video
+  setTimeout(() => {
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = anchor.start;
+    }
+  }, 0);
 };
 
   const handleAnchorMouseDown = (e, anchor, dragType) => {
@@ -832,11 +838,20 @@ const handleAnchorClick = (e, anchor) => {
           (newStart <= a.start && newEnd >= a.end)
         );
 
-        if (!wouldOverlap) {
+if (!wouldOverlap) {
           const updated = anchors.map(a =>
             a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
           ).sort((a, b) => a.start - b.start);
           setAnchors(updated);
+          
+          // Update preview video if this anchor is being previewed
+          if (previewAnchor?.id === selectedAnchor && previewVideoRef.current) {
+            if (dragState.type === 'anchor-left') {
+              previewVideoRef.current.currentTime = newStart;
+            } else if (dragState.type === 'anchor-right') {
+              previewVideoRef.current.currentTime = newStart;
+            }
+          }
         }
       }
     };
@@ -1729,9 +1744,9 @@ const exportVideo = async () => {
 {/* Timeline */}
 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
   
-<div className="flex flex-wrap items-center gap-3 justify-between mb-4 touch-manipulation">
-  {/* Left Group: Undo/Redo/Clear */}
-  <div className="flex gap-2">
+<div className="flex flex-wrap items-center gap-3 mb-4 touch-manipulation">
+  {/* Left Group: Undo/Redo/Trim/Clear */}
+  <div className="flex gap-2 flex-1 justify-start">
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
@@ -1777,8 +1792,8 @@ const exportVideo = async () => {
   </button>
 </div>
 
- {/* Center: DROP ANCHOR - Hero Button */}
-<div className="flex justify-center flex-1">
+{/* Center: DROP ANCHOR - Hero Button */}
+<div className="flex justify-center flex-shrink-0">
   <button
     onClick={addAnchor}
     disabled={!duration}
@@ -1790,10 +1805,11 @@ const exportVideo = async () => {
   </button>
 </div>
 
-  {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="flex items-center gap-3">
-    <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded-lg">
-      <label className="text-sm text-gray-300 whitespace-nowrap">Target:</label>
+{/* Right Group: Target/Auto-Gen/Beat-Sync */}
+  <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
+<div className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded-lg">
+      <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
+      <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
       <input
         type="range"
         min="15"
@@ -2048,9 +2064,12 @@ const exportVideo = async () => {
                         width: `${width}%`
                       }}
                     >
-                   <div
+<div
   onClick={(e) => handleAnchorClick(e, anchor)}
-  onDoubleClick={() => deleteAnchor(anchor.id)}
+  onDoubleClick={(e) => {
+    e.stopPropagation();
+    deleteAnchor(anchor.id);
+  }}
   onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
 onMouseEnter={() => {
   if (!previewAnchor || previewAnchor.id !== anchor.id) {
@@ -2095,7 +2114,13 @@ onMouseLeave={() => {
   <div
     onClick={(e) => e.stopPropagation()}
     onMouseDown={(e) => e.stopPropagation()}
-    className="absolute bottom-full mb-6 left-1/2 -translate-x-1/2 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64"
+    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64 ${
+      (anchor.start / duration) < 0.3 
+        ? 'left-0' 
+        : (anchor.start / duration) > 0.7 
+          ? 'right-0' 
+          : 'left-1/2 -translate-x-1/2'
+    }`}
   >
     <div className="flex justify-between items-center mb-2">
       <div className="text-xs font-semibold">
