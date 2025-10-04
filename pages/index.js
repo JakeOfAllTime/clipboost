@@ -739,14 +739,15 @@ if (motionScore > 0.15) {
     }
   };
 
-  const handleAnchorClick = (e, anchor) => {
-    e.stopPropagation();
-    setSelectedAnchor(anchor.id);
-    setPreviewAnchor(anchor);
-    if (previewVideoRef.current) {
-      previewVideoRef.current.currentTime = anchor.start;
-    }
-  };
+const handleAnchorClick = (e, anchor) => {
+  e.stopPropagation();
+  setSelectedAnchor(anchor.id);
+  setPreviewAnchor(anchor);
+  setHoveredAnchor(null); // Clear hover state when clicking
+  if (previewVideoRef.current) {
+    previewVideoRef.current.currentTime = anchor.start;
+  }
+};
 
   const handleAnchorMouseDown = (e, anchor, dragType) => {
     e.stopPropagation();
@@ -1373,7 +1374,7 @@ const exportVideo = async () => {
 
   return (
 <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto">
+  <div className="max-w-7xl mx-auto w-full">
         {/* Header */}
        <div className="text-center mb-8">
   <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(219,39,119,0.8)] drop-shadow-[0_0_30px_rgba(219,39,119,0.6)] drop-shadow-[0_0_45px_rgba(219,39,119,0.4)]">
@@ -1501,9 +1502,10 @@ const exportVideo = async () => {
     max="100"
     value={audioBalance}
     onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+    onInput={(e) => setAudioBalance(parseInt(e.target.value))}
     className="w-full h-2 rounded-lg appearance-none cursor-pointer"
     style={{
-     background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+      background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
     }}
   />
 </div>
@@ -2050,8 +2052,16 @@ const exportVideo = async () => {
   onClick={(e) => handleAnchorClick(e, anchor)}
   onDoubleClick={() => deleteAnchor(anchor.id)}
   onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-  onMouseEnter={() => setHoveredAnchor(anchor)}
-  onMouseLeave={() => setHoveredAnchor(null)}
+onMouseEnter={() => {
+  if (!previewAnchor || previewAnchor.id !== anchor.id) {
+    setHoveredAnchor(anchor);
+  }
+}}
+onMouseLeave={() => {
+  if (!previewAnchor || previewAnchor.id !== anchor.id) {
+    setHoveredAnchor(null);
+  }
+}}
   className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition`}
 >
                         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
@@ -2210,7 +2220,7 @@ const exportVideo = async () => {
         {showTrimModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 max-w-6xl w-full max-h-[95vh] overflow-y-auto">
-             <div className="space-y-3 mb-4">
+             <div className="space-y-2 mb-3">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
@@ -2358,9 +2368,9 @@ const exportVideo = async () => {
         )}
 
         {/* Precision Modal */}
-        {showPrecisionModal && precisionAnchor && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+{showPrecisionModal && precisionAnchor && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
+    <div className="bg-slate-800 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-700 max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col">
             <div className="space-y-4 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
@@ -2427,8 +2437,8 @@ const exportVideo = async () => {
   </div>
 </div>
 
-              {/* Video Preview */}
-              <div className="bg-black rounded-lg overflow-hidden mb-4">
+{/* Video Preview */}
+<div className="bg-black rounded-lg overflow-hidden mb-3 flex-shrink-0">
                 <video
                   ref={precisionVideoRef}
                   src={videoUrl}
@@ -2588,7 +2598,7 @@ const exportVideo = async () => {
               </div>
 
 {/* Precision Timeline */}
-<div className="relative mb-6">
+<div className="relative mb-3 flex-shrink-0">
   <div
     ref={precisionTimelineRef}
     onMouseDown={handlePrecisionTimelineMouseDown}
@@ -2677,21 +2687,21 @@ const exportVideo = async () => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowPrecisionModal(false)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={applyPrecisionChanges}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition"
-                >
-                  Apply Changes
-                </button>
-              </div>
+{/* Action Buttons */}
+<div className="flex gap-3 justify-end mt-auto pt-4 border-t border-slate-700 flex-shrink-0">
+  <button
+    onClick={() => setShowPrecisionModal(false)}
+    className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition text-sm sm:text-base"
+  >
+    Cancel
+  </button>
+  <button
+    onClick={applyPrecisionChanges}
+    className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition text-sm sm:text-base"
+  >
+    Apply Changes
+  </button>
+</div>
             </div>
           </div>
         )}
