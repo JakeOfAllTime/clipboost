@@ -1635,7 +1635,7 @@ const exportVideo = async () => {
   <video
     ref={videoRef}
     src={videoUrl}
-    className="w-full h-full object-cover"
+    className="w-full h-full object-contain"
     onTimeUpdate={handleTimeUpdate}
     onLoadedMetadata={handleLoadedMetadata}
     onEnded={() => setIsPlaying(false)}
