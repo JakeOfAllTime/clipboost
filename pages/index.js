@@ -75,7 +75,7 @@ const ClipBoost = () => {
   const [showRestoreToast, setShowRestoreToast] = useState(false);
   const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
   const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
-
+  const [hoveredAnchor, setHoveredAnchor] = useState(null);
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
   const [ffmpegLoaded, setFFmpegLoaded] = useState(false);
@@ -1372,14 +1372,14 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-8">
+<div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
-            ClipBoost
-          </h1>
-          <p className="text-gray-300">AI-Powered Video Editor</p>
+       <div className="text-center mb-8">
+  <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(219,39,119,0.8)] drop-shadow-[0_0_30px_rgba(219,39,119,0.6)] drop-shadow-[0_0_45px_rgba(219,39,119,0.4)]">
+    ClipBoost
+  </h1>
+  <p className="text-gray-300">AI-Powered Video Editor</p>
           {!ffmpegLoaded && (
             <p className="text-sm text-yellow-400 mt-2">Loading video processor...</p>
           )}
@@ -1485,39 +1485,49 @@ const exportVideo = async () => {
                         onEnded={() => setIsMusicPlaying(false)}
                         className="hidden"
                       />
-
+<div>
+  <div className="flex justify-between items-center mb-1">
+    <label className="text-xs text-gray-300">Audio Balance</label>
+    <span className="text-xs flex items-center gap-2">
+      <span className="text-blue-400">Video: {100 - audioBalance}%</span>
+      <span className="text-gray-500">•</span>
+      <span className="text-green-400">Music: {audioBalance}%</span>
+    </span>
+  </div>
+<div className="relative">
+  <input
+    type="range"
+    min="0"
+    max="100"
+    value={audioBalance}
+    onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+    style={{
+     background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+    }}
+  />
+</div>
+</div>
                       <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs text-gray-300">Audio Balance</label>
-                          <span className="text-xs text-gray-400">
-                            Video: {100 - audioBalance}% • Music: {audioBalance}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={audioBalance}
-                          onChange={(e) => setAudioBalance(parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs text-gray-300">Music Start Position</label>
-                          <span className="text-xs text-gray-400">{formatTime(musicStartTime)}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max={musicDuration}
-                          step="0.1"
-                          value={musicStartTime}
-                          onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
-                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
+  <div className="flex justify-between items-center mb-1">
+    <label className="text-xs text-gray-300">Music Start Position</label>
+    <span className="text-xs text-gray-400">{formatTime(musicStartTime)}</span>
+  </div>
+  <div className="relative">
+    <input
+      type="range"
+      min="0"
+      max={musicDuration}
+      step="0.1"
+      value={musicStartTime}
+      onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
+      className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+      style={{
+        background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) 100%)`
+      }}
+    />
+  </div>
+</div>
 
                       <div className="flex justify-center">
                         <button
@@ -1553,93 +1563,177 @@ const exportVideo = async () => {
 
             {/* Video Preview */}
             <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-              <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4">
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  className="w-full h-full object-cover"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onEnded={() => setIsPlaying(false)}
-                />
-              </div>
+            {/* Preview/Export Buttons - NOW AT TOP */}
+  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+    <button
+      onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
+      disabled={isProcessing || anchors.length === 0}
+      className={`flex-1 py-3 rounded-xl font-semibold text-base transition-all ${
+        anchors.length === 0
+          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+          : isPreviewMode 
+            ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
+            : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
+      } shadow-lg disabled:hover:scale-100`}
+    >
+      <span className="flex items-center justify-center gap-2">
+        {isPreviewMode ? (
+          <>
+            <Pause size={18} />
+            <span className="hidden sm:inline">Stop Preview</span>
+            <span className="sm:hidden">Stop</span>
+            <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
+          </>
+        ) : (
+          <>
+            <Play size={18} />
+            <span className="hidden sm:inline">Preview Mode</span>
+            <span className="sm:hidden">Preview</span>
+          </>
+        )}
+      </span>
+    </button>
 
-              {/* Playback Controls + Preview/Export */}
-              <div className="flex items-center gap-2 mb-2">
-                <button
-                  onClick={togglePlay}
-                  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition flex-shrink-0"
-                >
-                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                </button>
-                <div className="text-sm text-gray-300 flex-shrink-0">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </div>
-              </div>
+    <button
+      onClick={() => setShowExportModal(true)}
+      disabled={!ffmpegLoaded || isProcessing || isPreviewMode}
+      className="flex-1 py-3 rounded-xl font-semibold text-base transition-all relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+    >
+{isProcessing ? (
+  <div className="flex flex-col items-center gap-1">
+    <span>Processing...</span>
+    <span className="text-sm">{progress}%</span>
+  </div>
+) : (
+        <span className="flex items-center justify-center gap-2">
+          <Download size={18} />
+          <span className="hidden sm:inline">Export Video</span>
+          <span className="sm:inline md:hidden">Export</span>
+        </span>
+      )}
+    </button>
+  </div>
+{/* Video Player */}
+<div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
+  <video
+    ref={videoRef}
+    src={videoUrl}
+    className="w-full h-full object-cover"
+    onTimeUpdate={handleTimeUpdate}
+    onLoadedMetadata={handleLoadedMetadata}
+    onEnded={() => setIsPlaying(false)}
+  />
+  
+  {/* Play/Pause Overlay Button */}
+  <button
+  
+    onClick={togglePlay}
+    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+      isPlaying 
+        ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20' 
+        : 'bg-black/40 opacity-100'
+    }`}
+  >
+    <div className={`transition-all duration-300 ${
+      isPlaying
+        ? 'scale-75 opacity-60 group-hover:scale-100 group-hover:opacity-100'
+        : 'scale-100 opacity-100'
+    }`}>
+      {isPlaying ? (
+        <Pause size={64} className="text-white drop-shadow-lg" />
+      ) : (
+<Play size={64} className="text-white drop-shadow-lg" />
+      )}
+    </div>
+  </button>
+  
+{/* Video Scrub Bar with Handle - Hidden during preview */}
+{!isPreviewMode && (
+  <div 
+    className="absolute bottom-0 left-0 right-0 h-1 bg-slate-700/50 group-hover:h-3 transition-all cursor-pointer"
+    onMouseDown={(e) => {
+      const container = e.currentTarget;
+      const rect = container.getBoundingClientRect();
 
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
-                  disabled={isProcessing || anchors.length === 0}
-                  className={`flex-1 py-3 rounded-xl font-semibold text-base transition-all ${
-                    anchors.length === 0
-                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                      : isPreviewMode 
-                        ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
-                        : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
-                  } shadow-lg disabled:hover:scale-100`}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    {isPreviewMode ? (
-                      <>
-                        <Pause size={18} />
-                        <span className="hidden sm:inline">Stop Preview</span>
-                        <span className="sm:hidden">Stop</span>
-                        <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={18} />
-                        <span className="hidden sm:inline">Preview Mode</span>
-                        <span className="sm:hidden">Preview</span>
-                      </>
-                    )}
-                  </span>
-                </button>
+      const scrubVideo = (clientX) => {
+        const x = clientX - rect.left;
+        const percent = Math.max(0, Math.min(1, x / rect.width));
+        const time = percent * duration;
+        if (videoRef.current) {
+          videoRef.current.currentTime = time;
+        }
+      };
 
-                <button
-                  onClick={() => setShowExportModal(true)}
-                  disabled={!ffmpegLoaded || isProcessing || isPreviewMode}
-                  className="flex-1 py-3 rounded-xl font-semibold text-base transition-all relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  {isProcessing ? (
-                    <div className="flex flex-col items-center gap-1">
-                      <span>Processing...</span>
-                      <span className="text-sm">{progress}%</span>
-                    </div>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <Download size={18} />
-                      <span className="hidden sm:inline">Export Video</span>
-                      <span className="sm:inline md:hidden">Export</span>
-                    </span>
-                  )}
-                </button>
-              </div>
+      scrubVideo(e.clientX);
+
+      const handleMouseMove = (moveEvent) => {
+        scrubVideo(moveEvent.clientX);
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }}
+    onTouchStart={(e) => {
+      const container = e.currentTarget;
+      const rect = container.getBoundingClientRect();
+      const touch = e.touches[0];
+
+      const scrubVideo = (clientX) => {
+        const x = clientX - rect.left;
+        const percent = Math.max(0, Math.min(1, x / rect.width));
+        const time = percent * duration;
+        if (videoRef.current) {
+          videoRef.current.currentTime = time;
+        }
+      };
+
+      scrubVideo(touch.clientX);
+
+      const handleTouchMove = (moveEvent) => {
+        scrubVideo(moveEvent.touches[0].clientX);
+      };
+
+      const handleTouchEnd = () => {
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('touchend', handleTouchEnd);
+    }}
+  >
+    <div 
+      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all relative pointer-events-none"
+      style={{ width: `${(currentTime / duration) * 100}%` }}
+    >
+      {/* Scrubber Handle */}
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
+  </div>
+)}
+</div>
+
+ {/* Playback Info */}
+<div className="text-sm text-gray-300 text-center">
+  {formatTime(currentTime)} / {formatTime(duration)}
+</div>
             </div>
 
-     {/* Timeline */}
+{/* Timeline */}
 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-  <div className="flex justify-between items-center mb-4">
-    <h3 className="text-xl font-semibold">Timeline</h3>
-  </div>
   
-  <div className="flex flex-wrap gap-2">
-    {/* Undo/Redo */}
+<div className="flex flex-wrap items-center gap-3 justify-between mb-4 touch-manipulation">
+  {/* Left Group: Undo/Redo/Clear */}
+  <div className="flex gap-2">
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
-    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
     title="Undo (Ctrl+Z)"
   >
     <RotateCcw size={16} />
@@ -1648,263 +1742,19 @@ const exportVideo = async () => {
   <button
     onClick={redo}
     disabled={historyIndex >= history.length - 1}
-    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
     title="Redo (Ctrl+Y)"
   >
-    <RotateCcw size={16} />
+    <RotateCw size={16} />
     <span className="hidden sm:inline">Redo</span>
   </button>
-
   <button
     onClick={() => setShowTrimModal(true)}
-    className="px-3 py-2 md:px-4 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
+    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
   >
     <Scissors size={16} />
     <span className="hidden sm:inline">Trim</span>
   </button>
-  
-  <button
-    onClick={addAnchor}
-    disabled={!duration}
-    className="px-4 py-3 md:px-4 md:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
-  >
-    <Sparkles size={20} className="md:w-4 md:h-4" />
-    <span>Add Anchor</span>
-  </button>
-
-  {/* Target Duration Slider */}
-  <div className="flex items-center gap-2">
-    <label className="text-sm text-gray-300 whitespace-nowrap">Target:</label>
-    <input
-      type="range"
-      min="15"
-      max="120"
-      step="5"
-      value={targetDuration}
-      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-      className="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-    />
-    <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
-  </div>
-
-  {/* Beat-Sync Toggle */}
-  {music && (
-    <label className="flex items-center gap-2 cursor-pointer">
-      <input
-        type="checkbox"
-        checked={useBeatSync}
-        onChange={(e) => setUseBeatSync(e.target.checked)}
-        className="w-4 h-4 rounded border-2 border-purple-500 bg-slate-800 checked:bg-white checked:border-purple-500 cursor-pointer"
-      />
-      <span className="text-sm text-gray-300">Beat-Sync</span>
-    </label>
-  )}
-
-  {/* Auto-Generate Button */}
-  <button
-    onClick={async () => {
-      if (!video || isAnalyzing) return;
-      
-try {
-  setIsAnalyzing(true);
-    console.log('🎬 AUTO-GENERATE STARTED');
-  console.log('Target duration:', targetDuration);
-  console.log('Beat-sync enabled:', useBeatSync);
-  // Analyze audio FIRST if beat-sync is enabled
-  let musicAnalysisResult = null;
-  if (useBeatSync) {
-    if (music) {
-      // Use uploaded music
-musicAnalysisResult = await analyzeMusicStructure(music, musicStartTime, targetDuration);
-setMusicAnalysis(musicAnalysisResult);
-// Beat grid is already adjusted inside analyzeMusicStructure
-    } else if (video) {
-      // Extract and use video's own audio
-      if (!ffmpegLoaded) {
-        alert('Video processor not ready yet');
-        setIsAnalyzing(false);
-        return;
-      }
-      
-      try {
-        // Extract audio from video
-        await ffmpeg.writeFile('temp_video.mp4', await fetchFile(video));
-        await ffmpeg.exec(['-i', 'temp_video.mp4', '-vn', '-acodec', 'mp3', 'extracted_audio.mp3']);
-        const audioData = await ffmpeg.readFile('extracted_audio.mp3');
-        const audioBlob = new Blob([audioData.buffer], { type: 'audio/mp3' });
-        
-        // Analyze extracted audio
-        musicAnalysisResult = await analyzeMusicStructure(audioBlob);
-        setMusicAnalysis(musicAnalysisResult);
-      } catch (error) {
-        console.error('Failed to extract video audio:', error);
-        alert('Could not extract audio from video for beat-sync');
-        setIsAnalyzing(false);
-        return;
-      }
-    }
-  }
-  
-// Then analyze video
-console.log('🎥 Starting video analysis...');
-const videoAnalysisResult = await analyzeVideo(video);
-setVideoAnalysis(videoAnalysisResult);
-console.log('✅ Video analysis complete! Found', videoAnalysisResult.length, 'moments');
-console.log('First 5 moments:', videoAnalysisResult.slice(0, 5));
-  console.log('Beat grid length:', musicAnalysisResult?.beatGrid?.length);
-  console.log('Target duration:', targetDuration);
-let sortedMoments;
-
-console.log('🎵 Music analysis result:', musicAnalysisResult ? 'YES' : 'NO');
-if (musicAnalysisResult) {
-  console.log('Beat grid length:', musicAnalysisResult.beatGrid?.length);
-}
-
-if (musicAnalysisResult?.beatGrid) {
-  // Beat-sync mode: Use beat grid directly, don't filter by motion
-  console.log('⚠️ USING BEAT-SYNC MODE');
-  sortedMoments = videoAnalysisResult.map((moment, index) => ({
-    ...moment,
-    score: 1.0 - (index * 0.01) // Slight preference for earlier beats
-  }));
-} else {
-  // Normal mode: Score by motion
-  const scoredMoments = [];
-  
-  for (const moment of videoAnalysisResult) {
-    let score = moment.motionScore * 0.8;
-    if (moment.sceneChange) score += 0.6;
-    scoredMoments.push({ ...moment, score });
-  }
-  
-  sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
-}
-
-// Variable clip lengths based on musical phrasing
-console.log('📊 Sorted moments count:', sortedMoments.length);
-console.log('Creating anchors from moments...');
-const newAnchors = [];
-let totalDuration = 0;
-
-// In beat-sync mode, space out selections to avoid too many clips
-let momentsToUse = sortedMoments;
-// Don't filter when beat-sync is on - let post-processing handle alignment
-
-for (let i = 0; i < momentsToUse.length && totalDuration < targetDuration; i++) {
-  const moment = momentsToUse[i];
-  
-  // Determine clip length based on musical context
-  let clipLength = 2.5; // default
-  
-  if (musicAnalysisResult) {
-    const nearbyBeat = musicAnalysisResult.moments.find(
-      m => Math.abs(m.time - moment.time) < 0.5
-    );
-    
-    if (nearbyBeat?.onPhraseBoundary) {
-      clipLength = 4;
-    } else if (nearbyBeat && nearbyBeat.strength > 0.7) {
-      clipLength = 3;
-    }
-  }
-    
-    const start = Math.max(0, moment.time - 0.5);
-    const end = Math.min(duration, start + clipLength);
-    
-    const hasOverlap = newAnchors.some(a =>
-      (start >= a.start && start < a.end) ||
-      (end > a.start && end <= a.end) ||
-      (start <= a.start && end >= a.end)
-    );
-    
-   if (!hasOverlap) {
-      newAnchors.push({
-        id: Date.now() + i,
-        start: start,
-        end: end
-      });
-      totalDuration += (end - start);
-      console.log(`✓ Anchor ${newAnchors.length}: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${(end-start).toFixed(1)}s)`);
-    } else {
-      console.log(`✗ Skipped moment at ${start.toFixed(1)}s (overlap)`);
-    }
-  }
-  
-  console.log('📦 Total anchors created:', newAnchors.length);
-  console.log('⏱️ Total duration:', totalDuration.toFixed(1), 's');
-  
- let finalAnchors = newAnchors.sort((a, b) => a.start - b.start);
-
-// POST-PROCESS: Snap to beats if beat-sync is enabled
-if (musicAnalysisResult?.beatGrid && finalAnchors.length > 0) {
-  const beatGrid = musicAnalysisResult.beatGrid;
-  
-  finalAnchors = finalAnchors.map(anchor => {
-    // Find nearest beat to anchor start
-    let nearestStartBeat = beatGrid[0];
-    let minStartDiff = Math.abs(anchor.start - beatGrid[0]);
-    
-    for (const beat of beatGrid) {
-      const diff = Math.abs(anchor.start - beat);
-      if (diff < minStartDiff) {
-        minStartDiff = diff;
-        nearestStartBeat = beat;
-      }
-    }
-    
-    // Find nearest beat to anchor end (must be after start beat)
-    let nearestEndBeat = nearestStartBeat + 2; // Minimum 2 seconds
-    for (const beat of beatGrid) {
-      if (beat > nearestStartBeat + 1.5) { // At least 1.5s after start
-        const diff = Math.abs(anchor.end - beat);
-        if (diff < Math.abs(anchor.end - nearestEndBeat)) {
-          nearestEndBeat = beat;
-        }
-      }
-    }
-    
-    // Determine if this should be a longer clip based on musical phrasing
-    const beatsSpanned = beatGrid.filter(b => b >= nearestStartBeat && b <= nearestEndBeat).length;
-    
-    // Extend to phrase boundary if we're close (phrases are typically 4 or 8 beats)
-    if (beatsSpanned >= 6 && beatsSpanned < 8) {
-      // Extend to 8-beat phrase
-      const targetBeatIndex = beatGrid.indexOf(nearestStartBeat) + 8;
-      if (targetBeatIndex < beatGrid.length) {
-        nearestEndBeat = beatGrid[targetBeatIndex];
-      }
-    }
-    
-    return {
-      ...anchor,
-      start: nearestStartBeat,
-      end: Math.min(nearestEndBeat, duration)
-    };
-  });
-  
-  // Remove any overlaps that might have been created by snapping
-  finalAnchors = finalAnchors.filter((anchor, index) => {
-    if (index === 0) return true;
-    return anchor.start >= finalAnchors[index - 1].end;
-  });
-}
-
-setAnchors(finalAnchors);
-saveToHistory(finalAnchors);
-      } catch (error) {
-        console.error('Auto-generate error:', error);
-        alert('Error analyzing video');
-      } finally {
-        setIsAnalyzing(false);
-      }
-    }}
-    disabled={!duration || isAnalyzing}
-    className="px-4 py-3 md:px-4 md:py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-sm font-semibold"
-  >
-    <Sparkles size={20} className="md:w-4 md:h-4" />
-    <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
-  </button>
-
   <button
     onClick={() => {
       if (anchors.length > 0) {
@@ -1918,18 +1768,260 @@ saveToHistory(finalAnchors);
       }
     }}
     disabled={anchors.length === 0}
-    className="px-3 py-2 md:px-4 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+    className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
   >
     <Trash2 size={16} />
     <span className="hidden sm:inline">Clear</span>
   </button>
 </div>
 
+ {/* Center: DROP ANCHOR - Hero Button */}
+<div className="flex justify-center flex-1">
+  <button
+    onClick={addAnchor}
+    disabled={!duration}
+    className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-xl transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-bold shadow-lg hover:shadow-purple-500/50 hover:scale-105"
+    title="Add anchor at current time (Double-click timeline)"
+  >
+    <Sparkles size={24} />
+    <span>Drop Anchor</span>
+  </button>
+</div>
+
+  {/* Right Group: Target/Auto-Gen/Beat-Sync */}
+  <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded-lg">
+      <label className="text-sm text-gray-300 whitespace-nowrap">Target:</label>
+      <input
+        type="range"
+        min="15"
+        max="120"
+        step="5"
+        value={targetDuration}
+        onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+        className="w-24 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+      />
+      <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
+    </div>
+
+    <button
+      onClick={async () => {
+        if (!video || isAnalyzing) return;
+        
+        try {
+          setIsAnalyzing(true);
+          
+          // Analyze audio FIRST if beat-sync is enabled
+          let musicAnalysisResult = null;
+          if (useBeatSync) {
+            if (music) {
+              musicAnalysisResult = await analyzeMusicStructure(music, musicStartTime, targetDuration);
+              setMusicAnalysis(musicAnalysisResult);
+            } else if (video) {
+              if (!ffmpegLoaded) {
+                alert('Video processor not ready yet');
+                setIsAnalyzing(false);
+                return;
+              }
+              
+              try {
+                await ffmpeg.writeFile('temp_video.mp4', await fetchFile(video));
+                await ffmpeg.exec(['-i', 'temp_video.mp4', '-vn', '-acodec', 'mp3', 'extracted_audio.mp3']);
+                const audioData = await ffmpeg.readFile('extracted_audio.mp3');
+                const audioBlob = new Blob([audioData.buffer], { type: 'audio/mp3' });
+                
+                musicAnalysisResult = await analyzeMusicStructure(audioBlob);
+                setMusicAnalysis(musicAnalysisResult);
+              } catch (error) {
+                console.error('Failed to extract video audio:', error);
+                alert('Could not extract audio from video for beat-sync');
+                setIsAnalyzing(false);
+                return;
+              }
+            }
+          }
+          
+          const videoAnalysisResult = await analyzeVideo(video);
+          setVideoAnalysis(videoAnalysisResult);
+          
+          let sortedMoments;
+
+          if (musicAnalysisResult?.beatGrid) {
+            sortedMoments = videoAnalysisResult.map((moment, index) => ({
+              ...moment,
+              score: 1.0 - (index * 0.01)
+            }));
+          } else {
+            const scoredMoments = [];
+            
+            for (const moment of videoAnalysisResult) {
+              let score = moment.motionScore * 0.8;
+              if (moment.sceneChange) score += 0.6;
+              scoredMoments.push({ ...moment, score });
+            }
+            
+            sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
+          }
+
+          const newAnchors = [];
+          let totalDuration = 0;
+
+          for (let i = 0; i < sortedMoments.length && totalDuration < targetDuration; i++) {
+            const moment = sortedMoments[i];
+            
+            let clipLength = 2.5;
+            
+            if (musicAnalysisResult) {
+              const nearbyBeat = musicAnalysisResult.moments.find(
+                m => Math.abs(m.time - moment.time) < 0.5
+              );
+              
+              if (nearbyBeat?.onPhraseBoundary) {
+                clipLength = 4;
+              } else if (nearbyBeat && nearbyBeat.strength > 0.7) {
+                clipLength = 3;
+              }
+            }
+              
+            const start = Math.max(0, moment.time - 0.5);
+            const end = Math.min(duration, start + clipLength);
+            
+            const hasOverlap = newAnchors.some(a =>
+              (start >= a.start && start < a.end) ||
+              (end > a.start && end <= a.end) ||
+              (start <= a.start && end >= a.end)
+            );
+            
+            if (!hasOverlap) {
+              newAnchors.push({
+                id: Date.now() + i,
+                start: start,
+                end: end
+              });
+              totalDuration += (end - start);
+            }
+          }
+          
+          let finalAnchors = newAnchors.sort((a, b) => a.start - b.start);
+
+          if (musicAnalysisResult?.beatGrid && finalAnchors.length > 0) {
+            const beatGrid = musicAnalysisResult.beatGrid;
+            
+            finalAnchors = finalAnchors.map(anchor => {
+              let nearestStartBeat = beatGrid[0];
+              let minStartDiff = Math.abs(anchor.start - beatGrid[0]);
+              
+              for (const beat of beatGrid) {
+                const diff = Math.abs(anchor.start - beat);
+                if (diff < minStartDiff) {
+                  minStartDiff = diff;
+                  nearestStartBeat = beat;
+                }
+              }
+              
+              let nearestEndBeat = nearestStartBeat + 2;
+              for (const beat of beatGrid) {
+                if (beat > nearestStartBeat + 1.5) {
+                  const diff = Math.abs(anchor.end - beat);
+                  if (diff < Math.abs(anchor.end - nearestEndBeat)) {
+                    nearestEndBeat = beat;
+                  }
+                }
+              }
+              
+              const beatsSpanned = beatGrid.filter(b => b >= nearestStartBeat && b <= nearestEndBeat).length;
+              
+              if (beatsSpanned >= 6 && beatsSpanned < 8) {
+                const targetBeatIndex = beatGrid.indexOf(nearestStartBeat) + 8;
+                if (targetBeatIndex < beatGrid.length) {
+                  nearestEndBeat = beatGrid[targetBeatIndex];
+                }
+              }
+              
+              return {
+                ...anchor,
+                start: nearestStartBeat,
+                end: Math.min(nearestEndBeat, duration)
+              };
+            });
+            
+            finalAnchors = finalAnchors.filter((anchor, index) => {
+              if (index === 0) return true;
+              return anchor.start >= finalAnchors[index - 1].end;
+            });
+          }
+
+          setAnchors(finalAnchors);
+          saveToHistory(finalAnchors);
+        } catch (error) {
+          console.error('Auto-generate error:', error);
+          alert('Error analyzing video');
+        } finally {
+          setIsAnalyzing(false);
+        }
+      }}
+      disabled={!duration || isAnalyzing}
+      className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md"
+    >
+      <Sparkles size={18} />
+      <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
+    </button>
+
+ {music && (
+  <label className="flex items-center gap-2 cursor-pointer bg-slate-700/50 px-3 py-2 rounded-lg">
+    <input
+      type="checkbox"
+      checked={useBeatSync}
+      onChange={(e) => setUseBeatSync(e.target.checked)}
+      className="w-4 h-4 rounded cursor-pointer accent-green-500"
+      style={{
+        accentColor: 'rgb(34, 197, 94)'
+      }}
+    />
+    <span className="text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
+  </label>
+)}
+  </div>
+</div>
 {/* Timeline visualization */}
 <div
   ref={timelineRef}
   onMouseDown={handleTimelineMouseDown}
-  className="relative h-24 bg-slate-900 rounded-lg cursor-pointer mb-4"
+  onTouchStart={(e) => {
+    const touch = e.touches[0];
+    handleTimelineMouseDown({ ...e, clientX: touch.clientX });
+  }}
+  onDoubleClick={(e) => {
+    if (!timelineRef.current || !duration) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    const time = percent * duration;
+    
+    const newAnchor = {
+      id: Date.now(),
+      start: time,
+      end: Math.min(time + 2, duration)
+    };
+
+    const hasOverlap = anchors.some(a =>
+      (newAnchor.start >= a.start && newAnchor.start < a.end) ||
+      (newAnchor.end > a.start && newAnchor.end <= a.end) ||
+      (newAnchor.start <= a.start && newAnchor.end >= a.end)
+    );
+
+    if (hasOverlap) {
+      alert('Anchor overlaps with existing anchor');
+      return;
+    }
+
+    const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+    setAnchors(updated);
+    saveToHistory(updated);
+    setSelectedAnchor(newAnchor.id);
+  }}
+  className="relative h-24 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all"
+  title="Double-click to drop anchor"
 >
   {/* Current time indicator */}
                 <div
@@ -1954,12 +2046,14 @@ saveToHistory(finalAnchors);
                         width: `${width}%`
                       }}
                     >
-                      <div
-                        onClick={(e) => handleAnchorClick(e, anchor)}
-                        onDoubleClick={() => deleteAnchor(anchor.id)}
-                        onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-                        className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition`}
-                      >
+                   <div
+  onClick={(e) => handleAnchorClick(e, anchor)}
+  onDoubleClick={() => deleteAnchor(anchor.id)}
+  onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
+  onMouseEnter={() => setHoveredAnchor(anchor)}
+  onMouseLeave={() => setHoveredAnchor(null)}
+  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition`}
+>
                         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
                           {formatTime(anchor.end - anchor.start)}
                         </div>
@@ -1981,29 +2075,22 @@ saveToHistory(finalAnchors);
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Precision button */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPrecisionModal(anchor);
-                              }}
-                              className={`absolute ${anchor.start / duration > 0.8 ? 'top-full mt-2' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 bg-purple-600 hover:bg-purple-700 rounded px-2 py-1 text-xs flex items-center gap-1 transition z-30 whitespace-nowrap`}
-                            >
-                              <ZoomIn size={12} />
-                              Precision
-                            </button>
+                            
                           </>
                         )}
                       </div>
 
-                      {/* Preview Panel */}
-                      {previewAnchor?.id === anchor.id && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          className="absolute bottom-full mb-6 left-1/2 -translate-x-1/2 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64"
-                        >
-                          <div className="flex justify-between items-center mb-2">
-                            <div className="text-xs font-semibold">Anchor {index + 1} Preview</div>
+{/* Preview/Hover Panel */}
+{(previewAnchor?.id === anchor.id || hoveredAnchor?.id === anchor.id) && (
+  <div
+    onClick={(e) => e.stopPropagation()}
+    onMouseDown={(e) => e.stopPropagation()}
+    className="absolute bottom-full mb-6 left-1/2 -translate-x-1/2 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64"
+  >
+    <div className="flex justify-between items-center mb-2">
+      <div className="text-xs font-semibold">
+        Anchor {index + 1} {previewAnchor?.id === anchor.id ? 'Preview' : 'Hover'}
+      </div>
                             <button
                               onClick={() => setPreviewAnchor(null)}
                               className="text-gray-400 hover:text-white"
@@ -2022,17 +2109,30 @@ saveToHistory(finalAnchors);
                             />
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={togglePreviewPlay}
-                              className="p-2 bg-purple-600 rounded hover:bg-purple-700"
-                            >
-                              {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
-                            </button>
-                            <div className="text-xs text-gray-300">
-                              {formatTime(anchor.end - anchor.start)} loop
-                            </div>
-                          </div>
+<div className="space-y-2">
+  <div className="flex items-center gap-2">
+    <button
+      onClick={togglePreviewPlay}
+      className="p-2 bg-purple-600 rounded hover:bg-purple-700"
+    >
+      {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
+    </button>
+    <div className="text-xs text-gray-300">
+      {formatTime(anchor.end - anchor.start)} loop
+    </div>
+  </div>
+  
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      openPrecisionModal(anchor);
+    }}
+    className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs flex items-center justify-center gap-2 transition font-semibold"
+  >
+    <ZoomIn size={14} />
+    Open Precision Editor
+  </button>
+</div>
                         </div>
                       )}
                     </div>
@@ -2109,20 +2209,72 @@ saveToHistory(finalAnchors);
         {/* Trim Modal */}
         {showTrimModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-2xl w-full mx-4">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-semibold flex items-center gap-2">
-                  <Scissors size={24} />
-                  Trim Video
-                </h3>
-                <button
-                  onClick={() => setShowTrimModal(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <X size={24} />
-                </button>
-              </div>
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+             <div className="space-y-3 mb-4">
+  {/* Top Row: Prev/Next Navigation */}
+  <div className="flex items-center justify-center gap-4">
+    <button
+      onClick={goToPreviousAnchor}
+      disabled={!precisionAnchor || precisionAnchor._index === 0}
+      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      title="Previous Anchor"
+    >
+      ← Prev
+    </button>
+    
+    <div className="text-lg font-semibold text-gray-300">
+      Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
+    </div>
+    
+    <button
+      onClick={goToNextAnchor}
+      disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
+      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      title="Next Anchor"
+    >
+      Next →
+    </button>
+  </div>
 
+  {/* Start/End Time Buttons */}
+  <div className="flex items-center justify-center gap-6">
+    <button
+      onClick={() => {
+        setSelectedHandle('start');
+        setPrecisionTime(precisionAnchor.start);
+        if (precisionVideoRef.current) {
+          precisionVideoRef.current.currentTime = precisionAnchor.start;
+        }
+      }}
+      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
+        selectedHandle === 'start'
+          ? 'bg-green-500 text-white shadow-lg shadow-green-500/50 scale-105'
+          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+      }`}
+    >
+      <div className="text-xs opacity-80 mb-1">START</div>
+      <div>{formatTime(precisionAnchor.start)}</div>
+    </button>
+
+    <button
+      onClick={() => {
+        setSelectedHandle('end');
+        setPrecisionTime(precisionAnchor.end);
+        if (precisionVideoRef.current) {
+          precisionVideoRef.current.currentTime = precisionAnchor.end;
+        }
+      }}
+      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
+        selectedHandle === 'end'
+          ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 scale-105'
+          : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+      }`}
+    >
+      <div className="text-xs opacity-80 mb-1">END</div>
+      <div>{formatTime(precisionAnchor.end)}</div>
+    </button>
+  </div>
+</div>
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-900/50 p-4 rounded-lg">
@@ -2209,40 +2361,68 @@ saveToHistory(finalAnchors);
         {showPrecisionModal && precisionAnchor && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-  <div className="flex items-center gap-3">
-    <h3 className="text-2xl font-semibold flex items-center gap-3">
-      <ZoomIn size={24} />
-      Precision Timeline
-    </h3>
-    {precisionAnchor && (
-      <span className="text-sm text-gray-400">
-        Anchor {(precisionAnchor._index || 0) + 1} of {anchors.length}
-      </span>
-    )}
-  </div>
-  <div className="flex items-center gap-2">
+            <div className="space-y-4 mb-6">
+  {/* Top Row: Prev/Next Navigation */}
+  <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
       disabled={!precisionAnchor || precisionAnchor._index === 0}
-      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
       ← Prev
     </button>
+    
+    <div className="text-lg font-semibold text-gray-300">
+      Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
+    </div>
+    
     <button
       onClick={goToNextAnchor}
       disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
-      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
       Next →
     </button>
+  </div>
+
+  {/* Start/End Time Buttons */}
+  <div className="flex items-center justify-center gap-6">
     <button
-      onClick={() => setShowPrecisionModal(false)}
-      className="text-gray-400 hover:text-white p-2"
+      onClick={() => {
+        setSelectedHandle('start');
+        setPrecisionTime(precisionAnchor.start);
+        if (precisionVideoRef.current) {
+          precisionVideoRef.current.currentTime = precisionAnchor.start;
+        }
+      }}
+      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
+        selectedHandle === 'start'
+          ? 'bg-green-500 text-white shadow-lg shadow-green-500/50 scale-105'
+          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+      }`}
     >
-      <X size={24} />
+      <div className="text-xs opacity-80 mb-1">START</div>
+      <div>{formatTime(precisionAnchor.start)}</div>
+    </button>
+
+    <button
+      onClick={() => {
+        setSelectedHandle('end');
+        setPrecisionTime(precisionAnchor.end);
+        if (precisionVideoRef.current) {
+          precisionVideoRef.current.currentTime = precisionAnchor.end;
+        }
+      }}
+      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
+        selectedHandle === 'end'
+          ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 scale-105'
+          : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+      }`}
+    >
+      <div className="text-xs opacity-80 mb-1">END</div>
+      <div>{formatTime(precisionAnchor.end)}</div>
     </button>
   </div>
 </div>
@@ -2259,146 +2439,143 @@ saveToHistory(finalAnchors);
               </div>
 
               {/* Controls */}
-              <div className="flex items-center justify-center gap-3 mb-4">
-                {/* Left Frame Button */}
-<button
-  
-  onMouseDown={(e) => {
-    e.preventDefault();
-    if (!precisionVideoRef.current || !precisionAnchor) return;
-    
-    const step = () => {
-      const newTime = precisionAnchor[selectedHandle] - 1/30;
-      const range = getPrecisionRange(precisionAnchor);
+             {/* Frame Controls */}
+<div className="flex items-center justify-center gap-3 mb-4">
+  <button
+    onMouseDown={(e) => {
+      e.preventDefault();
+      if (!precisionVideoRef.current || !precisionAnchor) return;
       
-      if (selectedHandle === 'start') {
-        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      } else {
-        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      }
-    };
-    
-    step(); // Execute once immediately
-    const interval = setInterval(step, 100);
-    
-    const cleanup = () => clearInterval(interval);
-    document.addEventListener('mouseup', cleanup, { once: true });
-    document.addEventListener('touchend', cleanup, { once: true });
-  }}
-  onTouchStart={(e) => {
-    e.preventDefault();
-    if (!precisionVideoRef.current || !precisionAnchor) return;
-    
-    const step = () => {
-      const newTime = precisionAnchor[selectedHandle] - 1/30;
-      const range = getPrecisionRange(precisionAnchor);
+      const step = () => {
+        const newTime = precisionAnchor[selectedHandle] - 1/30;
+        const range = getPrecisionRange(precisionAnchor);
+        
+        if (selectedHandle === 'start') {
+          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        } else {
+          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        }
+      };
       
-      if (selectedHandle === 'start') {
-        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      } else {
-        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      }
-    };
-    
-    step();
-    const interval = setInterval(step, 100);
-    
-    const cleanup = () => clearInterval(interval);
-    document.addEventListener('mouseup', cleanup, { once: true });
-    document.addEventListener('touchend', cleanup, { once: true });
-  }}
-  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
->
-  ← Frame
-</button>
-<button
-  onClick={togglePrecisionPlay}
-  className="p-3 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
->
-  {precisionPlaying ? <Pause size={20} /> : <Play size={20} />}
-</button>
-{/* Right Frame Button */}
-<button
-  onMouseDown={(e) => {
-    e.preventDefault();
-    if (!precisionVideoRef.current || !precisionAnchor) return;
-    
-    const step = () => {
-      const newTime = precisionAnchor[selectedHandle] + 1/30;
-      const range = getPrecisionRange(precisionAnchor);
+      step();
+      const interval = setInterval(step, 100);
       
-      if (selectedHandle === 'start') {
-        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      } else {
-        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      }
-    };
-    
-    step();
-    const interval = setInterval(step, 100);
-    
-    const cleanup = () => clearInterval(interval);
-    document.addEventListener('mouseup', cleanup, { once: true });
-    document.addEventListener('touchend', cleanup, { once: true });
-  }}
-  onTouchStart={(e) => {
-    e.preventDefault();
-    if (!precisionVideoRef.current || !precisionAnchor) return;
-    
-    const step = () => {
-      const newTime = precisionAnchor[selectedHandle] + 1/30;
-      const range = getPrecisionRange(precisionAnchor);
+      const cleanup = () => clearInterval(interval);
+      document.addEventListener('mouseup', cleanup, { once: true });
+      document.addEventListener('touchend', cleanup, { once: true });
+    }}
+    onTouchStart={(e) => {
+      e.preventDefault();
+      if (!precisionVideoRef.current || !precisionAnchor) return;
       
-      if (selectedHandle === 'start') {
-        const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      } else {
-        const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-        setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-        setPrecisionTime(constrainedTime);
-        precisionVideoRef.current.currentTime = constrainedTime;
-      }
-    };
-    
-    step();
-    const interval = setInterval(step, 100);
-    
-    const cleanup = () => clearInterval(interval);
-    document.addEventListener('mouseup', cleanup, { once: true });
-    document.addEventListener('touchend', cleanup, { once: true });
-  }}
-  className="p-2.5 bg-slate-700 rounded-lg hover:bg-slate-600 transition text-white font-semibold"
->
-  Frame →
-</button>
-              </div>
+      const step = () => {
+        const newTime = precisionAnchor[selectedHandle] - 1/30;
+        const range = getPrecisionRange(precisionAnchor);
+        
+        if (selectedHandle === 'start') {
+          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        } else {
+          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        }
+      };
+      
+      step();
+      const interval = setInterval(step, 100);
+      
+      const cleanup = () => clearInterval(interval);
+      document.addEventListener('mouseup', cleanup, { once: true });
+      document.addEventListener('touchend', cleanup, { once: true });
+    }}
+    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-white font-semibold shadow-md"
+  >
+    ← Frame
+  </button>
 
-              {/* Hint */}
-              <div className="text-center mb-4">
-                <p className="text-xs text-gray-400">
-                  Click a handle (green start or red end) then use frame arrows to adjust it
-                </p>
-              </div>
+  <button
+    onClick={togglePrecisionPlay}
+    className="p-4 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
+  >
+    {precisionPlaying ? <Pause size={24} /> : <Play size={24} />}
+  </button>
+
+  <button
+    onMouseDown={(e) => {
+      e.preventDefault();
+      if (!precisionVideoRef.current || !precisionAnchor) return;
+      
+      const step = () => {
+        const newTime = precisionAnchor[selectedHandle] + 1/30;
+        const range = getPrecisionRange(precisionAnchor);
+        
+        if (selectedHandle === 'start') {
+          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        } else {
+          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        }
+      };
+      
+      step();
+      const interval = setInterval(step, 100);
+      
+      const cleanup = () => clearInterval(interval);
+      document.addEventListener('mouseup', cleanup, { once: true });
+      document.addEventListener('touchend', cleanup, { once: true });
+    }}
+    onTouchStart={(e) => {
+      e.preventDefault();
+      if (!precisionVideoRef.current || !precisionAnchor) return;
+      
+      const step = () => {
+        const newTime = precisionAnchor[selectedHandle] + 1/30;
+        const range = getPrecisionRange(precisionAnchor);
+        
+        if (selectedHandle === 'start') {
+          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        } else {
+          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
+          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
+          setPrecisionTime(constrainedTime);
+          precisionVideoRef.current.currentTime = constrainedTime;
+        }
+      };
+      
+      step();
+      const interval = setInterval(step, 100);
+      
+      const cleanup = () => clearInterval(interval);
+      document.addEventListener('mouseup', cleanup, { once: true });
+      document.addEventListener('touchend', cleanup, { once: true });
+    }}
+    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-white font-semibold shadow-md"
+  >
+    Frame →
+  </button>
+</div>
+
+<p className="text-xs text-gray-400 text-center mb-4">
+  Click START or END to switch • Hold frame buttons to scrub quickly
+</p>
 
               {/* Time Display */}
               <div className="text-center mb-4">
@@ -2410,13 +2587,13 @@ saveToHistory(finalAnchors);
                 </div>
               </div>
 
-              {/* Precision Timeline */}
-              <div className="relative mb-6">
-                <div
-                  ref={precisionTimelineRef}
-                  onMouseDown={handlePrecisionTimelineMouseDown}
-                  className="relative h-20 bg-slate-900 rounded-lg cursor-pointer mb-4 border border-slate-600"
-                >
+{/* Precision Timeline */}
+<div className="relative mb-6">
+  <div
+    ref={precisionTimelineRef}
+    onMouseDown={handlePrecisionTimelineMouseDown}
+    className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
+  >
                   {/* Current time indicator */}
                   <div
                     className="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none"
