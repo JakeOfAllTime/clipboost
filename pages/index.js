@@ -1631,11 +1631,11 @@ const exportVideo = async () => {
     </button>
   </div>
 {/* Video Player */}
-<div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
-  <video
+<div className="bg-black rounded-lg overflow-hidden mb-4 relative group w-full aspect-video sm:aspect-auto">
+<video
     ref={videoRef}
     src={videoUrl}
-    className="w-full h-full object-contain"
+    className="w-full sm:h-full object-contain sm:max-h-[600px]"
     onTimeUpdate={handleTimeUpdate}
     onLoadedMetadata={handleLoadedMetadata}
     onEnded={() => setIsPlaying(false)}
