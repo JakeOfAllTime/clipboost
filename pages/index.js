@@ -296,7 +296,7 @@ const dismissRestoreToast = () => {
 // (Replaced: defines music & video analyzers as two separate top-level functions)
 
 // Beat-Sync / Music Analysis System
-const analyzeMusicStructure = async (audioFile) => {
+const analyzeMusicStructure = async (audioFile, startTime = 0, duration = null) => {
   return new Promise((resolve, reject) => {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const fileReader = new FileReader();
@@ -304,7 +304,7 @@ const analyzeMusicStructure = async (audioFile) => {
     fileReader.onload = async (e) => {
       try {
         const audioBuffer = await audioContext.decodeAudioData(e.target.result);
-        const duration = audioBuffer.duration;
+        const audioDuration = audioBuffer.duration;
         const sampleRate = audioBuffer.sampleRate;
         const channelData = audioBuffer.getChannelData(0); // Use first channel
 
@@ -361,11 +361,14 @@ const analyzeMusicStructure = async (audioFile) => {
           bpm = 120;
         }
 
-        // Generate beat grid
-        const beatGrid = [];
-        for (let time = 0; time < duration; time += beatInterval) {
-          beatGrid.push(time);
-        }
+// Generate beat grid as video-relative timestamps
+const beatGrid = [];
+const endTime = duration !== null ? Math.min(startTime + duration, audioDuration) : audioDuration;
+let videoTime = 0; // Start from video beginning
+for (let time = startTime; time < endTime; time += beatInterval) {
+  beatGrid.push(videoTime);
+  videoTime += beatInterval;
+}
 
         // Score musical moments
         const musicalMoments = [];
@@ -373,7 +376,7 @@ const analyzeMusicStructure = async (audioFile) => {
           const time = beatGrid[i];
           const isPhraseBoundary = i % 8 === 0; // Every 8th beat
 
-          const energyIndex = Math.floor((time / duration) * energyData.length);
+          const energyIndex = Math.floor((time / audioDuration) * energyData.length);
           const currentEnergy = energyData[energyIndex]?.energy || 0;
           const prevEnergy = energyData[Math.max(0, energyIndex - 1)]?.energy || 0;
           const energyIncrease = Math.max(0, currentEnergy - prevEnergy);
@@ -397,7 +400,7 @@ const analyzeMusicStructure = async (audioFile) => {
         }
 
         audioContext.close();
-        resolve({ moments: musicalMoments, bpm });
+        resolve({ moments: musicalMoments, bpm, beatGrid });
       } catch (error) {
         reject(error);
       }
@@ -427,25 +430,25 @@ const analyzeVideo = async (videoFile) => {
       canvas.height = 180;
       const videoDuration = video.duration;
 
-      // Adaptive sampling
-      let sampleInterval;
-      if (videoDuration < 300) sampleInterval = 0.5; // under 5 min
-      else if (videoDuration < 1800) sampleInterval = 2;
-      else if (videoDuration < 3600) sampleInterval = 5;
-      else sampleInterval = 10;
+// Adaptive sampling
+let sampleInterval;
+if (videoDuration < 300) sampleInterval = 0.5;
+else if (videoDuration < 1800) sampleInterval = 2;
+else if (videoDuration < 3600) sampleInterval = 5;
+else sampleInterval = 10;
 
-      const totalSamples = Math.floor(videoDuration / sampleInterval);
-      let currentSample = 0;
+const totalSamples = Math.floor(videoDuration / sampleInterval);
+let currentSample = 0;
 
       const processFrame = () => {
-        if (currentSample >= totalSamples) {
-          URL.revokeObjectURL(video.src);
-          resolve(results);
-          return;
-        }
-        const timestamp = currentSample * sampleInterval;
-        video.currentTime = timestamp;
-      };
+  if (currentSample >= totalSamples) {
+    URL.revokeObjectURL(video.src);
+    resolve(results);
+    return;
+  }
+  const timestamp = currentSample * sampleInterval;
+  video.currentTime = timestamp;
+};
 
       // Use onseeked to capture frames after seeking
       video.onseeked = () => {
@@ -454,27 +457,27 @@ const analyzeVideo = async (videoFile) => {
           const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
           if (previousFrame) {
-            let diffSum = 0;
-            const totalPixels = currentFrame.data.length / 4;
+  let diffSum = 0;
+  const totalPixels = currentFrame.data.length / 4;
 
-            for (let i = 0; i < currentFrame.data.length; i += 4) {
-              const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
-              const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
-              const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
-              diffSum += (rDiff + gDiff + bDiff) / 3;
-            }
+  for (let i = 0; i < currentFrame.data.length; i += 4) {
+    const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
+    const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
+    const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
+    diffSum += (rDiff + gDiff + bDiff) / 3;
+  }
 
-            const motionScore = diffSum / totalPixels / 255;
-            const isSceneChange = motionScore > 0.4;
+  const motionScore = diffSum / totalPixels / 255;
+  const isSceneChange = motionScore > 0.4;
 
-            if (motionScore > 0.15) {
-              results.push({
-                time: video.currentTime,
-                motionScore,
-                sceneChange: isSceneChange,
-              });
-            }
-          }
+if (motionScore > 0.15) {
+  results.push({
+    time: video.currentTime,
+    motionScore,
+    sceneChange: isSceneChange,
+  });
+}
+} // <-- This closing brace for if (previousFrame) was missing
 
           previousFrame = currentFrame;
           currentSample++;
@@ -489,7 +492,7 @@ const analyzeVideo = async (videoFile) => {
         } catch (err) {
           // If reading pixels fails for any reason, continue gracefully
           currentSample++;
-          if (currentSample < totalSamples) processFrame();
+         if (currentSample < totalSamples) processFrame();
           else {
             URL.revokeObjectURL(video.src);
             resolve(results);
@@ -1702,69 +1705,192 @@ const exportVideo = async () => {
     onClick={async () => {
       if (!video || isAnalyzing) return;
       
+try {
+  setIsAnalyzing(true);
+    console.log('🎬 AUTO-GENERATE STARTED');
+  console.log('Target duration:', targetDuration);
+  console.log('Beat-sync enabled:', useBeatSync);
+  // Analyze audio FIRST if beat-sync is enabled
+  let musicAnalysisResult = null;
+  if (useBeatSync) {
+    if (music) {
+      // Use uploaded music
+musicAnalysisResult = await analyzeMusicStructure(music, musicStartTime, targetDuration);
+setMusicAnalysis(musicAnalysisResult);
+// Beat grid is already adjusted inside analyzeMusicStructure
+    } else if (video) {
+      // Extract and use video's own audio
+      if (!ffmpegLoaded) {
+        alert('Video processor not ready yet');
+        setIsAnalyzing(false);
+        return;
+      }
+      
       try {
-        setIsAnalyzing(true);
+        // Extract audio from video
+        await ffmpeg.writeFile('temp_video.mp4', await fetchFile(video));
+        await ffmpeg.exec(['-i', 'temp_video.mp4', '-vn', '-acodec', 'mp3', 'extracted_audio.mp3']);
+        const audioData = await ffmpeg.readFile('extracted_audio.mp3');
+        const audioBlob = new Blob([audioData.buffer], { type: 'audio/mp3' });
         
-        const videoAnalysisResult = await analyzeVideo(video);
-        setVideoAnalysis(videoAnalysisResult);
-        
-        let musicAnalysisResult = null;
-        if (useBeatSync && music) {
-          musicAnalysisResult = await analyzeMusicStructure(music);
-          setMusicAnalysis(musicAnalysisResult);
+        // Analyze extracted audio
+        musicAnalysisResult = await analyzeMusicStructure(audioBlob);
+        setMusicAnalysis(musicAnalysisResult);
+      } catch (error) {
+        console.error('Failed to extract video audio:', error);
+        alert('Could not extract audio from video for beat-sync');
+        setIsAnalyzing(false);
+        return;
+      }
+    }
+  }
+  
+// Then analyze video
+console.log('🎥 Starting video analysis...');
+const videoAnalysisResult = await analyzeVideo(video);
+setVideoAnalysis(videoAnalysisResult);
+console.log('✅ Video analysis complete! Found', videoAnalysisResult.length, 'moments');
+console.log('First 5 moments:', videoAnalysisResult.slice(0, 5));
+  console.log('Beat grid length:', musicAnalysisResult?.beatGrid?.length);
+  console.log('Target duration:', targetDuration);
+let sortedMoments;
+
+console.log('🎵 Music analysis result:', musicAnalysisResult ? 'YES' : 'NO');
+if (musicAnalysisResult) {
+  console.log('Beat grid length:', musicAnalysisResult.beatGrid?.length);
+}
+
+if (musicAnalysisResult?.beatGrid) {
+  // Beat-sync mode: Use beat grid directly, don't filter by motion
+  console.log('⚠️ USING BEAT-SYNC MODE');
+  sortedMoments = videoAnalysisResult.map((moment, index) => ({
+    ...moment,
+    score: 1.0 - (index * 0.01) // Slight preference for earlier beats
+  }));
+} else {
+  // Normal mode: Score by motion
+  const scoredMoments = [];
+  
+  for (const moment of videoAnalysisResult) {
+    let score = moment.motionScore * 0.8;
+    if (moment.sceneChange) score += 0.6;
+    scoredMoments.push({ ...moment, score });
+  }
+  
+  sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
+}
+
+// Variable clip lengths based on musical phrasing
+console.log('📊 Sorted moments count:', sortedMoments.length);
+console.log('Creating anchors from moments...');
+const newAnchors = [];
+let totalDuration = 0;
+
+// In beat-sync mode, space out selections to avoid too many clips
+let momentsToUse = sortedMoments;
+// Don't filter when beat-sync is on - let post-processing handle alignment
+
+for (let i = 0; i < momentsToUse.length && totalDuration < targetDuration; i++) {
+  const moment = momentsToUse[i];
+  
+  // Determine clip length based on musical context
+  let clipLength = 2.5; // default
+  
+  if (musicAnalysisResult) {
+    const nearbyBeat = musicAnalysisResult.moments.find(
+      m => Math.abs(m.time - moment.time) < 0.5
+    );
+    
+    if (nearbyBeat?.onPhraseBoundary) {
+      clipLength = 4;
+    } else if (nearbyBeat && nearbyBeat.strength > 0.7) {
+      clipLength = 3;
+    }
+  }
+    
+    const start = Math.max(0, moment.time - 0.5);
+    const end = Math.min(duration, start + clipLength);
+    
+    const hasOverlap = newAnchors.some(a =>
+      (start >= a.start && start < a.end) ||
+      (end > a.start && end <= a.end) ||
+      (start <= a.start && end >= a.end)
+    );
+    
+   if (!hasOverlap) {
+      newAnchors.push({
+        id: Date.now() + i,
+        start: start,
+        end: end
+      });
+      totalDuration += (end - start);
+      console.log(`✓ Anchor ${newAnchors.length}: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${(end-start).toFixed(1)}s)`);
+    } else {
+      console.log(`✗ Skipped moment at ${start.toFixed(1)}s (overlap)`);
+    }
+  }
+  
+  console.log('📦 Total anchors created:', newAnchors.length);
+  console.log('⏱️ Total duration:', totalDuration.toFixed(1), 's');
+  
+ let finalAnchors = newAnchors.sort((a, b) => a.start - b.start);
+
+// POST-PROCESS: Snap to beats if beat-sync is enabled
+if (musicAnalysisResult?.beatGrid && finalAnchors.length > 0) {
+  const beatGrid = musicAnalysisResult.beatGrid;
+  
+  finalAnchors = finalAnchors.map(anchor => {
+    // Find nearest beat to anchor start
+    let nearestStartBeat = beatGrid[0];
+    let minStartDiff = Math.abs(anchor.start - beatGrid[0]);
+    
+    for (const beat of beatGrid) {
+      const diff = Math.abs(anchor.start - beat);
+      if (diff < minStartDiff) {
+        minStartDiff = diff;
+        nearestStartBeat = beat;
+      }
+    }
+    
+    // Find nearest beat to anchor end (must be after start beat)
+    let nearestEndBeat = nearestStartBeat + 2; // Minimum 2 seconds
+    for (const beat of beatGrid) {
+      if (beat > nearestStartBeat + 1.5) { // At least 1.5s after start
+        const diff = Math.abs(anchor.end - beat);
+        if (diff < Math.abs(anchor.end - nearestEndBeat)) {
+          nearestEndBeat = beat;
         }
-        
-        const scoredMoments = [];
-        
-        for (const moment of videoAnalysisResult) {
-          let score = moment.motionScore * 0.8;
-          if (moment.sceneChange) score += 0.6;
-          
-          if (musicAnalysisResult) {
-            const nearbyBeat = musicAnalysisResult.moments.find(
-              m => Math.abs(m.time - moment.time) < 0.5
-            );
-            
-            if (nearbyBeat) {
-              if (nearbyBeat.onPhraseBoundary) score += 1.0;
-              score += nearbyBeat.energyIncrease * 0.7;
-              score += nearbyBeat.spectralChange * 0.5;
-            }
-          }
-          
-          scoredMoments.push({ ...moment, score });
-        }
-        
-        const sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
-        const targetLength = targetDuration;
-        const avgAnchorLength = 2.5;
-        const numAnchors = Math.min(20, Math.floor(targetLength / avgAnchorLength));
-        
-        const newAnchors = [];
-        for (let i = 0; i < numAnchors && i < sortedMoments.length; i++) {
-          const moment = sortedMoments[i];
-          const start = Math.max(0, moment.time - 0.5);
-          const end = Math.min(duration, moment.time + 2);
-          
-          const hasOverlap = newAnchors.some(a =>
-            (start >= a.start && start < a.end) ||
-            (end > a.start && end <= a.end) ||
-            (start <= a.start && end >= a.end)
-          );
-          
-          if (!hasOverlap) {
-            newAnchors.push({
-              id: Date.now() + i,
-              start: start,
-              end: end
-            });
-          }
-        }
-        
-        const sorted = newAnchors.sort((a, b) => a.start - b.start);
-        setAnchors(sorted);
-        saveToHistory(sorted);
-        
+      }
+    }
+    
+    // Determine if this should be a longer clip based on musical phrasing
+    const beatsSpanned = beatGrid.filter(b => b >= nearestStartBeat && b <= nearestEndBeat).length;
+    
+    // Extend to phrase boundary if we're close (phrases are typically 4 or 8 beats)
+    if (beatsSpanned >= 6 && beatsSpanned < 8) {
+      // Extend to 8-beat phrase
+      const targetBeatIndex = beatGrid.indexOf(nearestStartBeat) + 8;
+      if (targetBeatIndex < beatGrid.length) {
+        nearestEndBeat = beatGrid[targetBeatIndex];
+      }
+    }
+    
+    return {
+      ...anchor,
+      start: nearestStartBeat,
+      end: Math.min(nearestEndBeat, duration)
+    };
+  });
+  
+  // Remove any overlaps that might have been created by snapping
+  finalAnchors = finalAnchors.filter((anchor, index) => {
+    if (index === 0) return true;
+    return anchor.start >= finalAnchors[index - 1].end;
+  });
+}
+
+setAnchors(finalAnchors);
+saveToHistory(finalAnchors);
       } catch (error) {
         console.error('Auto-generate error:', error);
         alert('Error analyzing video');
