@@ -1631,11 +1631,11 @@ const exportVideo = async () => {
     </button>
   </div>
 {/* Video Player */}
-<div className="bg-black rounded-lg overflow-hidden mb-4 relative group w-full aspect-video sm:aspect-auto">
-<video
+<div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
+  <video
     ref={videoRef}
     src={videoUrl}
-    className="w-full sm:h-full object-contain sm:max-h-[600px]"
+    className="w-full h-full object-contain"
     onTimeUpdate={handleTimeUpdate}
     onLoadedMetadata={handleLoadedMetadata}
     onEnded={() => setIsPlaying(false)}
@@ -1744,13 +1744,13 @@ const exportVideo = async () => {
 {/* Timeline */}
 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
   
-<div className="flex flex-wrap items-center gap-3 mb-4 touch-manipulation">
+<div className="flex items-center gap-2 mb-4 touch-manipulation">
   {/* Left Group: Undo/Redo/Trim/Clear */}
-  <div className="flex gap-2 flex-1 justify-start">
+  <div className="flex gap-1 flex-1 justify-start">
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
-    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
     title="Undo (Ctrl+Z)"
   >
     <RotateCcw size={16} />
@@ -1797,7 +1797,7 @@ const exportVideo = async () => {
   <button
     onClick={addAnchor}
     disabled={!duration}
-    className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-xl transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-bold shadow-lg hover:shadow-purple-500/50 hover:scale-105"
+    className="px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-bold shadow-lg hover:shadow-purple-500/50 hover:scale-105"
     title="Add anchor at current time (Double-click timeline)"
   >
     <Sparkles size={24} />
@@ -1806,8 +1806,8 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
-<div className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded-lg">
+  <div className="flex items-center gap-1 flex-1 justify-end flex-nowrap">
+<div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg flex-shrink-0">
       <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
       <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
       <input
@@ -1817,10 +1817,26 @@ const exportVideo = async () => {
         step="5"
         value={targetDuration}
         onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-        className="w-24 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+        className="w-16 sm:w-24 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
       />
       <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
+      <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
     </div>
+
+    {music && (
+      <label className="flex items-center gap-2 cursor-pointer bg-slate-700/50 px-3 py-2 rounded-lg">
+        <input
+          type="checkbox"
+          checked={useBeatSync}
+          onChange={(e) => setUseBeatSync(e.target.checked)}
+          className="w-4 h-4 rounded cursor-pointer accent-green-500"
+          style={{
+            accentColor: 'rgb(34, 197, 94)'
+          }}
+        />
+        <span className="text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
+      </label>
+    )}
 
     <button
       onClick={async () => {
@@ -1985,20 +2001,7 @@ const exportVideo = async () => {
       <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
     </button>
 
- {music && (
-  <label className="flex items-center gap-2 cursor-pointer bg-slate-700/50 px-3 py-2 rounded-lg">
-    <input
-      type="checkbox"
-      checked={useBeatSync}
-      onChange={(e) => setUseBeatSync(e.target.checked)}
-      className="w-4 h-4 rounded cursor-pointer accent-green-500"
-      style={{
-        accentColor: 'rgb(34, 197, 94)'
-      }}
-    />
-    <span className="text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
-  </label>
-)}
+ 
   </div>
 </div>
 {/* Timeline visualization */}
