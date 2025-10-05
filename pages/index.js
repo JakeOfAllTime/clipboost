@@ -1806,22 +1806,20 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
-    <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-3 sm:col-span-1">
-      <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
-      <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
-<input
-        type="range"
-        min="15"
-        max="120"
-        step="5"
-        value={targetDuration}
-        onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-        className="w-12 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
-      />
-      <span className="text-xs sm:text-sm text-gray-400 w-8 sm:w-10">{targetDuration}s</span>
-      <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
-    </div>
+<div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-2 sm:col-span-1">
+    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0">Tgt:</label>
+    <input
+      type="range"
+      min="15"
+      max="120"
+      step="5"
+      value={targetDuration}
+      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+      className="flex-1 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+    />
+    <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{targetDuration}s</span>
+  </div>
 
 
       <label className={`flex items-center gap-1 cursor-pointer bg-slate-700/50 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg ${!music ? 'opacity-50 cursor-not-allowed' : ''}`}>
