@@ -1806,7 +1806,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="flex items-center gap-1 flex-1 justify-end flex-nowrap">
+  <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 flex-1 justify-end">
 <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg flex-shrink-0">
       <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
       <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
@@ -1834,7 +1834,7 @@ const exportVideo = async () => {
             accentColor: 'rgb(34, 197, 94)'
           }}
         />
-        <span className="text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
+       <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
       </label>
     )}
 
