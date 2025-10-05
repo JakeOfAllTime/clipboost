@@ -1744,9 +1744,9 @@ const exportVideo = async () => {
 {/* Timeline */}
 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
   
-<div className="flex items-center gap-2 mb-4 touch-manipulation">
+<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 touch-manipulation">
   {/* Left Group: Undo/Redo/Trim/Clear */}
-  <div className="flex gap-1 flex-1 justify-start">
+  <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
@@ -1793,7 +1793,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Center: DROP ANCHOR - Hero Button */}
-<div className="flex justify-center flex-shrink-0">
+<div className="flex justify-center w-full sm:w-auto sm:flex-shrink-0">
   <button
     onClick={addAnchor}
     disabled={!duration}
@@ -1806,7 +1806,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 flex-1 justify-end">
+  <div className="flex items-center gap-2 w-full sm:flex-1 justify-between sm:justify-end">
 <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg flex-shrink-0">
       <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
       <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
