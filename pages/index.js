@@ -1810,16 +1810,16 @@ const exportVideo = async () => {
 <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg flex-shrink-0">
       <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
       <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
-      <input
+<input
         type="range"
         min="15"
         max="120"
         step="5"
         value={targetDuration}
         onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-        className="w-16 sm:w-24 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+        className="w-12 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
       />
-      <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
+      <span className="text-xs sm:text-sm text-gray-400 w-8 sm:w-10">{targetDuration}s</span>
       <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
     </div>
 
