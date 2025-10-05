@@ -1806,8 +1806,8 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-  <div className="flex items-center gap-2 w-full sm:flex-1 justify-between sm:justify-end">
-<div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg flex-shrink-0">
+  <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+    <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-3 sm:col-span-1">
       <label className="text-sm text-gray-300 whitespace-nowrap hidden sm:inline">Target:</label>
       <label className="text-sm text-gray-300 whitespace-nowrap sm:hidden">Tgt:</label>
 <input
@@ -1823,21 +1823,21 @@ const exportVideo = async () => {
       <span className="text-sm text-gray-400 w-10">{targetDuration}s</span>
     </div>
 
-    {music && (
-      <label className="flex items-center gap-2 cursor-pointer bg-slate-700/50 px-3 py-2 rounded-lg">
-        <input
+
+      <label className={`flex items-center gap-1 cursor-pointer bg-slate-700/50 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg ${!music ? 'opacity-50 cursor-not-allowed' : ''}`}>
+<input
           type="checkbox"
           checked={useBeatSync}
           onChange={(e) => setUseBeatSync(e.target.checked)}
-          className="w-4 h-4 rounded cursor-pointer accent-green-500"
+          disabled={!music}
+          className="w-4 h-4 rounded cursor-pointer accent-green-500 disabled:cursor-not-allowed"
           style={{
             accentColor: 'rgb(34, 197, 94)'
           }}
         />
        <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
       </label>
-    )}
-
+    
     <button
       onClick={async () => {
         if (!video || isAnalyzing) return;
