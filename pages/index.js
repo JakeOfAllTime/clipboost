@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, RotateCcw, RotateCw, Save, FolderOpen } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -15,6 +15,13 @@ const ClipBoost = () => {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [previewAnchorIndex, setPreviewAnchorIndex] = useState(0);
   const previewIntervalRef = useRef(null);
+
+  // Enhanced preview with scrubber
+  const [previewTimeline, setPreviewTimeline] = useState([]);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+  const [previewTotalDuration, setPreviewTotalDuration] = useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const previewAnimationRef = useRef(null);
 
   // Music state
   const [music, setMusic] = useState(null);
@@ -71,6 +78,7 @@ const ClipBoost = () => {
   const [targetDuration, setTargetDuration] = useState(60);
   const [musicAnalysis, setMusicAnalysis] = useState(null);
   const [useBeatSync, setUseBeatSync] = useState(false);
+  const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
   // Auto-save state
   const [showRestoreToast, setShowRestoreToast] = useState(false);
   const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
@@ -147,24 +155,31 @@ const platforms = {
     loadFFmpeg();
   }, []);
 
-  // Auto-save anchors when they change
+  // Auto-save anchors when they change (debounced 300ms)
   useEffect(() => {
     if (anchors.length > 0 && video) {
-      try {
-        const saveData = {
-          anchors,
-          musicStartTime,
-          audioBalance,
-          timestamp: Date.now()
-        };
-        localStorage.setItem('clipboost-autosave', JSON.stringify(saveData));
-        
-        // Show indicator briefly
-        setShowAutoSaveIndicator(true);
-        setTimeout(() => setShowAutoSaveIndicator(false), 2000);
-      } catch (error) {
-        console.error('Error auto-saving:', error);
-      }
+      const timeoutId = setTimeout(() => {
+        try {
+          const saveData = {
+            anchors,
+            musicStartTime,
+            audioBalance,
+            timestamp: Date.now()
+          };
+          localStorage.setItem('clipboost-autosave', JSON.stringify(saveData));
+
+          // Show indicator briefly
+          setShowAutoSaveIndicator(true);
+          const indicatorTimeout = setTimeout(() => setShowAutoSaveIndicator(false), 2000);
+
+          // Store timeout ID for cleanup
+          return () => clearTimeout(indicatorTimeout);
+        } catch (error) {
+          console.error('Error auto-saving:', error);
+        }
+      }, 300); // Debounce: wait 300ms after last change
+
+      return () => clearTimeout(timeoutId);
     }
   }, [anchors, musicStartTime, audioBalance, video]);
 
@@ -199,49 +214,52 @@ const dismissRestoreToast = () => {
   clearAutoSave();
 };
 
-  // Utility functions
-  const formatTime = (seconds) => {
+  // Utility functions (memoized)
+  const formatTime = useCallback((seconds) => {
     if (seconds == null || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
-  const getAnchorColor = (index, isSelected) => {
-    const colors = [
-      { bg: 'bg-green-400/30', border: 'border-green-400', handle: 'bg-green-400' },
-      { bg: 'bg-blue-400/30', border: 'border-blue-400', handle: 'bg-blue-400' },
-      { bg: 'bg-red-400/30', border: 'border-red-400', handle: 'bg-red-400' },
-      { bg: 'bg-purple-400/30', border: 'border-purple-400', handle: 'bg-purple-400' },
-      { bg: 'bg-yellow-400/30', border: 'border-yellow-400', handle: 'bg-yellow-400' }
-    ];
-    const color = colors[index % colors.length];
+  const anchorColors = useMemo(() => [
+    { bg: 'bg-green-400/30', border: 'border-green-400', handle: 'bg-green-400' },
+    { bg: 'bg-blue-400/30', border: 'border-blue-400', handle: 'bg-blue-400' },
+    { bg: 'bg-red-400/30', border: 'border-red-400', handle: 'bg-red-400' },
+    { bg: 'bg-purple-400/30', border: 'border-purple-400', handle: 'bg-purple-400' },
+    { bg: 'bg-yellow-400/30', border: 'border-yellow-400', handle: 'bg-yellow-400' }
+  ], []);
+
+  const getAnchorColor = useCallback((index, isSelected) => {
+    const color = anchorColors[index % anchorColors.length];
     return isSelected ? { ...color, bg: color.bg.replace('/30', '/50') } : color;
-  };
+  }, [anchorColors]);
 
-  // Undo/Redo functions
-  const saveToHistory = (newAnchors) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(JSON.parse(JSON.stringify(newAnchors)));
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  };
+  // Undo/Redo functions (memoized)
+  const saveToHistory = useCallback((newAnchors) => {
+    setHistory(prevHistory => {
+      const newHistory = prevHistory.slice(0, historyIndex + 1);
+      newHistory.push(JSON.parse(JSON.stringify(newAnchors)));
+      return newHistory;
+    });
+    setHistoryIndex(prev => prev + 1);
+  }, [historyIndex]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (historyIndex > 0) {
       const prevState = history[historyIndex - 1];
       setAnchors(JSON.parse(JSON.stringify(prevState)));
       setHistoryIndex(historyIndex - 1);
     }
-  };
+  }, [historyIndex, history]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextState = history[historyIndex + 1];
       setAnchors(JSON.parse(JSON.stringify(nextState)));
       setHistoryIndex(historyIndex + 1);
     }
-  };
+  }, [historyIndex, history]);
 
   // Save/Load functions
   const saveConfiguration = () => {
@@ -344,39 +362,70 @@ const analyzeMusicStructure = async (audioFile, startTime = 0, duration = null) 
           }
         }
 
-        // Estimate BPM from peak intervals (guard against no peaks)
+        // Estimate BPM from peak intervals with outlier rejection
         let bpm = 0;
         let beatInterval = 0;
         if (peaks.length >= 2) {
           const intervals = [];
-          for (let i = 1; i < peaks.length && i < 20; i++) {
+
+          // Use ALL peaks for better accuracy (not just first 20)
+          for (let i = 1; i < peaks.length; i++) {
             intervals.push(peaks[i].time - peaks[i - 1].time);
           }
-          const avgInterval = intervals.reduce((sum, v) => sum + v, 0) / intervals.length || 0.5;
+
+          // Median-based outlier rejection
+          intervals.sort((a, b) => a - b);
+          const median = intervals[Math.floor(intervals.length / 2)];
+
+          // Filter out intervals that differ by more than 30% from median
+          const validIntervals = intervals.filter(interval =>
+            Math.abs(interval - median) < median * 0.3
+          );
+
+          // Calculate average from valid intervals
+          const avgInterval = validIntervals.length > 0
+            ? validIntervals.reduce((sum, v) => sum + v, 0) / validIntervals.length
+            : median;
+
           beatInterval = avgInterval;
           bpm = 60 / avgInterval;
+
+          // Validate BPM range and correct tempo multiples
+          // Typical music is 60-180 BPM
+          if (bpm < 60) {
+            // Likely detected half-time (e.g., 60 BPM detected as 30)
+            beatInterval /= 2;
+            bpm *= 2;
+          } else if (bpm > 180) {
+            // Likely detected double-time (e.g., 120 BPM detected as 240)
+            beatInterval *= 2;
+            bpm /= 2;
+          }
         } else {
-          // fallback defaults if detection fails
+          // Fallback defaults if detection fails
           beatInterval = 0.5;
           bpm = 120;
         }
 
-// Generate beat grid as video-relative timestamps
+// Generate beat grid using absolute video timestamps
+// Music starts at 'startTime' in the video, beats align with that
 const beatGrid = [];
 const endTime = duration !== null ? Math.min(startTime + duration, audioDuration) : audioDuration;
-let videoTime = 0; // Start from video beginning
-for (let time = startTime; time < endTime; time += beatInterval) {
-  beatGrid.push(videoTime);
-  videoTime += beatInterval;
+
+for (let musicTime = startTime; musicTime < endTime; musicTime += beatInterval) {
+  // Use absolute video time where music is playing
+  // If music starts at 61.1s in video, first beat is at 61.1s
+  beatGrid.push(musicTime);
 }
 
         // Score musical moments
         const musicalMoments = [];
         for (let i = 0; i < beatGrid.length; i++) {
-          const time = beatGrid[i];
+          const beatTime = beatGrid[i]; // Already absolute video timestamp
           const isPhraseBoundary = i % 8 === 0; // Every 8th beat
 
-          const energyIndex = Math.floor((time / audioDuration) * energyData.length);
+          // Beat grid already uses music timeline positions
+          const energyIndex = Math.floor((beatTime / audioDuration) * energyData.length);
           const currentEnergy = energyData[energyIndex]?.energy || 0;
           const prevEnergy = energyData[Math.max(0, energyIndex - 1)]?.energy || 0;
           const energyIncrease = Math.max(0, currentEnergy - prevEnergy);
@@ -390,7 +439,7 @@ for (let time = startTime; time < endTime; time += beatInterval) {
               spectralChange;
 
             musicalMoments.push({
-              time,
+              time: beatTime, // Use absolute video timestamp
               onPhraseBoundary: isPhraseBoundary,
               energyIncrease: avgEnergy ? energyIncrease / avgEnergy : 0,
               spectralChange,
@@ -411,8 +460,8 @@ for (let time = startTime; time < endTime; time += beatInterval) {
   });
 };
 
-// Motion Detection / Video Analysis System
-const analyzeVideo = async (videoFile) => {
+// Motion Detection / Video Analysis System (Enhanced)
+const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     const canvas = document.createElement("canvas");
@@ -423,76 +472,217 @@ const analyzeVideo = async (videoFile) => {
 
     const results = [];
     let previousFrame = null;
-    let frameCount = 0;
+    let previousHistogram = null;
+    let previousEdges = null;
+    let allMotionScores = []; // For adaptive thresholding
 
     video.onloadedmetadata = () => {
-      canvas.width = 320; // reduced size for speed
+      canvas.width = 320;
       canvas.height = 180;
       const videoDuration = video.duration;
 
-// Adaptive sampling
-let sampleInterval;
-if (videoDuration < 300) sampleInterval = 0.5;
-else if (videoDuration < 1800) sampleInterval = 2;
-else if (videoDuration < 3600) sampleInterval = 5;
-else sampleInterval = 10;
+      console.log('📹 Video analysis starting:', {
+        duration: videoDuration.toFixed(2),
+        durationMinutes: (videoDuration / 60).toFixed(2)
+      });
 
-const totalSamples = Math.floor(videoDuration / sampleInterval);
-let currentSample = 0;
+      // Adaptive sampling
+      let sampleInterval;
+      if (videoDuration < 300) sampleInterval = 0.5;
+      else if (videoDuration < 1800) sampleInterval = 2;
+      else if (videoDuration < 3600) sampleInterval = 5;
+      else sampleInterval = 10;
+
+      const totalSamples = Math.floor(videoDuration / sampleInterval);
+      let currentSample = 0;
+
+      // Helper: Calculate histogram (RGB channels)
+      const calculateHistogram = (imageData) => {
+        const histogram = { r: new Array(256).fill(0), g: new Array(256).fill(0), b: new Array(256).fill(0) };
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          histogram.r[imageData.data[i]]++;
+          histogram.g[imageData.data[i + 1]]++;
+          histogram.b[imageData.data[i + 2]]++;
+        }
+        return histogram;
+      };
+
+      // Helper: Compare histograms (Bhattacharyya distance approximation)
+      const compareHistograms = (hist1, hist2) => {
+        let distance = 0;
+        const totalPixels = canvas.width * canvas.height;
+
+        ['r', 'g', 'b'].forEach(channel => {
+          for (let i = 0; i < 256; i++) {
+            const p1 = hist1[channel][i] / totalPixels;
+            const p2 = hist2[channel][i] / totalPixels;
+            distance += Math.sqrt(p1 * p2);
+          }
+        });
+
+        return 1 - (distance / 3); // Normalize to 0-1, higher = more different
+      };
+
+      // Helper: Edge detection (simple Sobel approximation)
+      const detectEdges = (imageData) => {
+        const edges = new Uint8ClampedArray(imageData.data.length / 4);
+        const width = canvas.width;
+        const height = canvas.height;
+
+        for (let y = 1; y < height - 1; y++) {
+          for (let x = 1; x < width - 1; x++) {
+            const idx = (y * width + x) * 4;
+
+            // Grayscale conversion
+            const center = (imageData.data[idx] + imageData.data[idx + 1] + imageData.data[idx + 2]) / 3;
+
+            // Simple gradient approximation
+            const right = (imageData.data[idx + 4] + imageData.data[idx + 5] + imageData.data[idx + 6]) / 3;
+            const bottom = (imageData.data[idx + width * 4] + imageData.data[idx + width * 4 + 1] + imageData.data[idx + width * 4 + 2]) / 3;
+
+            const gx = right - center;
+            const gy = bottom - center;
+            edges[y * width + x] = Math.sqrt(gx * gx + gy * gy);
+          }
+        }
+
+        return edges;
+      };
+
+      // Helper: Compare edge maps
+      const compareEdges = (edges1, edges2) => {
+        let diffSum = 0;
+        for (let i = 0; i < edges1.length; i++) {
+          diffSum += Math.abs(edges1[i] - edges2[i]);
+        }
+        return diffSum / edges1.length / 255;
+      };
 
       const processFrame = () => {
-  if (currentSample >= totalSamples) {
-    URL.revokeObjectURL(video.src);
-    resolve(results);
-    return;
-  }
-  const timestamp = currentSample * sampleInterval;
-  video.currentTime = timestamp;
-};
+        if (currentSample >= totalSamples) {
+          // Apply adaptive thresholding based on collected data
+          if (allMotionScores.length > 0) {
+            const sortedScores = [...allMotionScores].sort((a, b) => a - b);
+            const median = sortedScores[Math.floor(sortedScores.length / 2)];
+            const stdDev = Math.sqrt(allMotionScores.reduce((sum, s) => sum + Math.pow(s - median, 2), 0) / allMotionScores.length);
 
-      // Use onseeked to capture frames after seeking
+            // Re-classify scene changes based on adaptive threshold
+            const adaptiveSceneThreshold = Math.max(0.35, median + stdDev * 1.5);
+            results.forEach(r => {
+              r.sceneChange = r.motionScore > adaptiveSceneThreshold;
+            });
+          }
+
+          URL.revokeObjectURL(video.src);
+          resolve(results);
+          return;
+        }
+        const timestamp = currentSample * sampleInterval;
+        video.currentTime = timestamp;
+      };
+
       video.onseeked = () => {
         try {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
           if (previousFrame) {
-  let diffSum = 0;
-  const totalPixels = currentFrame.data.length / 4;
+            // 1. Basic pixel difference (with center weighting)
+            let diffSum = 0;
+            let centerDiffSum = 0;
+            const totalPixels = currentFrame.data.length / 4;
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const centerRadius = Math.min(width, height) / 3;
 
-  for (let i = 0; i < currentFrame.data.length; i += 4) {
-    const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
-    const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
-    const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
-    diffSum += (rDiff + gDiff + bDiff) / 3;
-  }
+            for (let i = 0; i < currentFrame.data.length; i += 4) {
+              const pixelIndex = i / 4;
+              const x = pixelIndex % width;
+              const y = Math.floor(pixelIndex / width);
 
-  const motionScore = diffSum / totalPixels / 255;
-  const isSceneChange = motionScore > 0.4;
+              const rDiff = Math.abs(currentFrame.data[i] - previousFrame.data[i]);
+              const gDiff = Math.abs(currentFrame.data[i + 1] - previousFrame.data[i + 1]);
+              const bDiff = Math.abs(currentFrame.data[i + 2] - previousFrame.data[i + 2]);
+              const pixelDiff = (rDiff + gDiff + bDiff) / 3;
 
-if (motionScore > 0.15) {
-  results.push({
-    time: video.currentTime,
-    motionScore,
-    sceneChange: isSceneChange,
-  });
-}
-} // <-- This closing brace for if (previousFrame) was missing
+              diffSum += pixelDiff;
+
+              // Center weighting (subject focus)
+              const distFromCenter = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+              if (distFromCenter < centerRadius) {
+                centerDiffSum += pixelDiff;
+              }
+            }
+
+            const basicMotionScore = diffSum / totalPixels / 255;
+            const centerMotionScore = centerDiffSum / (Math.PI * centerRadius * centerRadius) / 255;
+
+            // 2. Histogram comparison (color changes)
+            const currentHistogram = calculateHistogram(currentFrame);
+            const histogramDiff = previousHistogram ? compareHistograms(previousHistogram, currentHistogram) : 0;
+
+            // 3. Edge detection comparison (structural changes)
+            const currentEdges = detectEdges(currentFrame);
+            const edgeDiff = previousEdges ? compareEdges(previousEdges, currentEdges) : 0;
+
+            // 4. Combined motion score with weights
+            const motionScore = (
+              basicMotionScore * 0.4 +
+              centerMotionScore * 0.3 +
+              histogramDiff * 0.2 +
+              edgeDiff * 0.1
+            );
+
+            // Store for adaptive thresholding
+            allMotionScores.push(motionScore);
+
+            // Temporal smoothing (average with previous result if exists)
+            let smoothedScore = motionScore;
+            if (results.length > 0) {
+              const prevScore = results[results.length - 1].motionScore;
+              smoothedScore = motionScore * 0.7 + prevScore * 0.3;
+            }
+
+            // Multi-tier classification
+            const isSceneChange = motionScore > 0.4; // Will be adaptive later
+            const motionIntensity = smoothedScore < 0.2 ? 'subtle' :
+                                   smoothedScore < 0.5 ? 'moderate' : 'intense';
+
+            // Sensitivity-adjusted threshold (sensitivity: 0=strict, 1=permissive)
+            // Higher sensitivity = lower threshold = more moments pass through
+            const baseThreshold = 0.15;
+            const adjustedThreshold = baseThreshold * (1 - sensitivity * 0.8); // Range: 0.15 (strict) to 0.03 (permissive)
+
+            if (smoothedScore > adjustedThreshold) {
+              results.push({
+                time: video.currentTime,
+                motionScore: smoothedScore,
+                sceneChange: isSceneChange,
+                motionIntensity,
+                centerMotion: centerMotionScore,
+                colorChange: histogramDiff,
+                edgeChange: edgeDiff
+              });
+            }
+
+            previousHistogram = currentHistogram;
+            previousEdges = currentEdges;
+          }
 
           previousFrame = currentFrame;
           currentSample++;
-          frameCount++;
 
-          // yield a tick to avoid locking the UI on very long videos
+          // Yield to UI
           if (currentSample % 5 === 0) {
             setTimeout(processFrame, 0);
           } else {
             processFrame();
           }
         } catch (err) {
-          // If reading pixels fails for any reason, continue gracefully
           currentSample++;
-         if (currentSample < totalSamples) processFrame();
+          if (currentSample < totalSamples) processFrame();
           else {
             URL.revokeObjectURL(video.src);
             resolve(results);
@@ -500,7 +690,6 @@ if (motionScore > 0.15) {
         }
       };
 
-      // start processing
       processFrame();
     };
 
@@ -617,6 +806,193 @@ if (motionScore > 0.15) {
     }
   };
 
+  // Build preview timeline map from anchors
+  const buildPreviewTimeline = useCallback(() => {
+    if (anchors.length === 0) {
+      setPreviewTimeline([]);
+      setPreviewTotalDuration(0);
+      return;
+    }
+
+    const timeline = [];
+    let previewTime = 0;
+
+    // Sort anchors by start time
+    const sortedAnchors = [...anchors].sort((a, b) => a.start - b.start);
+
+    sortedAnchors.forEach((anchor, index) => {
+      const segmentDuration = anchor.end - anchor.start;
+
+      timeline.push({
+        index,
+        anchorId: anchor.id,
+        previewStart: previewTime,
+        previewEnd: previewTime + segmentDuration,
+        sourceStart: anchor.start,
+        sourceEnd: anchor.end,
+        musicTime: musicStartTime + previewTime, // Music plays linearly through preview
+        duration: segmentDuration
+      });
+
+      previewTime += segmentDuration;
+    });
+
+    setPreviewTimeline(timeline);
+    setPreviewTotalDuration(previewTime);
+  }, [anchors, musicStartTime]);
+
+  // Find which segment contains the preview time
+  const findSegmentAtTime = useCallback((time) => {
+    return previewTimeline.find(seg =>
+      time >= seg.previewStart && time < seg.previewEnd
+    ) || previewTimeline[previewTimeline.length - 1];
+  }, [previewTimeline]);
+
+  // Seek to preview time
+  const seekPreviewTime = useCallback((previewTime) => {
+    const segment = findSegmentAtTime(previewTime);
+    if (!segment || !videoRef.current) return;
+
+    const offset = previewTime - segment.previewStart;
+    const sourceTime = segment.sourceStart + offset;
+
+    videoRef.current.currentTime = sourceTime;
+    setPreviewCurrentTime(previewTime);
+    setPreviewAnchorIndex(segment.index);
+
+    // Sync music if available
+    if (music && musicRef.current) {
+      const musicTime = segment.musicTime + offset;
+      musicRef.current.currentTime = musicTime;
+    }
+  }, [findSegmentAtTime, music]);
+
+  // Start enhanced preview mode
+  const startEnhancedPreview = useCallback(() => {
+    if (anchors.length === 0) {
+      alert('Add anchors first to preview');
+      return;
+    }
+
+    buildPreviewTimeline();
+    setIsPreviewMode(true);
+    setPreviewCurrentTime(0);
+    setIsPreviewPlaying(true);
+
+    // Seek to start
+    seekPreviewTime(0);
+
+    // Start music
+    if (music && musicRef.current) {
+      musicRef.current.volume = audioBalance / 100;
+      musicRef.current.play();
+    }
+
+    // Start video
+    if (videoRef.current) {
+      videoRef.current.volume = 0;
+      videoRef.current.play();
+    }
+  }, [anchors, buildPreviewTimeline, seekPreviewTime, music, audioBalance]);
+
+  // Stop enhanced preview
+  const stopEnhancedPreview = useCallback(() => {
+    setIsPreviewMode(false);
+    setIsPreviewPlaying(false);
+    setPreviewCurrentTime(0);
+    setPreviewAnchorIndex(0);
+
+    if (previewAnimationRef.current) {
+      cancelAnimationFrame(previewAnimationRef.current);
+      previewAnimationRef.current = null;
+    }
+
+    if (musicRef.current) {
+      musicRef.current.pause();
+      musicRef.current.currentTime = musicStartTime;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.volume = (100 - audioBalance) / 100;
+      videoRef.current.pause();
+    }
+  }, [musicStartTime, audioBalance]);
+
+  // Toggle preview playback
+  const togglePreviewPlayback = useCallback(() => {
+    if (!isPreviewMode) return;
+
+    if (isPreviewPlaying) {
+      setIsPreviewPlaying(false);
+      if (videoRef.current) videoRef.current.pause();
+      if (musicRef.current) musicRef.current.pause();
+    } else {
+      setIsPreviewPlaying(true);
+      if (videoRef.current) videoRef.current.play();
+      if (musicRef.current) musicRef.current.play();
+    }
+  }, [isPreviewMode, isPreviewPlaying]);
+
+  // Rebuild timeline when anchors change
+  useEffect(() => {
+    if (isPreviewMode) {
+      buildPreviewTimeline();
+    }
+  }, [anchors, isPreviewMode, buildPreviewTimeline]);
+
+  // Keyboard shortcuts for preview mode
+  useEffect(() => {
+    if (!isPreviewMode) return;
+
+    const handleKeyDown = (e) => {
+      // Prevent default behavior if we're handling the key
+      switch (e.key) {
+        case ' ':
+        case 'Spacebar':
+          e.preventDefault();
+          togglePreviewPlayback();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          stopEnhancedPreview();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          const prevIndex = Math.max(0, previewAnchorIndex - 1);
+          if (prevIndex !== previewAnchorIndex && previewTimeline[prevIndex]) {
+            seekPreviewTime(previewTimeline[prevIndex].previewStart);
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
+          if (nextIndex !== previewAnchorIndex && previewTimeline[nextIndex]) {
+            seekPreviewTime(previewTimeline[nextIndex].previewStart);
+          }
+          break;
+        case 'Home':
+          e.preventDefault();
+          seekPreviewTime(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          if (previewTimeline.length > 0) {
+            const lastSegment = previewTimeline[previewTimeline.length - 1];
+            seekPreviewTime(lastSegment.previewStart);
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPreviewMode, togglePreviewPlayback, stopEnhancedPreview, previewAnchorIndex, previewTimeline, seekPreviewTime]);
+
   useEffect(() => {
     if (!isPreviewMode || anchors.length === 0) return;
 
@@ -649,6 +1025,60 @@ if (motionScore > 0.15) {
     };
   }, [isPreviewMode, previewAnchorIndex, anchors]);
 
+  // Enhanced preview playback monitoring with RAF
+  useEffect(() => {
+    if (!isPreviewMode || !isPreviewPlaying || previewTimeline.length === 0) {
+      if (previewAnimationRef.current) {
+        cancelAnimationFrame(previewAnimationRef.current);
+        previewAnimationRef.current = null;
+      }
+      return;
+    }
+
+    const updatePreviewTime = () => {
+      if (!videoRef.current || !isPreviewPlaying) return;
+
+      const currentSegment = previewTimeline[previewAnchorIndex];
+      if (!currentSegment) return;
+
+      const sourceTime = videoRef.current.currentTime;
+      const offset = sourceTime - currentSegment.sourceStart;
+      const newPreviewTime = currentSegment.previewStart + offset;
+
+      setPreviewCurrentTime(newPreviewTime);
+
+      // Check if we've reached the end of current segment
+      if (sourceTime >= currentSegment.sourceEnd - 0.05) { // 50ms tolerance
+        const nextIndex = previewAnchorIndex + 1;
+
+        if (nextIndex < previewTimeline.length) {
+          // Jump to next segment
+          const nextSegment = previewTimeline[nextIndex];
+          videoRef.current.currentTime = nextSegment.sourceStart;
+          setPreviewAnchorIndex(nextIndex);
+          setPreviewCurrentTime(nextSegment.previewStart);
+        } else {
+          // End of preview - loop or stop
+          setIsPreviewPlaying(false);
+          videoRef.current.pause();
+          if (musicRef.current) musicRef.current.pause();
+          // Reset to beginning
+          seekPreviewTime(0);
+        }
+      }
+
+      previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
+    };
+
+    previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
+
+    return () => {
+      if (previewAnimationRef.current) {
+        cancelAnimationFrame(previewAnimationRef.current);
+      }
+    };
+  }, [isPreviewMode, isPreviewPlaying, previewTimeline, previewAnchorIndex, seekPreviewTime]);
+
   // Music handlers
   const handleMusicUpload = (e) => {
     const file = e.target.files[0];
@@ -678,8 +1108,18 @@ if (motionScore > 0.15) {
     }
   };
 
-  // Timeline interaction
-  const handleTimelineMouseDown = (e) => {
+  // Timeline interaction (memoized)
+  const seekToPosition = useCallback((e) => {
+    if (!timelineRef.current || !videoRef.current) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    const time = percent * duration;
+    videoRef.current.currentTime = time;
+    setCurrentTime(time);
+  }, [duration]);
+
+  const handleTimelineMouseDown = useCallback((e) => {
     if (!timelineRef.current || !videoRef.current) return;
     setDragState({
       active: true,
@@ -688,20 +1128,10 @@ if (motionScore > 0.15) {
       anchorSnapshot: null
     });
     seekToPosition(e);
-  };
+  }, [seekToPosition]);
 
-  const seekToPosition = (e) => {
-    if (!timelineRef.current || !videoRef.current) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const time = percent * duration;
-    videoRef.current.currentTime = time;
-    setCurrentTime(time);
-  };
-
-  // Anchor management
-  const addAnchor = () => {
+  // Anchor management (memoized)
+  const addAnchor = useCallback(() => {
     if (!duration) return;
 
     const newAnchor = {
@@ -725,9 +1155,9 @@ if (motionScore > 0.15) {
     setAnchors(updated);
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
-  };
+  }, [duration, currentTime, anchors, saveToHistory]);
 
-  const deleteAnchor = (anchorId) => {
+  const deleteAnchor = useCallback((anchorId) => {
     const updated = anchors.filter(a => a.id !== anchorId);
     setAnchors(updated);
     saveToHistory(updated);
@@ -737,25 +1167,23 @@ if (motionScore > 0.15) {
     if (previewAnchor?.id === anchorId) {
       setPreviewAnchor(null);
     }
-  };
+  }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
 
-const handleAnchorClick = (e, anchor) => {
-  e.stopPropagation();
-  setSelectedAnchor(anchor.id);
-  setHoveredAnchor(null); // Clear hover state first
-  
-  // Set preview anchor and ensure video seeks
-  setPreviewAnchor(anchor);
-  
-  // Use setTimeout to ensure state updates before seeking video
-  setTimeout(() => {
+  const handleAnchorClick = useCallback((e, anchor) => {
+    e.stopPropagation();
+
+    // Batch state updates to reduce re-renders
+    setSelectedAnchor(anchor.id);
+    setHoveredAnchor(null);
+    setPreviewAnchor(anchor);
+
+    // Use ref instead of setTimeout for immediate video seek
     if (previewVideoRef.current) {
       previewVideoRef.current.currentTime = anchor.start;
     }
-  }, 0);
-};
+  }, []);
 
-  const handleAnchorMouseDown = (e, anchor, dragType) => {
+  const handleAnchorMouseDown = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
     setDragState({
@@ -764,9 +1192,9 @@ const handleAnchorClick = (e, anchor) => {
       startX: e.clientX || e.touches?.[0]?.clientX || 0,
       anchorSnapshot: { ...anchor }
     });
-  };
+  }, []);
 
-  const handleAnchorTouchStart = (e, anchor, dragType) => {
+  const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
     setDragState({
@@ -775,101 +1203,110 @@ const handleAnchorClick = (e, anchor) => {
       startX: e.touches[0].clientX,
       anchorSnapshot: { ...anchor }
     });
-  };
+  }, []);
 
-  // Unified drag effect
+  // Persistent drag handlers with 60fps throttling (optimized)
+  const rafIdRef = useRef(null);
+  const dragDataRef = useRef({ anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory });
+
+  // Keep refs in sync without recreating handlers
   useEffect(() => {
-    if (!dragState.active) return;
+    dragDataRef.current = { anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory };
+  }, [anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory]);
 
-    let rafId = null;
-    let lastClientX = dragState.startX;
+  const processMouseMove = useCallback((clientX) => {
+    const { dragState, anchors, duration, selectedAnchor, previewAnchor } = dragDataRef.current;
 
-    const handleMouseMove = (e) => {
-      const clientX = e.clientX || e.touches?.[0]?.clientX;
-      if (!clientX) return;
-      lastClientX = clientX;
+    if (dragState.type === 'timeline') {
+      if (timelineRef.current && videoRef.current) {
+        const rect = timelineRef.current.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const percent = Math.max(0, Math.min(1, x / rect.width));
+        const time = percent * duration;
+        videoRef.current.currentTime = time;
+        setCurrentTime(time);
+      }
+    } else if (dragState.type.startsWith('anchor-')) {
+      const snapshot = dragState.anchorSnapshot;
+      if (!snapshot) return;
 
-      if (rafId) {
-        cancelAnimationFrame(rafId);
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const deltaX = clientX - dragState.startX;
+      const deltaTime = (deltaX / rect.width) * duration;
+
+      let newStart = snapshot.start;
+      let newEnd = snapshot.end;
+
+      if (dragState.type === 'anchor-left') {
+        newStart = Math.max(0, Math.min(snapshot.end - 1, snapshot.start + deltaTime));
+      } else if (dragState.type === 'anchor-right') {
+        newEnd = Math.max(snapshot.start + 1, Math.min(duration, snapshot.end + deltaTime));
+      } else if (dragState.type === 'anchor-move') {
+        const anchorDuration = snapshot.end - snapshot.start;
+        newStart = Math.max(0, Math.min(duration - anchorDuration, snapshot.start + deltaTime));
+        newEnd = newStart + anchorDuration;
       }
 
-      rafId = requestAnimationFrame(() => {
-        processMouseMove(lastClientX);
-      });
-    };
+      const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
+      const wouldOverlap = otherAnchors.some(a =>
+        (newStart >= a.start && newStart < a.end) ||
+        (newEnd > a.start && newEnd <= a.end) ||
+        (newStart <= a.start && newEnd >= a.end)
+      );
 
-    const processMouseMove = (clientX) => {
-      if (dragState.type === 'timeline') {
-        if (timelineRef.current && videoRef.current) {
-          const rect = timelineRef.current.getBoundingClientRect();
-          const x = clientX - rect.left;
-          const percent = Math.max(0, Math.min(1, x / rect.width));
-          const time = percent * duration;
-          videoRef.current.currentTime = time;
-          setCurrentTime(time);
-        }
-      } else if (dragState.type.startsWith('anchor-')) {
-        const snapshot = dragState.anchorSnapshot;
-        if (!snapshot) return;
+      if (!wouldOverlap) {
+        const updated = anchors.map(a =>
+          a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
+        ).sort((a, b) => a.start - b.start);
+        setAnchors(updated);
 
-        const rect = timelineRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const deltaX = clientX - dragState.startX;
-        const deltaTime = (deltaX / rect.width) * duration;
-
-        let newStart = snapshot.start;
-        let newEnd = snapshot.end;
-
-        if (dragState.type === 'anchor-left') {
-          newStart = Math.max(0, Math.min(snapshot.end - 1, snapshot.start + deltaTime));
-        } else if (dragState.type === 'anchor-right') {
-          newEnd = Math.max(snapshot.start + 1, Math.min(duration, snapshot.end + deltaTime));
-        } else if (dragState.type === 'anchor-move') {
-          const anchorDuration = snapshot.end - snapshot.start;
-          newStart = Math.max(0, Math.min(duration - anchorDuration, snapshot.start + deltaTime));
-          newEnd = newStart + anchorDuration;
-        }
-
-        const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
-        const wouldOverlap = otherAnchors.some(a =>
-          (newStart >= a.start && newStart < a.end) ||
-          (newEnd > a.start && newEnd <= a.end) ||
-          (newStart <= a.start && newEnd >= a.end)
-        );
-
-if (!wouldOverlap) {
-          const updated = anchors.map(a =>
-            a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
-          ).sort((a, b) => a.start - b.start);
-          setAnchors(updated);
-          
-          // Update preview video if this anchor is being previewed
-          if (previewAnchor?.id === selectedAnchor && previewVideoRef.current) {
-            if (dragState.type === 'anchor-left') {
-              previewVideoRef.current.currentTime = newStart;
-            } else if (dragState.type === 'anchor-right') {
-              previewVideoRef.current.currentTime = newStart;
-            }
+        // Update preview video if this anchor is being previewed
+        if (previewAnchor?.id === selectedAnchor && previewVideoRef.current) {
+          if (dragState.type === 'anchor-left' || dragState.type === 'anchor-right') {
+            previewVideoRef.current.currentTime = newStart;
           }
         }
       }
-    };
+    }
+  }, []);
 
-    const handleTouchMove = (e) => {
-      e.preventDefault();
-      handleMouseMove(e);
-    };
+  const handleMouseMove = useCallback((e) => {
+    const clientX = e.clientX || e.touches?.[0]?.clientX;
+    if (!clientX || !dragDataRef.current.dragState.active) return;
 
-    const handleMouseUp = () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-      if (dragState.type.startsWith('anchor-')) {
-        saveToHistory(anchors);
-      }
-      setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
-    };
+    // 60fps throttling with RAF
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      processMouseMove(clientX);
+    });
+  }, [processMouseMove]);
+
+  const handleMouseUp = useCallback(() => {
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
+    const { dragState, anchors, saveToHistory } = dragDataRef.current;
+
+    if (dragState.type?.startsWith('anchor-')) {
+      saveToHistory(anchors);
+    }
+    setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
+  }, []);
+
+  const handleTouchMove = useCallback((e) => {
+    e.preventDefault();
+    handleMouseMove(e);
+  }, [handleMouseMove]);
+
+  // Persistent event listeners (only attach/detach once)
+  useEffect(() => {
+    if (!dragState.active) return;
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -877,15 +1314,15 @@ if (!wouldOverlap) {
     document.addEventListener('touchend', handleMouseUp);
 
     return () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
       }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleMouseUp);
     };
-  }, [dragState, anchors, duration, selectedAnchor]);
+  }, [dragState.active, handleMouseMove, handleMouseUp, handleTouchMove]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -1583,7 +2020,7 @@ const exportVideo = async () => {
             {/* Preview/Export Buttons - NOW AT TOP */}
   <div className="flex flex-col sm:flex-row gap-3 mb-4">
     <button
-      onClick={isPreviewMode ? stopPreviewMode : startPreviewMode}
+      onClick={isPreviewMode ? stopEnhancedPreview : startEnhancedPreview}
       disabled={isProcessing || anchors.length === 0}
       className={`flex-1 py-3 rounded-xl font-semibold text-base transition-all ${
         anchors.length === 0
@@ -1735,9 +2172,145 @@ const exportVideo = async () => {
 )}
 </div>
 
+{/* Preview Mode Scrubber - Only show in preview mode */}
+{isPreviewMode && previewTimeline.length > 0 && (
+  <div className="mt-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+    {/* Preview Controls */}
+    <div className="flex items-center justify-between mb-3">
+      <div className="text-sm text-gray-300">
+        <span className="font-semibold">{formatTime(previewCurrentTime)}</span>
+        <span className="text-gray-500"> / </span>
+        <span>{formatTime(previewTotalDuration)}</span>
+      </div>
+      <div className="text-sm text-gray-400">
+        Anchor {previewAnchorIndex + 1} of {previewTimeline.length}
+      </div>
+    </div>
+
+    {/* Scrubber Bar */}
+    <div
+      className="relative h-12 bg-slate-800 rounded-lg overflow-hidden cursor-pointer mb-3"
+      onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const percentage = clickX / rect.width;
+        const newTime = percentage * previewTotalDuration;
+        seekPreviewTime(newTime);
+      }}
+      onMouseDown={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+
+        const handleMouseMove = (moveEvent) => {
+          const moveX = moveEvent.clientX - rect.left;
+          const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+          const newTime = percentage * previewTotalDuration;
+          seekPreviewTime(newTime);
+        };
+
+        const handleMouseUp = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+      }}
+    >
+      {/* Anchor Segments */}
+      {previewTimeline.map((segment, idx) => {
+        const left = (segment.previewStart / previewTotalDuration) * 100;
+        const width = (segment.duration / previewTotalDuration) * 100;
+        const colors = anchorColors[idx % anchorColors.length];
+        const isActive = idx === previewAnchorIndex;
+
+        return (
+          <div
+            key={segment.anchorId}
+            className={`absolute top-0 bottom-0 transition-all ${colors.bg} ${isActive ? 'opacity-100' : 'opacity-60 hover:opacity-80'}`}
+            style={{
+              left: `${left}%`,
+              width: `${width}%`,
+              border: isActive ? `2px solid ${colors.border.replace('border-', '')}` : 'none'
+            }}
+            title={`Anchor ${idx + 1}: ${formatTime(segment.duration)}`}
+          />
+        );
+      })}
+
+      {/* Playhead */}
+      <div
+        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none"
+        style={{
+          left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
+        }}
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-xl border-2 border-slate-900" />
+      </div>
+    </div>
+
+    {/* Playback Controls */}
+    <div className="flex items-center justify-center gap-3">
+      <button
+        onClick={() => {
+          const prevIndex = Math.max(0, previewAnchorIndex - 1);
+          if (prevIndex !== previewAnchorIndex) {
+            seekPreviewTime(previewTimeline[prevIndex].previewStart);
+          }
+        }}
+        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm"
+        title="Previous Anchor (Left Arrow)"
+      >
+        <span>◄</span> Prev
+      </button>
+
+      <button
+        onClick={togglePreviewPlayback}
+        className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition flex items-center gap-2 font-semibold shadow-lg"
+        title="Play/Pause (Spacebar)"
+      >
+        {isPreviewPlaying ? <Pause size={20} /> : <Play size={20} />}
+        {isPreviewPlaying ? 'Pause' : 'Play'}
+      </button>
+
+      <button
+        onClick={() => {
+          const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
+          if (nextIndex !== previewAnchorIndex) {
+            seekPreviewTime(previewTimeline[nextIndex].previewStart);
+          }
+        }}
+        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm"
+        title="Next Anchor (Right Arrow)"
+      >
+        Next <span>►</span>
+      </button>
+
+      <button
+        onClick={() => {
+          const currentAnchor = anchors[previewAnchorIndex];
+          if (currentAnchor) {
+            openPrecisionModal(currentAnchor);
+          }
+        }}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm font-semibold"
+        title="Edit Current Anchor"
+      >
+        <ZoomIn size={16} />
+        Edit
+      </button>
+    </div>
+  </div>
+)}
+
  {/* Playback Info */}
 <div className="text-sm text-gray-300 text-center">
-  {formatTime(currentTime)} / {formatTime(duration)}
+  {isPreviewMode && anchors.length > 0 ? (
+    <>
+      Anchor {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s
+    </>
+  ) : (
+    <>{formatTime(currentTime)} / {formatTime(duration)}</>
+  )}
 </div>
             </div>
 
@@ -1821,6 +2394,20 @@ const exportVideo = async () => {
     <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{targetDuration}s</span>
   </div>
 
+  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-2 sm:col-span-1">
+    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0" title="Motion detection sensitivity">Sens:</label>
+    <input
+      type="range"
+      min="0"
+      max="100"
+      step="10"
+      value={motionSensitivity * 100}
+      onChange={(e) => setMotionSensitivity(parseInt(e.target.value) / 100)}
+      className="flex-1 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+      title="Lower = stricter motion detection, Higher = more permissive"
+    />
+    <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{Math.round(motionSensitivity * 100)}%</span>
+  </div>
 
       <label className={`flex items-center gap-1 cursor-pointer bg-slate-700/50 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg ${!music ? 'opacity-50 cursor-not-allowed' : ''}`}>
 <input
@@ -1839,17 +2426,38 @@ const exportVideo = async () => {
     <button
       onClick={async () => {
         if (!video || isAnalyzing) return;
-        
+
+        console.log('🚀 AUTO-GENERATE CLICKED!', {
+          hasVideo: !!video,
+          hasMusic: !!music,
+          useBeatSync,
+          musicStartTime,
+          targetDuration
+        });
+        alert('🔍 Auto-Generate started! Check console for detailed logs.');
+
         try {
           setIsAnalyzing(true);
-          
+
           // Analyze audio FIRST if beat-sync is enabled
           let musicAnalysisResult = null;
           if (useBeatSync) {
+            console.log('🎵 Beat-Sync is ENABLED');
             if (music) {
+              console.log('🎵 Using MUSIC FILE for beat analysis', {
+                musicStartTime,
+                targetDuration
+              });
               musicAnalysisResult = await analyzeMusicStructure(music, musicStartTime, targetDuration);
               setMusicAnalysis(musicAnalysisResult);
+              console.log('🎵 Music analysis complete:', {
+                bpm: musicAnalysisResult.bpm,
+                beatGridLength: musicAnalysisResult.beatGrid?.length,
+                momentsFound: musicAnalysisResult.moments?.length
+              });
             } else if (video) {
+              console.log('⚠️ No music file - extracting audio from VIDEO');
+
               if (!ffmpegLoaded) {
                 alert('Video processor not ready yet');
                 setIsAnalyzing(false);
@@ -1873,33 +2481,64 @@ const exportVideo = async () => {
             }
           }
           
-          const videoAnalysisResult = await analyzeVideo(video);
+          const videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
           setVideoAnalysis(videoAnalysisResult);
-          
-          let sortedMoments;
+
+          console.log('🎬 Video Analysis Complete:', {
+            totalMoments: videoAnalysisResult.length,
+            firstFew: videoAnalysisResult.slice(0, 3),
+            timesInFirst30s: videoAnalysisResult.filter(m => m.time <= 30).map(m => m.time.toFixed(1))
+          });
+
+          // Score all moments by motion quality
+          const scoredMoments = [];
+
+          for (const moment of videoAnalysisResult) {
+            let score = moment.motionScore * 0.8;
+            if (moment.sceneChange) score += 0.6;
+
+            // BOOST score if moment is near music when beat-sync is enabled
+            if (musicAnalysisResult?.beatGrid) {
+              const beatGrid = musicAnalysisResult.beatGrid;
+              const musicStart = beatGrid[0];
+              const musicEnd = beatGrid[beatGrid.length - 1];
+              const expandedRange = 10; // seconds before/after music
+
+              if (moment.time >= musicStart - expandedRange && moment.time <= musicEnd + expandedRange) {
+                score *= 3; // 3x boost for moments near music section
+                console.log(`🎵 Boosted moment at ${moment.time.toFixed(1)}s (near music ${musicStart.toFixed(1)}-${musicEnd.toFixed(1)}s)`);
+              }
+            }
+
+            scoredMoments.push({ ...moment, score });
+          }
+
+          const sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
 
           if (musicAnalysisResult?.beatGrid) {
-            sortedMoments = videoAnalysisResult.map((moment, index) => ({
-              ...moment,
-              score: 1.0 - (index * 0.01)
-            }));
+            console.log('🎵 Beat-Sync Mode - Prioritizing moments near music section');
           } else {
-            const scoredMoments = [];
-            
-            for (const moment of videoAnalysisResult) {
-              let score = moment.motionScore * 0.8;
-              if (moment.sceneChange) score += 0.6;
-              scoredMoments.push({ ...moment, score });
-            }
-            
-            sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
+            console.log('📊 No Beat-Sync - Using motion scores only');
           }
+
+          console.log('🎯 Starting anchor generation:', {
+            totalCandidates: sortedMoments.length,
+            targetDuration,
+            firstMoments: sortedMoments.slice(0, 5).map(m => ({ time: m.time, score: m.score }))
+          });
 
           const newAnchors = [];
           let totalDuration = 0;
 
           for (let i = 0; i < sortedMoments.length && totalDuration < targetDuration; i++) {
             const moment = sortedMoments[i];
+
+            console.log(`🔄 Loop iteration ${i}:`, {
+              momentTime: moment.time,
+              currentTotalDuration: totalDuration,
+              targetDuration,
+              anchorsCreated: newAnchors.length
+            });
             
             let clipLength = 2.5;
             
@@ -1917,32 +2556,77 @@ const exportVideo = async () => {
               
             const start = Math.max(0, moment.time - 0.5);
             const end = Math.min(duration, start + clipLength);
-            
+
             const hasOverlap = newAnchors.some(a =>
               (start >= a.start && start < a.end) ||
               (end > a.start && end <= a.end) ||
               (start <= a.start && end >= a.end)
             );
-            
-            if (!hasOverlap) {
+
+            if (hasOverlap) {
+              console.log(`❌ Overlap detected for moment ${i}:`, {
+                proposedStart: start,
+                proposedEnd: end,
+                existingAnchors: newAnchors.map(a => ({ start: a.start, end: a.end }))
+              });
+            } else {
               newAnchors.push({
                 id: Date.now() + i,
                 start: start,
                 end: end
               });
               totalDuration += (end - start);
+              console.log(`✅ Anchor ${newAnchors.length - 1} added:`, {
+                start,
+                end,
+                duration: end - start,
+                totalDuration
+              });
             }
           }
-          
+
+          console.log('📦 Anchors before beat-snapping:', {
+            count: newAnchors.length,
+            totalDuration,
+            anchors: newAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
+          });
+
           let finalAnchors = newAnchors.sort((a, b) => a.start - b.start);
 
           if (musicAnalysisResult?.beatGrid && finalAnchors.length > 0) {
             const beatGrid = musicAnalysisResult.beatGrid;
-            
-            finalAnchors = finalAnchors.map(anchor => {
+            const beatGridStart = beatGrid[0];
+            const beatGridEnd = beatGrid[beatGrid.length - 1];
+
+            console.log('🎵 Beat-snapping enabled:', {
+              beatGridLength: beatGrid.length,
+              beatGridRange: `${beatGridStart.toFixed(2)}s - ${beatGridEnd.toFixed(2)}s`,
+              anchorsToSnap: finalAnchors.length
+            });
+
+            // Calculate beat interval from grid
+            const beatInterval = beatGrid.length > 1 ? beatGrid[1] - beatGrid[0] : 0.5;
+
+            console.log('⏱️ Beat interval calculated:', beatInterval);
+
+            finalAnchors = finalAnchors.map((anchor, idx) => {
+              const originalStart = anchor.start;
+              const originalEnd = anchor.end;
+
+              // Check if anchor is within beat grid range
+              const anchorInBeatRange = anchor.start >= beatGridStart - 5 && anchor.start <= beatGridEnd + 5;
+
+              if (!anchorInBeatRange) {
+                console.log(`⏭️ Anchor ${idx} outside beat grid - keeping original:`, {
+                  anchorStart: originalStart.toFixed(2),
+                  beatGridRange: `${beatGridStart.toFixed(2)} - ${beatGridEnd.toFixed(2)}`
+                });
+                return anchor; // Keep original anchor unchanged
+              }
+
               let nearestStartBeat = beatGrid[0];
               let minStartDiff = Math.abs(anchor.start - beatGrid[0]);
-              
+
               for (const beat of beatGrid) {
                 const diff = Math.abs(anchor.start - beat);
                 if (diff < minStartDiff) {
@@ -1950,8 +2634,9 @@ const exportVideo = async () => {
                   nearestStartBeat = beat;
                 }
               }
-              
-              let nearestEndBeat = nearestStartBeat + 2;
+
+              // Default to 4 beats (1 bar in 4/4 time) instead of 2 seconds
+              let nearestEndBeat = nearestStartBeat + (beatInterval * 4);
               for (const beat of beatGrid) {
                 if (beat > nearestStartBeat + 1.5) {
                   const diff = Math.abs(anchor.end - beat);
@@ -1960,28 +2645,78 @@ const exportVideo = async () => {
                   }
                 }
               }
-              
+
               const beatsSpanned = beatGrid.filter(b => b >= nearestStartBeat && b <= nearestEndBeat).length;
-              
+
               if (beatsSpanned >= 6 && beatsSpanned < 8) {
                 const targetBeatIndex = beatGrid.indexOf(nearestStartBeat) + 8;
                 if (targetBeatIndex < beatGrid.length) {
                   nearestEndBeat = beatGrid[targetBeatIndex];
                 }
               }
-              
-              return {
+
+              const snappedAnchor = {
                 ...anchor,
                 start: nearestStartBeat,
                 end: Math.min(nearestEndBeat, duration)
               };
+
+              console.log(`🎯 Snapped anchor ${idx}:`, {
+                original: { start: originalStart.toFixed(2), end: originalEnd.toFixed(2) },
+                snapped: { start: snappedAnchor.start.toFixed(2), end: snappedAnchor.end.toFixed(2) },
+                beatsSpanned
+              });
+
+              return snappedAnchor;
             });
-            
-            finalAnchors = finalAnchors.filter((anchor, index) => {
-              if (index === 0) return true;
-              return anchor.start >= finalAnchors[index - 1].end;
+
+            console.log('📦 After beat-snapping, before overlap filter:', {
+              count: finalAnchors.length,
+              anchors: finalAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
+            });
+
+            // Filter overlaps by checking against KEPT anchors, not original array
+            finalAnchors = finalAnchors.reduce((kept, anchor, index) => {
+              if (index === 0) {
+                kept.push(anchor);
+                console.log(`✅ Kept anchor 0 (first):`, { start: anchor.start.toFixed(2), end: anchor.end.toFixed(2) });
+                return kept;
+              }
+
+              // Check against the LAST KEPT anchor, not the original array
+              const lastKept = kept[kept.length - 1];
+              if (anchor.start >= lastKept.end) {
+                kept.push(anchor);
+                console.log(`✅ Kept anchor ${index}:`, {
+                  start: anchor.start.toFixed(2),
+                  end: anchor.end.toFixed(2),
+                  lastKeptEnd: lastKept.end.toFixed(2),
+                  gap: (anchor.start - lastKept.end).toFixed(2)
+                });
+              } else {
+                console.log(`❌ Rejected anchor ${index} (overlap):`, {
+                  start: anchor.start.toFixed(2),
+                  end: anchor.end.toFixed(2),
+                  lastKeptEnd: lastKept.end.toFixed(2),
+                  overlap: (lastKept.end - anchor.start).toFixed(2)
+                });
+              }
+
+              return kept;
+            }, []);
+
+            console.log('🏁 Final anchors after overlap filter:', {
+              count: finalAnchors.length,
+              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(2),
+              anchors: finalAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
             });
           }
+
+          console.log('🎉 AUTO-GENERATE COMPLETE:', {
+            finalAnchorCount: finalAnchors.length,
+            totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(2),
+            targetDuration
+          });
 
           setAnchors(finalAnchors);
           saveToHistory(finalAnchors);
