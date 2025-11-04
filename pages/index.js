@@ -1200,7 +1200,7 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     setDragState({
       active: true,
       type: dragType,
-      startX: e.touches[0].clientX,
+      startX: e.touches?.[0]?.clientX || 0,
       anchorSnapshot: { ...anchor }
     });
   }, []);
@@ -1445,7 +1445,7 @@ const goToNextAnchor = () => {
     setPrecisionDragState({
       active: true,
       type: handleType,
-      startX: e.touches[0].clientX,
+      startX: e.touches?.[0]?.clientX || 0,
       startAnchor: { ...precisionAnchor }
     });
   };
@@ -2135,7 +2135,8 @@ const exportVideo = async () => {
     onTouchStart={(e) => {
       const container = e.currentTarget;
       const rect = container.getBoundingClientRect();
-      const touch = e.touches[0];
+      const touch = e.touches?.[0];
+      if (!touch) return;
 
       const scrubVideo = (clientX) => {
         const x = clientX - rect.left;
@@ -2149,7 +2150,10 @@ const exportVideo = async () => {
       scrubVideo(touch.clientX);
 
       const handleTouchMove = (moveEvent) => {
-        scrubVideo(moveEvent.touches[0].clientX);
+        const touchX = moveEvent.touches?.[0]?.clientX;
+        if (touchX !== undefined) {
+          scrubVideo(touchX);
+        }
       };
 
       const handleTouchEnd = () => {
@@ -2214,6 +2218,35 @@ const exportVideo = async () => {
 
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
+      }}
+      onTouchStart={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const touch = e.touches?.[0];
+        if (!touch) return;
+
+        // Seek to initial position
+        const clickX = touch.clientX - rect.left;
+        const percentage = clickX / rect.width;
+        const newTime = percentage * previewTotalDuration;
+        seekPreviewTime(newTime);
+
+        const handleTouchMove = (moveEvent) => {
+          const touchX = moveEvent.touches?.[0]?.clientX;
+          if (touchX !== undefined) {
+            const moveX = touchX - rect.left;
+            const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+            const newTime = percentage * previewTotalDuration;
+            seekPreviewTime(newTime);
+          }
+        };
+
+        const handleTouchEnd = () => {
+          document.removeEventListener('touchmove', handleTouchMove);
+          document.removeEventListener('touchend', handleTouchEnd);
+        };
+
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd);
       }}
     >
       {/* Anchor Segments */}
@@ -2807,6 +2840,7 @@ const exportVideo = async () => {
     deleteAnchor(anchor.id);
   }}
   onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
+  onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-move')}
 onMouseEnter={() => {
   if (!previewAnchor || previewAnchor.id !== anchor.id) {
     setHoveredAnchor(anchor);
@@ -2850,11 +2884,12 @@ onMouseLeave={() => {
   <div
     onClick={(e) => e.stopPropagation()}
     onMouseDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
     className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64 ${
-      (anchor.start / duration) < 0.3 
-        ? 'left-0' 
-        : (anchor.start / duration) > 0.7 
-          ? 'right-0' 
+      (anchor.start / duration) < 0.3
+        ? 'left-0'
+        : (anchor.start / duration) > 0.7
+          ? 'right-0'
           : 'left-1/2 -translate-x-1/2'
     }`}
   >
@@ -3363,6 +3398,12 @@ onMouseLeave={() => {
   <div
     ref={precisionTimelineRef}
     onMouseDown={handlePrecisionTimelineMouseDown}
+    onTouchStart={(e) => {
+      const touch = e.touches?.[0];
+      if (touch) {
+        handlePrecisionTimelineMouseDown({ ...e, clientX: touch.clientX });
+      }
+    }}
     className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
   >
                   {/* Current time indicator */}
