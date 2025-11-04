@@ -21,3 +21,13 @@ body {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* Prevent overscroll/bounce on iOS */
+html {
+  overscroll-behavior: none;
+}
+
+/* Improve touch precision */
+* {
+  -webkit-tap-highlight-color: transparent;
+}

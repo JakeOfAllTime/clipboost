@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, RotateCcw, RotateCw, Save, FolderOpen } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -84,6 +84,11 @@ const ClipBoost = () => {
   const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
   const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
   const [hoveredAnchor, setHoveredAnchor] = useState(null);
+
+  // Mobile edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [previewMuted, setPreviewMuted] = useState(false);
+
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
   const [ffmpegLoaded, setFFmpegLoaded] = useState(false);
@@ -1196,6 +1201,13 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
   const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent click interference and scrolling
+
+    // Haptic feedback if supported
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+
     setSelectedAnchor(anchor.id);
     setDragState({
       active: true,
@@ -1323,6 +1335,28 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
       document.removeEventListener('touchend', handleMouseUp);
     };
   }, [dragState.active, handleMouseMove, handleMouseUp, handleTouchMove]);
+
+  // Lock body scroll during drag or edit mode
+  useEffect(() => {
+    if (dragState.active || isEditMode) {
+      // Save original styles
+      const originalOverflow = document.body.style.overflow;
+      const originalPosition = document.body.style.position;
+      const originalWidth = document.body.style.width;
+
+      // Lock scroll
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+
+      return () => {
+        // Restore original styles
+        document.body.style.overflow = originalOverflow;
+        document.body.style.position = originalPosition;
+        document.body.style.width = originalWidth;
+      };
+    }
+  }, [dragState.active, isEditMode]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -2067,6 +2101,50 @@ const exportVideo = async () => {
       )}
     </button>
   </div>
+
+  {/* Edit Mode Toggle Button */}
+  <div className="flex justify-center mb-4">
+    <button
+      onClick={() => {
+        setIsEditMode(!isEditMode);
+        // Haptic feedback
+        if (navigator.vibrate) {
+          navigator.vibrate(20);
+        }
+      }}
+      className={`px-6 py-3 rounded-xl font-semibold text-base transition-all flex items-center gap-2 shadow-lg ${
+        isEditMode
+          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+          : 'bg-slate-700 hover:bg-slate-600'
+      }`}
+    >
+      {isEditMode ? (
+        <>
+          <Minimize2 size={18} />
+          <span>Exit Edit Mode</span>
+        </>
+      ) : (
+        <>
+          <Maximize2 size={18} />
+          <span>📱 Mobile Edit Mode</span>
+        </>
+      )}
+    </button>
+  </div>
+
+  {/* Edit Mode Active Banner */}
+  {isEditMode && (
+    <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-500 rounded-xl p-4 mb-4 text-center">
+      <div className="flex items-center justify-center gap-2 mb-2">
+        <Maximize2 size={20} className="text-green-400" />
+        <span className="font-bold text-lg text-green-400">Edit Mode Active</span>
+      </div>
+      <p className="text-sm text-gray-300">
+        📱 Enhanced for mobile • Larger timeline & touch targets • Scroll locked
+      </p>
+    </div>
+  )}
+
 {/* Video Player */}
 <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
   <video
@@ -2807,7 +2885,7 @@ const exportVideo = async () => {
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
   }}
-  className="relative h-24 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all"
+  className={`relative ${isEditMode ? 'h-48' : 'h-24'} bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all`}
   title="Double-click to drop anchor"
 >
   {/* Current time indicator */}
@@ -2863,14 +2941,14 @@ onMouseLeave={() => {
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-left')}
                               onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-left')}
-                              className={`absolute left-0 top-0 bottom-0 w-2 ${colors.handle} cursor-ew-resize hover:opacity-80 -ml-1 z-30`}
+                              className={`absolute left-0 top-0 bottom-0 ${isEditMode ? 'w-6' : 'w-2'} ${colors.handle} cursor-ew-resize hover:opacity-80 ${isEditMode ? '-ml-3' : '-ml-1'} z-30 transition-all`}
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Right handle */}
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-right')}
                               onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-right')}
-                              className={`absolute right-0 top-0 bottom-0 w-2 ${colors.handle} cursor-ew-resize hover:opacity-80 -mr-1 z-30`}
+                              className={`absolute right-0 top-0 bottom-0 ${isEditMode ? 'w-6' : 'w-2'} ${colors.handle} cursor-ew-resize hover:opacity-80 ${isEditMode ? '-mr-3' : '-mr-1'} z-30 transition-all`}
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Precision button */}
@@ -2912,6 +2990,8 @@ onMouseLeave={() => {
                               className="w-full h-32 object-contain"
                               onTimeUpdate={handlePreviewTimeUpdate}
                               loop
+                              muted={previewMuted}
+                              playsInline
                             />
                           </div>
 
@@ -2922,6 +3002,13 @@ onMouseLeave={() => {
       className="p-2 bg-purple-600 rounded hover:bg-purple-700"
     >
       {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
+    </button>
+    <button
+      onClick={() => setPreviewMuted(!previewMuted)}
+      className="p-2 bg-slate-600 rounded hover:bg-slate-700"
+      title={previewMuted ? "Unmute" : "Mute"}
+    >
+      {previewMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
     </button>
     <div className="text-xs text-gray-300">
       {formatTime(anchor.end - anchor.start)} loop
