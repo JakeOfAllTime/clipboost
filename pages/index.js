@@ -3,7 +3,7 @@ import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Sc
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
-const ClipBoost = () => {
+const ReelForge = () => {
   // Core video state
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -88,6 +88,9 @@ const ClipBoost = () => {
   // Mobile edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [previewMuted, setPreviewMuted] = useState(false);
+
+  // Tab navigation state
+  const [currentTab, setCurrentTab] = useState('upload');
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -1660,6 +1663,109 @@ const goToNextAnchor = () => {
     }
   };
 
+  // Tab navigation helpers
+  const goNext = useCallback(() => {
+    const tabs = ['upload', 'clips', 'music', 'export'];
+    const currentIndex = tabs.indexOf(currentTab);
+
+    // Validation before advancing
+    if (currentTab === 'upload' && !video) {
+      alert('⚠️ Please upload a video first');
+      return;
+    }
+
+    // Advance to next tab
+    if (currentIndex < tabs.length - 1) {
+      setCurrentTab(tabs[currentIndex + 1]);
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(20);
+      }
+    }
+  }, [currentTab, video]);
+
+  const goBack = useCallback(() => {
+    const tabs = ['upload', 'clips', 'music', 'export'];
+    const currentIndex = tabs.indexOf(currentTab);
+
+    if (currentIndex > 0) {
+      setCurrentTab(tabs[currentIndex - 1]);
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(10);
+      }
+    }
+  }, [currentTab]);
+
+  // TabNav Component (vertical-only for mobile-first approach)
+  const TabNav = ({ currentTab, onChange, hasVideo, hasClips }) => {
+    const tabs = [
+      { id: 'upload', label: 'Upload', icon: '📤', number: 1 },
+      { id: 'clips', label: 'Clips', icon: '✂️', number: 2 },
+      { id: 'music', label: 'Music', icon: '🎵', number: 3 },
+      { id: 'export', label: 'Export', icon: '🚀', number: 4 }
+    ];
+
+    const isTabAccessible = (tabId) => {
+      if (tabId === 'upload') return true;
+      if (tabId === 'clips') return hasVideo;
+      if (tabId === 'music') return hasVideo;
+      if (tabId === 'export') return hasVideo;
+      return false;
+    };
+
+    const isTabCompleted = (tabId) => {
+      if (tabId === 'upload') return hasVideo;
+      if (tabId === 'clips') return hasClips;
+      return false;
+    };
+
+    const handleTabClick = (tabId) => {
+      if (isTabAccessible(tabId)) {
+        onChange(tabId);
+        // Haptic feedback
+        if (navigator.vibrate) {
+          navigator.vibrate(15);
+        }
+      }
+    };
+
+    return (
+      <div className="mb-8">
+        {/* Vertical tab navigation */}
+        <div className="flex flex-col gap-2 max-w-md mx-auto">
+          {tabs.map(tab => {
+            const isActive = currentTab === tab.id;
+            const isAccessible = isTabAccessible(tab.id);
+            const isCompleted = isTabCompleted(tab.id);
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabClick(tab.id)}
+                disabled={!isAccessible}
+                className={`
+                  flex items-center gap-3 px-6 py-4 rounded-xl transition-all text-left
+                  ${isActive ? 'bg-purple-600 shadow-xl scale-105 ring-2 ring-purple-400' : ''}
+                  ${!isActive && isAccessible ? 'bg-slate-700 hover:bg-slate-600' : ''}
+                  ${!isAccessible ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                `}
+              >
+                <span className="text-3xl">{tab.icon}</span>
+                <div className="flex-1">
+                  <div className="font-bold text-lg">{tab.label}</div>
+                  <div className="text-xs text-gray-300">Step {tab.number} of 4</div>
+                </div>
+                {isCompleted && <span className="text-green-400 text-2xl">✓</span>}
+                {!isAccessible && <span className="text-gray-500 text-xl">🔒</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // Export processing
 const exportVideo = async () => {
   if (!ffmpegLoaded || !video || selectedPlatforms.length === 0) return;
@@ -1864,7 +1970,7 @@ const exportVideo = async () => {
         {/* Header */}
        <div className="text-center mb-8">
   <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(219,39,119,0.8)] drop-shadow-[0_0_30px_rgba(219,39,119,0.6)] drop-shadow-[0_0_45px_rgba(219,39,119,0.4)]">
-    ClipBoost
+    ReelForge
   </h1>
   <p className="text-gray-300">AI-Powered Video Editor</p>
           {!ffmpegLoaded && (
@@ -1878,6 +1984,14 @@ const exportVideo = async () => {
             </div>
           )}
         </div>
+
+        {/* Tab Navigation */}
+        <TabNav
+          currentTab={currentTab}
+          onChange={setCurrentTab}
+          hasVideo={!!video}
+          hasClips={anchors.length > 0}
+        />
 {/* Restore Toast Notification */}
         {showRestoreToast && (
           <div className="fixed top-4 right-4 bg-slate-800 border-2 border-purple-500 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
@@ -1911,28 +2025,66 @@ const exportVideo = async () => {
             </div>
           </div>
         )}
-        {/* Upload */}
-        {!video && (
-          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-12 text-center border border-slate-700">
-            <Upload className="w-16 h-16 mx-auto mb-4 text-purple-400" />
-            <h2 className="text-2xl font-semibold mb-2">Upload Your Video</h2>
-            <p className="text-gray-400 mb-6">Maximum file size: 500 MB</p>
-            <label className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
-              Choose Video
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleVideoUpload}
-                className="hidden"
-              />
-            </label>
+
+        {/* TAB 1: UPLOAD */}
+        {currentTab === 'upload' && (
+          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-12 border border-slate-700">
+            {!video ? (
+              <div className="text-center">
+                <Upload className="w-16 h-16 mx-auto mb-4 text-purple-400" />
+                <h2 className="text-2xl font-semibold mb-2">Upload Your Video</h2>
+                <p className="text-gray-400 mb-6">Maximum file size: 500 MB</p>
+                <label className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
+                  Choose Video
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-green-400 text-6xl mb-4">✓</div>
+                <h2 className="text-2xl font-semibold mb-2">Video Uploaded!</h2>
+                <p className="text-gray-300 mb-4">
+                  Duration: {formatTime(duration)} • {video.name}
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <button
+                    onClick={() => setShowTrimModal(true)}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
+                  >
+                    <Scissors size={18} />
+                    Trim Video (Optional)
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (videoUrl) URL.revokeObjectURL(videoUrl);
+                      setVideo(null);
+                      setVideoUrl(null);
+                      setAnchors([]);
+                      setHistory([]);
+                      setHistoryIndex(-1);
+                      setMusic(null);
+                      setMusicUrl(null);
+                      setCurrentTab('upload');
+                    }}
+                    className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition"
+                  >
+                    Change Video
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Main Interface */}
-        {video && (
+        {/* TAB 2: CLIPS */}
+        {currentTab === 'clips' && video && (
           <div className="space-y-6">
-            {/* Top Controls - Music & Change Video */}
+            {/* Video Preview */}
             <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 {/* Music Section */}
@@ -3595,6 +3747,185 @@ onMouseLeave={() => {
           </div>
         )}
 
+        {/* TAB 3: MUSIC */}
+        {currentTab === 'music' && video && (
+          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-semibold mb-2">🎵 Add Music (Optional)</h2>
+              <p className="text-gray-400">Enhance your clips with background music</p>
+            </div>
+
+            {!music ? (
+              <div className="text-center">
+                <label className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
+                  Choose Music File
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleMusicUpload}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-sm text-gray-400 mt-4">Supported formats: MP3, WAV, OGG</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                  <span className="text-gray-300">🎵 {music.name}</span>
+                  <button
+                    onClick={() => {
+                      setMusic(null);
+                      setMusicUrl(null);
+                    }}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <audio
+                  ref={musicRef}
+                  src={musicUrl}
+                  onLoadedMetadata={handleMusicLoadedMetadata}
+                  onEnded={() => setIsMusicPlaying(false)}
+                  className="hidden"
+                />
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-sm text-gray-300">Audio Balance</label>
+                    <span className="text-sm flex items-center gap-2">
+                      <span className="text-blue-400">Video: {100 - audioBalance}%</span>
+                      <span className="text-gray-500">•</span>
+                      <span className="text-green-400">Music: {audioBalance}%</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={audioBalance}
+                    onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+                    className="w-full h-3 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-sm text-gray-300">Music Start Position</label>
+                    <span className="text-sm text-gray-400">{formatTime(musicStartTime)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={musicDuration}
+                    step="0.1"
+                    value={musicStartTime}
+                    onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
+                    className="w-full h-3 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) 100%)`
+                    }}
+                  />
+                </div>
+
+                <div className="flex justify-center">
+                  <button
+                    onClick={toggleMusicPreview}
+                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2"
+                  >
+                    {isMusicPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    {isMusicPlaying ? 'Pause' : 'Preview'} Music
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: EXPORT */}
+        {currentTab === 'export' && video && (
+          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-semibold mb-2">🚀 Export Your Video</h2>
+              <p className="text-gray-400">Select platforms and export your clips</p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <h3 className="font-semibold text-lg">Select Platforms:</h3>
+              {Object.entries(platforms).map(([key, platform]) => (
+                <label
+                  key={key}
+                  className="flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedPlatforms.includes(key)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedPlatforms([...selectedPlatforms, key]);
+                      } else {
+                        setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-2 border-purple-500"
+                  />
+                  <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
+                    {platform.name}
+                    {platform.subtitle && (
+                      <div className="text-sm opacity-80">{platform.subtitle}</div>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={exportVideo}
+                disabled={!ffmpegLoaded || isProcessing || selectedPlatforms.length === 0}
+                className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-bold text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                {isProcessing ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <span>Processing...</span>
+                    <span className="text-sm">{progress}%</span>
+                  </div>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Download size={20} />
+                    Export {selectedPlatforms.length > 1 ? `(${selectedPlatforms.length} platforms)` : ''}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between mt-8">
+          {currentTab !== 'upload' && (
+            <button
+              onClick={goBack}
+              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all flex items-center gap-2 font-semibold"
+            >
+              ← Back
+            </button>
+          )}
+
+          {currentTab !== 'export' && (
+            <button
+              onClick={goNext}
+              className="px-8 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all flex items-center gap-2 ml-auto font-semibold"
+            >
+              {currentTab === 'music' ? 'Skip to Export →' : 'Next →'}
+            </button>
+          )}
+        </div>
+
         {/* Export Platform Modal */}
 {/* Export Platform Modal */}
 {showExportModal && (
@@ -3652,4 +3983,4 @@ onMouseLeave={() => {
   );
 };
 
-export default ClipBoost;
+export default ReelForge;
