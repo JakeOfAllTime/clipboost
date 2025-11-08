@@ -86,7 +86,6 @@ const ReelForge = () => {
   const [hoveredAnchor, setHoveredAnchor] = useState(null);
 
   // Mobile edit mode state
-  const [isEditMode, setIsEditMode] = useState(false);
   const [previewMuted, setPreviewMuted] = useState(false);
 
   // Tab navigation state
@@ -103,6 +102,8 @@ const ReelForge = () => {
   const precisionVideoRef = useRef(null);
   const musicRef = useRef(null);
   const timelineRef = useRef(null);
+  const lastTapTimeRef = useRef(0);
+  const lastTapPositionRef = useRef({ x: 0, y: 0 });
   const precisionTimelineRef = useRef(null);
   const loadConfigInputRef = useRef(null);
 
@@ -1139,6 +1140,41 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     seekToPosition(e);
   }, [seekToPosition]);
 
+  // Handle double-tap on timeline (mobile)
+  const handleTimelineDoubleTap = useCallback((e) => {
+    if (!timelineRef.current || !duration) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const touch = e.changedTouches[0];
+    const x = touch.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    const time = percent * duration;
+
+    const newAnchor = {
+      id: Date.now(),
+      start: time,
+      end: Math.min(time + 2, duration)
+    };
+
+    const hasOverlap = anchors.some(a =>
+      (newAnchor.start >= a.start && newAnchor.start < a.end) ||
+      (newAnchor.end > a.start && newAnchor.end <= a.end) ||
+      (newAnchor.start <= a.start && newAnchor.end >= a.end)
+    );
+
+    if (!hasOverlap) {
+      const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+      setAnchors(updated);
+      saveToHistory(updated);
+      setSelectedAnchor(newAnchor.id);
+
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(30);
+      }
+    }
+  }, [duration, anchors, saveToHistory]);
+
   // Anchor management (memoized)
   const addAnchor = useCallback(() => {
     if (!duration) return;
@@ -1340,9 +1376,9 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     };
   }, [dragState.active, handleMouseMove, handleMouseUp, handleTouchMove]);
 
-  // Lock body scroll during drag or edit mode
+  // Lock body scroll during drag
   useEffect(() => {
-    if (dragState.active || isEditMode) {
+    if (dragState.active) {
       // Save original styles and scroll position
       const scrollY = window.scrollY || window.pageYOffset;
       const originalOverflow = document.body.style.overflow;
@@ -1367,7 +1403,7 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
         window.scrollTo(0, scrollY);
       };
     }
-  }, [dragState.active, isEditMode]);
+  }, [dragState.active]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -2324,65 +2360,6 @@ const exportVideo = async () => {
     </button>
   </div>
 
-  {/* Edit Mode Toggle Button */}
-  <div className="flex justify-center mb-4">
-    <button
-      onClick={() => {
-        setIsEditMode(!isEditMode);
-        // Haptic feedback
-        if (navigator.vibrate) {
-          navigator.vibrate(20);
-        }
-      }}
-      className={`px-6 py-3 rounded-xl font-semibold text-base transition-all flex items-center gap-2 shadow-lg ${
-        isEditMode
-          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-          : 'bg-slate-700 hover:bg-slate-600'
-      }`}
-    >
-      {isEditMode ? (
-        <>
-          <Minimize2 size={18} />
-          <span>Exit Edit Mode</span>
-        </>
-      ) : (
-        <>
-          <Maximize2 size={18} />
-          <span>📱 Mobile Edit Mode</span>
-        </>
-      )}
-    </button>
-  </div>
-
-  {/* Edit Mode Active Banner */}
-  {isEditMode && (
-    <>
-      <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-500 rounded-xl p-4 mb-4 text-center">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <Maximize2 size={20} className="text-green-400" />
-          <span className="font-bold text-lg text-green-400">Edit Mode Active</span>
-        </div>
-        <p className="text-sm text-gray-300">
-          📱 Enhanced for mobile • Larger timeline & touch targets • Scroll locked
-        </p>
-      </div>
-
-      {/* Exit Edit Mode Button */}
-      <button
-        onClick={() => {
-          setIsEditMode(false);
-          if (navigator.vibrate) {
-            navigator.vibrate(10);
-          }
-        }}
-        className="fixed top-4 right-4 z-50 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white shadow-lg font-semibold transition-all flex items-center gap-2"
-      >
-        <X size={18} />
-        Exit Edit Mode
-      </button>
-    </>
-  )}
-
 {/* Video Player */}
 <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
   <video
@@ -3103,6 +3080,25 @@ const exportVideo = async () => {
   onTouchEnd={(e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Double-tap detection for mobile
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapTimeRef.current;
+    const touch = e.changedTouches[0];
+    const tapPosition = { x: touch.clientX, y: touch.clientY };
+    const distance = Math.sqrt(
+      Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
+      Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
+    );
+
+    // If tapped within 300ms and within 30px of last tap, it's a double-tap
+    if (timeSinceLastTap < 300 && distance < 30) {
+      handleTimelineDoubleTap(e);
+      lastTapTimeRef.current = 0; // Reset to prevent triple-tap
+    } else {
+      lastTapTimeRef.current = now;
+      lastTapPositionRef.current = tapPosition;
+    }
   }}
   onDoubleClick={(e) => {
     if (!timelineRef.current || !duration) return;
@@ -3133,8 +3129,8 @@ const exportVideo = async () => {
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
   }}
-  className={`relative ${isEditMode ? 'h-48' : 'h-24'} bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all`}
-  style={{ touchAction: 'none', position: 'relative' }}
+  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all select-none"
+  style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
   title="Double-click to drop anchor"
 >
   {/* Current time indicator */}
@@ -3190,14 +3186,14 @@ onMouseLeave={() => {
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-left')}
                               onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-left')}
-                              className={`absolute left-0 top-0 bottom-0 ${isEditMode ? 'w-6' : 'w-2'} ${colors.handle} cursor-ew-resize hover:opacity-80 ${isEditMode ? '-ml-3' : '-ml-1'} z-30 transition-all`}
+                              className={`absolute left-0 top-0 bottom-0 w-4 ${colors.handle} cursor-ew-resize hover:opacity-80 -ml-2 z-30 transition-all`}
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Right handle */}
                             <div
                               onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-right')}
                               onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-right')}
-                              className={`absolute right-0 top-0 bottom-0 ${isEditMode ? 'w-6' : 'w-2'} ${colors.handle} cursor-ew-resize hover:opacity-80 ${isEditMode ? '-mr-3' : '-mr-1'} z-30 transition-all`}
+                              className={`absolute right-0 top-0 bottom-0 w-4 ${colors.handle} cursor-ew-resize hover:opacity-80 -mr-2 z-30 transition-all`}
                               onClick={(e) => e.stopPropagation()}
                             />
                             {/* Precision button */}
