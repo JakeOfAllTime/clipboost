@@ -2031,7 +2031,10 @@ const exportVideo = async () => {
 
   return (
 <div className="min-h-screen p-4 sm:p-8" style={{ color: 'var(--text-primary)' }}>
-  <div className="max-w-7xl mx-auto w-full">
+  {/* Stone Texture Overlay */}
+  <div className="stone-texture-overlay" />
+
+  <div className="max-w-7xl mx-auto w-full relative z-10">
         {/* Header - Carved Stone */}
         <div className="text-center mb-8 forge-panel rounded-lg p-6">
           <h1 className="text-5xl font-bold mb-2 tracking-wider" style={{
@@ -2059,7 +2062,7 @@ const exportVideo = async () => {
         />
 {/* Restore Toast Notification */}
         {showRestoreToast && (
-          <div className="fixed top-4 right-4 bg-slate-800 border-2 border-purple-500 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
+          <div className="fixed top-4 right-4 bg-slate-800 border-2 border-amber-600/60 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <div className="font-semibold mb-1">Previous Work Found</div>
@@ -2069,7 +2072,7 @@ const exportVideo = async () => {
                 <div className="flex gap-2">
                   <button
                     onClick={restoreAutoSave}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold transition"
+                    className="px-3 py-1.5 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border border-amber-600/40 hover:border-amber-600/60 rounded text-sm font-semibold transition"
                   >
                     Restore
                   </button>
@@ -2528,8 +2531,8 @@ const exportVideo = async () => {
       document.addEventListener('touchend', handleTouchEnd);
     }}
   >
-    <div 
-      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all relative pointer-events-none"
+    <div
+      className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 transition-all relative pointer-events-none border-r-2 border-amber-500/60"
       style={{ width: `${(currentTime / duration) * 100}%` }}
     >
       {/* Scrubber Handle */}
@@ -2661,7 +2664,7 @@ const exportVideo = async () => {
 
       <button
         onClick={togglePreviewPlayback}
-        className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition flex items-center gap-2 font-semibold shadow-lg"
+        className="px-6 py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center gap-2 font-semibold shadow-lg"
         title="Play/Pause (Spacebar)"
       >
         {isPreviewPlaying ? <Pause size={20} /> : <Play size={20} />}
@@ -3294,7 +3297,7 @@ onMouseLeave={() => {
     onClick={(e) => e.stopPropagation()}
     onMouseDown={(e) => e.stopPropagation()}
     onTouchStart={(e) => e.stopPropagation()}
-    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-purple-500 p-3 z-50 w-64 ${
+    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 z-50 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
@@ -3330,7 +3333,7 @@ onMouseLeave={() => {
   <div className="flex items-center gap-2">
     <button
       onClick={togglePreviewPlay}
-      className="p-2 bg-purple-600 rounded hover:bg-purple-700"
+      className="p-2 bg-gradient-to-br from-gray-700 to-gray-800 border border-amber-600/40 rounded hover:border-amber-600/60"
     >
       {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
     </button>
@@ -3396,7 +3399,7 @@ onMouseLeave={() => {
                 </div>
                 <div className="bg-slate-900/50 p-3 rounded-lg text-center">
                   <div className="text-gray-400 text-xs">Selected</div>
-                  <div className="text-lg font-semibold text-purple-400">
+                  <div className="text-lg font-semibold text-amber-400">
                     {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
                   </div>
                 </div>
@@ -3527,7 +3530,7 @@ onMouseLeave={() => {
 
                 <div className="bg-slate-900/50 p-4 rounded-lg text-center">
                   <div className="text-sm text-gray-400 mb-1">Duration</div>
-                  <div className="text-3xl font-bold text-purple-400">{formatTime(trimEnd - trimStart)}</div>
+                  <div className="text-3xl font-bold text-amber-400">{formatTime(trimEnd - trimStart)}</div>
                 </div>
 
                 <div>
@@ -3567,7 +3570,7 @@ onMouseLeave={() => {
                     <div className="text-sm text-gray-300 mb-2">Processing... {progress}%</div>
                     <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
+                        className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 border-r-2 border-amber-500/60 transition-all"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -3850,16 +3853,23 @@ onMouseLeave={() => {
 
                   {/* Anchor visualization */}
                   <div
-                    className="absolute top-2 bottom-2 bg-purple-500/30 border-2 border-purple-500 rounded z-10"
+                    className="absolute top-2 bottom-2 bg-amber-500/20 border-2 border-amber-500/60 rounded z-10"
                     style={{
                       left: `${((precisionAnchor.start - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`,
                       width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
                     }}
                   >
-                    {/* Start handle */}
+                    {/* Start handle - Wider on mobile */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
-                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        handlePrecisionHandleMouseDown({
+                          ...e,
+                          clientX: e.touches[0].clientX
+                        }, 'start');
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedHandle('start');
@@ -3868,17 +3878,24 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.start;
                         }
                       }}
-                      className={`absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize transition -ml-1 z-30 ${
-                        selectedHandle === 'start' 
-                          ? 'bg-green-400 shadow-lg shadow-green-400/50' 
-                          : 'bg-green-500 hover:bg-green-400'
+                      className={`absolute left-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -ml-1 z-30 touch-none ${
+                        selectedHandle === 'start'
+                          ? 'bg-amber-500 shadow-lg shadow-amber-500/50'
+                          : 'bg-amber-600 hover:bg-amber-500'
                       }`}
                     />
 
-                    {/* End handle */}
+                    {/* End handle - Wider on mobile */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
-                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        handlePrecisionHandleMouseDown({
+                          ...e,
+                          clientX: e.touches[0].clientX
+                        }, 'end');
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedHandle('end');
@@ -3887,10 +3904,10 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.end;
                         }
                       }}
-                      className={`absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize transition -mr-1 z-30 ${
-                        selectedHandle === 'end' 
-                          ? 'bg-red-400 shadow-lg shadow-red-400/50' 
-                          : 'bg-red-500 hover:bg-red-400'
+                      className={`absolute right-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -mr-1 z-30 touch-none ${
+                        selectedHandle === 'end'
+                          ? 'bg-red-500 shadow-lg shadow-red-500/50'
+                          : 'bg-red-600 hover:bg-red-500'
                       }`}
                     />
 
@@ -3965,7 +3982,7 @@ onMouseLeave={() => {
                         setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
                       }
                     }}
-                    className="w-5 h-5 rounded border-2 border-purple-500"
+                    className="w-5 h-5 rounded border-2 border-amber-600/60"
                   />
                   <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
                     {platform.name}
@@ -4022,7 +4039,7 @@ onMouseLeave={() => {
                   setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
                 }
               }}
-            className="w-5 h-5 rounded border-2 border-purple-500 bg-slate-800 checked:bg-white checked:border-purple-500 focus:ring-2 focus:ring-purple-500 cursor-pointer"/>
+            className="w-5 h-5 rounded border-2 border-amber-600/60 bg-slate-800 checked:bg-white checked:border-amber-600 focus:ring-2 focus:ring-amber-500 cursor-pointer"/>
             <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
               <div className="text-lg">{platform.name}</div>
               {platform.subtitle && (
@@ -4043,7 +4060,7 @@ onMouseLeave={() => {
         <button
           onClick={exportVideo}
           disabled={selectedPlatforms.length === 0}
-          className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
+          className="flex-1 px-6 py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:scale-105 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
         >
           Export {selectedPlatforms.length > 1 ? `(${selectedPlatforms.length})` : ''}
         </button>
