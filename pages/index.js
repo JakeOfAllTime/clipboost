@@ -1343,21 +1343,28 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   // Lock body scroll during drag or edit mode
   useEffect(() => {
     if (dragState.active || isEditMode) {
-      // Save original styles
+      // Save original styles and scroll position
+      const scrollY = window.scrollY || window.pageYOffset;
       const originalOverflow = document.body.style.overflow;
       const originalPosition = document.body.style.position;
       const originalWidth = document.body.style.width;
+      const originalTop = document.body.style.top;
 
-      // Lock scroll
+      // Lock scroll while preserving scroll position
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
 
       return () => {
         // Restore original styles
         document.body.style.overflow = originalOverflow;
         document.body.style.position = originalPosition;
+        document.body.style.top = originalTop;
         document.body.style.width = originalWidth;
+
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
       };
     }
   }, [dragState.active, isEditMode]);
@@ -2067,7 +2074,7 @@ const exportVideo = async () => {
                     {!isPlaying && (
                       <div
                         className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                        onClick={togglePlayPause}
+                        onClick={togglePlay}
                       >
                         <div className="bg-white/90 rounded-full p-6">
                           <Play size={48} className="text-black ml-1" />
@@ -2104,7 +2111,7 @@ const exportVideo = async () => {
                     {/* Control Buttons */}
                     <div className="flex justify-center gap-4">
                       <button
-                        onClick={togglePlayPause}
+                        onClick={togglePlay}
                         className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
                       >
                         {isPlaying ? <Pause size={18} /> : <Play size={18} />}
@@ -3089,6 +3096,14 @@ const exportVideo = async () => {
     const touch = e.touches[0];
     handleTimelineMouseDown({ ...e, clientX: touch.clientX });
   }}
+  onTouchMove={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }}
+  onTouchEnd={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }}
   onDoubleClick={(e) => {
     if (!timelineRef.current || !duration) return;
     const rect = timelineRef.current.getBoundingClientRect();
@@ -3119,6 +3134,7 @@ const exportVideo = async () => {
     setSelectedAnchor(newAnchor.id);
   }}
   className={`relative ${isEditMode ? 'h-48' : 'h-24'} bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all`}
+  style={{ touchAction: 'none', position: 'relative' }}
   title="Double-click to drop anchor"
 >
   {/* Current time indicator */}
