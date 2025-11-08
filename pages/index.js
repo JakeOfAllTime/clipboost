@@ -1775,66 +1775,52 @@ const goToNextAnchor = () => {
 
     return (
       <div className="mb-8">
-        {/* Horizontal tab navigation with Back/Next */}
-        <div className="flex items-center justify-between max-w-5xl mx-auto border-b border-gray-700 pb-2">
+        {/* Stone Tablet Navigation */}
+        <div className="flex items-center justify-between max-w-5xl mx-auto" style={{ borderBottom: '2px solid var(--border)', paddingBottom: '0' }}>
           {/* Left side - Back button */}
-          <div className="w-24">
+          <div className="w-24 mb-2">
             {currentTab !== 'materials' && (
               <button
                 onClick={goBack}
-                className="text-gray-400 hover:text-white transition-colors flex items-center gap-1"
+                className="forge-button px-3 py-2 rounded text-sm flex items-center gap-1"
               >
                 ← Back
               </button>
             )}
           </div>
 
-          {/* Center - Tabs */}
-          <div className="flex justify-center items-center gap-8">
-            {tabs.map((tab, index) => {
+          {/* Center - Stone Tabs */}
+          <div className="flex justify-center items-end gap-1">
+            {tabs.map((tab) => {
               const isActive = currentTab === tab.id;
               const isAccessible = isTabAccessible(tab.id);
 
               return (
-                <React.Fragment key={tab.id}>
-                  <button
-                    onClick={() => handleTabClick(tab.id)}
-                    disabled={!isAccessible}
-                    className={`
-                      relative pb-3 font-bold text-lg transition-all
-                      ${isActive ? 'text-white' : ''}
-                      ${!isActive && isAccessible ? 'text-gray-500 hover:text-orange-400' : ''}
-                      ${!isAccessible ? 'text-gray-700 cursor-not-allowed' : 'cursor-pointer'}
-                    `}
-                    style={{
-                      textShadow: isActive ? '0 0 10px rgba(255, 107, 53, 0.5)' : 'none'
-                    }}
-                  >
-                    {tab.label}
-                    {/* Orange underline for active tab */}
-                    {isActive && (
-                      <div
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"
-                        style={{ backgroundColor: '#ff6b35' }}
-                      />
-                    )}
-                  </button>
-
-                  {/* Separator pipe */}
-                  {index < tabs.length - 1 && (
-                    <span className="text-gray-700">|</span>
-                  )}
-                </React.Fragment>
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  disabled={!isAccessible}
+                  className={`
+                    px-6 py-3 font-bold text-sm tracking-wider rounded-t-lg
+                    ${isActive ? 'forge-tab-active' : 'forge-tab'}
+                  `}
+                  style={{
+                    fontFamily: 'serif',
+                    letterSpacing: '0.1em'
+                  }}
+                >
+                  {tab.label}
+                </button>
               );
             })}
           </div>
 
           {/* Right side - Next button */}
-          <div className="w-24 text-right">
+          <div className="w-24 text-right mb-2">
             {currentTab !== 'ship' && (
               <button
                 onClick={goNext}
-                className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 ml-auto"
+                className="forge-button px-3 py-2 rounded text-sm flex items-center gap-1 ml-auto"
               >
                 Next →
               </button>
@@ -2044,16 +2030,24 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
-<div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-4 sm:p-8">
+<div className="min-h-screen p-4 sm:p-8" style={{ color: 'var(--text-primary)' }}>
   <div className="max-w-7xl mx-auto w-full">
-        {/* Header */}
-       <div className="text-center mb-8">
-  <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(219,39,119,0.8)] drop-shadow-[0_0_30px_rgba(219,39,119,0.6)] drop-shadow-[0_0_45px_rgba(219,39,119,0.4)]">
-    ReelForge
-  </h1>
-  <p className="text-gray-300">AI-Powered Video Editor</p>
+        {/* Header - Carved Stone */}
+        <div className="text-center mb-8 forge-panel rounded-lg p-6">
+          <h1 className="text-5xl font-bold mb-2 tracking-wider" style={{
+            color: 'var(--accent-hot)',
+            textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 20px rgba(255,107,53,0.4)',
+            fontFamily: 'serif'
+          }}>
+            ⚒️ REELFORGE
+          </h1>
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', letterSpacing: '0.1em' }}>
+            FORGE YOUR REELS
+          </p>
           {!ffmpegLoaded && (
-            <p className="text-sm text-yellow-400 mt-2">Loading video processor...</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--accent-warm)' }}>
+              ⚡ Loading forge tools...
+            </p>
           )}
         </div>
 
@@ -2099,13 +2093,13 @@ const exportVideo = async () => {
 
         {/* TAB 1: MATERIALS */}
         {currentTab === 'materials' && (
-          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-12 border border-slate-700">
+          <div className="forge-panel rounded-2xl p-12">
             {!video ? (
               <div className="text-center">
-                <Upload className="w-16 h-16 mx-auto mb-4 text-purple-400" />
-                <h2 className="text-2xl font-semibold mb-2">Upload Your Video</h2>
-                <p className="text-gray-400 mb-6">Maximum file size: 500 MB</p>
-                <label className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
+                <Upload className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--accent-warm)' }} />
+                <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Upload Your Video</h2>
+                <p className="mb-6" style={{ color: 'var(--text-dim)' }}>Maximum file size: 500 MB</p>
+                <label className="inline-block px-8 py-4 forge-button-hot rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
                   Choose Video
                   <input
                     type="file"
@@ -2118,7 +2112,7 @@ const exportVideo = async () => {
             ) : (
               <div className="max-w-4xl mx-auto">
                 {/* Video Preview Card */}
-                <div className="bg-slate-800 rounded-xl p-6 shadow-xl">
+                <div className="forge-panel rounded-xl p-6">
                   <h3 className="text-xl font-semibold mb-2">Video Preview</h3>
                   <p className="text-gray-300 text-sm mb-4">
                     Duration: {formatTime(duration)} • {video.name}
@@ -2177,7 +2171,7 @@ const exportVideo = async () => {
                   <div className="flex gap-3">
                     <button
                       onClick={togglePlay}
-                      className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
                     >
                       {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                       {isPlaying ? 'Pause' : 'Play'}
@@ -2185,7 +2179,7 @@ const exportVideo = async () => {
 
                     <button
                       onClick={() => setShowTrimModal(true)}
-                      className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
                     >
                       <Scissors size={18} />
                       Trim Video
@@ -2203,7 +2197,8 @@ const exportVideo = async () => {
                         setMusicUrl(null);
                         setCurrentTab('materials');
                       }}
-                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
+                      style={{ borderColor: 'var(--accent-hot)' }}
                     >
                       <X size={18} />
                       Change
@@ -2219,12 +2214,12 @@ const exportVideo = async () => {
         {currentTab === 'forge' && video && (
           <div className="space-y-4">
             {/* Compact Music Panel */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-4 border border-slate-700">
+            <div className="forge-panel rounded-xl p-4">
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 {/* Music Section - Compact */}
                 <div className="flex-1 w-full">
                   {!music ? (
-                    <label className="block px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition text-center text-sm">
+                    <label className="block px-3 py-2 forge-button rounded-lg cursor-pointer text-center text-sm">
                       🎵 Add Music (Optional)
                       <input
                         type="file"
@@ -2363,7 +2358,7 @@ const exportVideo = async () => {
                       {/* Precision Music Edit Button */}
                       <button
                         onClick={() => setShowMusicPrecisionModal(true)}
-                        className="w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center justify-center gap-1.5 text-xs"
+                        className="w-full px-3 py-1.5 forge-button-hot rounded-lg flex items-center justify-center gap-1.5 text-xs"
                       >
                         <ZoomIn size={14} />
                         Precision Music Edit
@@ -2372,7 +2367,7 @@ const exportVideo = async () => {
                       {/* Preview Button - Inline */}
                       <button
                         onClick={toggleMusicPreview}
-                        className="w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center justify-center gap-1.5 text-xs"
+                        className="w-full px-3 py-1.5 forge-button-hot rounded-lg flex items-center justify-center gap-1.5 text-xs"
                       >
                         {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
                         {isMusicPlaying ? 'Pause' : 'Preview'}
@@ -2393,7 +2388,7 @@ const exportVideo = async () => {
                     setMusic(null);
                     setMusicUrl(null);
                   }}
-                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-xs whitespace-nowrap self-start"
+                  className="px-3 py-2 forge-button rounded-lg text-xs whitespace-nowrap self-start"
                 >
                   Change Video
                 </button>
@@ -2401,7 +2396,7 @@ const exportVideo = async () => {
             </div>
 
             {/* Video Preview */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-4 border border-slate-700">
+            <div className="forge-panel rounded-xl p-4">
             {/* Preview Button */}
   <div className="flex justify-center mb-3">
     <button
@@ -2409,10 +2404,10 @@ const exportVideo = async () => {
       disabled={isProcessing || anchors.length === 0}
       className={`px-8 py-3 rounded-xl font-semibold text-base transition-all ${
         anchors.length === 0
-          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+          ? 'forge-button cursor-not-allowed opacity-50'
           : isPreviewMode
-            ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
-            : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
+            ? 'forge-button-hot hover:scale-105'
+            : 'forge-button-hot hover:scale-105'
       } shadow-lg disabled:hover:scale-100`}
     >
       <span className="flex items-center justify-center gap-2">
@@ -2692,7 +2687,7 @@ const exportVideo = async () => {
             openPrecisionModal(currentAnchor);
           }
         }}
-        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm font-semibold"
+        className="px-4 py-2 forge-button rounded-lg flex items-center gap-2 text-sm font-semibold"
         title="Edit Current Anchor"
       >
         <ZoomIn size={16} />
@@ -2715,15 +2710,15 @@ const exportVideo = async () => {
             </div>
 
 {/* Timeline */}
-<div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-  
+<div className="forge-panel rounded-2xl p-6">
+
 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 touch-manipulation">
   {/* Left Group: Undo/Redo/Trim/Clear */}
   <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
-    className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
+    className="px-2 py-1.5 forge-button rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
     title="Undo (Ctrl+Z)"
   >
     <RotateCcw size={16} />
@@ -2732,7 +2727,7 @@ const exportVideo = async () => {
   <button
     onClick={redo}
     disabled={historyIndex >= history.length - 1}
-    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
     title="Redo (Ctrl+Y)"
   >
     <RotateCw size={16} />
@@ -2740,7 +2735,7 @@ const exportVideo = async () => {
   </button>
   <button
     onClick={() => setShowTrimModal(true)}
-    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-2 text-sm"
+    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 text-sm"
   >
     <Scissors size={16} />
     <span className="hidden sm:inline">Trim</span>
@@ -2758,7 +2753,8 @@ const exportVideo = async () => {
       }
     }}
     disabled={anchors.length === 0}
-    className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+    style={{ borderColor: 'var(--accent-hot)' }}
   >
     <Trash2 size={16} />
     <span className="hidden sm:inline">Clear</span>
@@ -2770,7 +2766,7 @@ const exportVideo = async () => {
   <button
     onClick={addAnchor}
     disabled={!duration}
-    className="px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-bold shadow-lg hover:shadow-purple-500/50 hover:scale-105"
+    className="px-4 py-2 sm:px-6 sm:py-3 forge-button-hot rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-bold shadow-lg hover:scale-105 transition-all"
     title="Add anchor at current time (Double-click timeline)"
   >
     <Sparkles size={24} />
@@ -3127,7 +3123,7 @@ const exportVideo = async () => {
         }
       }}
       disabled={!duration || isAnalyzing}
-      className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md"
+      className="px-4 py-2 forge-button-hot rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition"
     >
       <Sparkles size={18} />
       <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
@@ -3355,7 +3351,7 @@ onMouseLeave={() => {
         e.stopPropagation();
         openPrecisionModal(anchor);
       }}
-      className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs flex items-center justify-center gap-1.5 transition font-semibold"
+      className="flex-1 px-3 py-2 forge-button-hot rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
     >
       <ZoomIn size={14} />
       Precision
@@ -3367,7 +3363,8 @@ onMouseLeave={() => {
         setPreviewAnchor(null);
         setHoveredAnchor(null);
       }}
-      className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs flex items-center justify-center gap-1.5 transition font-semibold"
+      className="px-3 py-2 forge-button rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
+      style={{ borderColor: 'var(--accent-hot)' }}
     >
       <X size={14} />
     </button>
@@ -3449,27 +3446,27 @@ onMouseLeave={() => {
         {/* Trim Modal */}
         {showTrimModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="forge-panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
              <div className="space-y-2 mb-3">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
       disabled={!precisionAnchor || precisionAnchor._index === 0}
-      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
       ← Prev
     </button>
-    
-    <div className="text-lg font-semibold text-gray-300">
+
+    <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
       Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
     </div>
-    
+
     <button
       onClick={goToNextAnchor}
       disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
-      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
       Next →
@@ -3580,14 +3577,14 @@ onMouseLeave={() => {
                   <button
                     onClick={() => setShowTrimModal(false)}
                     disabled={isProcessing}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition disabled:opacity-50"
+                    className="px-6 py-3 forge-button rounded-lg font-semibold disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={applyTrim}
                     disabled={isProcessing || (trimEnd - trimStart) < 2}
-                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
+                    className="px-6 py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
                   >
                     {isProcessing ? 'Processing...' : 'Apply Trim'}
                   </button>
@@ -3600,27 +3597,27 @@ onMouseLeave={() => {
         {/* Precision Modal */}
 {showPrecisionModal && precisionAnchor && (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-    <div className="bg-slate-800 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-700 max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col">
+    <div className="forge-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col">
             <div className="space-y-4 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
       disabled={!precisionAnchor || precisionAnchor._index === 0}
-      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
       ← Prev
     </button>
-    
-    <div className="text-lg font-semibold text-gray-300">
+
+    <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
       Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
     </div>
-    
+
     <button
       onClick={goToNextAnchor}
       disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
-      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
       Next →
@@ -3738,14 +3735,14 @@ onMouseLeave={() => {
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
     }}
-    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-white font-semibold shadow-md"
+    className="px-4 py-3 forge-button rounded-lg font-semibold shadow-md"
   >
     ← Frame
   </button>
 
   <button
     onClick={togglePrecisionPlay}
-    className="p-4 bg-purple-600 rounded-full hover:bg-purple-700 transition shadow-lg"
+    className="p-4 forge-button-hot rounded-full shadow-lg transition"
   >
     {precisionPlaying ? <Pause size={24} /> : <Play size={24} />}
   </button>
@@ -3807,7 +3804,7 @@ onMouseLeave={() => {
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
     }}
-    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-white font-semibold shadow-md"
+    className="px-4 py-3 forge-button rounded-lg font-semibold shadow-md"
   >
     Frame →
   </button>
@@ -3924,16 +3921,16 @@ onMouseLeave={() => {
               </div>
 
 {/* Action Buttons */}
-<div className="flex gap-3 justify-end mt-auto pt-4 border-t border-slate-700 flex-shrink-0">
+<div className="flex gap-3 justify-end mt-auto pt-4 flex-shrink-0" style={{ borderTop: '2px solid var(--border)' }}>
   <button
     onClick={() => setShowPrecisionModal(false)}
-    className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition text-sm sm:text-base"
+    className="px-4 sm:px-6 py-2 sm:py-3 forge-button rounded-lg font-semibold text-sm sm:text-base"
   >
     Cancel
   </button>
   <button
     onClick={applyPrecisionChanges}
-    className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 rounded-lg font-semibold transition text-sm sm:text-base"
+    className="px-4 sm:px-6 py-2 sm:py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold text-sm sm:text-base transition"
   >
     Apply Changes
   </button>
@@ -3944,18 +3941,18 @@ onMouseLeave={() => {
 
         {/* TAB 3: SHIP */}
         {currentTab === 'ship' && video && (
-          <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
+          <div className="forge-panel rounded-2xl p-8">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-semibold mb-2">⚡ Ship Your Reel</h2>
-              <p className="text-gray-400">Select platforms and forge your final reel</p>
+              <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-hot)', textShadow: '0 0 10px rgba(255,107,53,0.5)' }}>⚡ Ship Your Reel</h2>
+              <p style={{ color: 'var(--text-dim)' }}>Select platforms and forge your final reel</p>
             </div>
 
             <div className="space-y-4 mb-6">
-              <h3 className="font-semibold text-lg">Select Platforms:</h3>
+              <h3 className="font-semibold text-lg" style={{ color: 'var(--text-primary)' }}>Select Platforms:</h3>
               {Object.entries(platforms).map(([key, platform]) => (
                 <label
                   key={key}
-                  className="flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition"
+                  className="flex items-center gap-4 p-4 forge-button rounded-lg cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -3983,7 +3980,7 @@ onMouseLeave={() => {
               <button
                 onClick={exportVideo}
                 disabled={!ffmpegLoaded || isProcessing || selectedPlatforms.length === 0}
-                className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-bold text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="px-8 py-4 forge-button-hot rounded-xl font-bold text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {isProcessing ? (
                   <div className="flex flex-col items-center gap-2">
