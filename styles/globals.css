@@ -172,3 +172,17 @@ html {
   background-size: 400px 400px, 100% 100%, 100% 100%;
   background-repeat: repeat, no-repeat, no-repeat;
 }
+
+/* Prevent mobile tap delay and zoom issues */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth mobile interactions */
+@media (max-width: 768px) {
+  button, input[type="range"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}

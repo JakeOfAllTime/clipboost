@@ -235,16 +235,16 @@ const dismissRestoreToast = () => {
   }, []);
 
   const anchorColors = useMemo(() => [
-    { bg: 'bg-green-400/30', border: 'border-green-400', handle: 'bg-green-400' },
-    { bg: 'bg-blue-400/30', border: 'border-blue-400', handle: 'bg-blue-400' },
-    { bg: 'bg-red-400/30', border: 'border-red-400', handle: 'bg-red-400' },
-    { bg: 'bg-purple-400/30', border: 'border-purple-400', handle: 'bg-purple-400' },
-    { bg: 'bg-yellow-400/30', border: 'border-yellow-400', handle: 'bg-yellow-400' }
+    { bg: 'bg-green-500/20', border: 'border-green-600/60', handle: 'bg-green-600' },
+    { bg: 'bg-blue-500/20', border: 'border-blue-600/60', handle: 'bg-blue-600' },
+    { bg: 'bg-red-500/20', border: 'border-red-600/60', handle: 'bg-red-600' },
+    { bg: 'bg-purple-500/20', border: 'border-purple-600/60', handle: 'bg-purple-600' },
+    { bg: 'bg-yellow-500/20', border: 'border-yellow-600/60', handle: 'bg-yellow-600' }
   ], []);
 
   const getAnchorColor = useCallback((index, isSelected) => {
     const color = anchorColors[index % anchorColors.length];
-    return isSelected ? { ...color, bg: color.bg.replace('/30', '/50') } : color;
+    return isSelected ? { ...color, bg: color.bg.replace('/20', '/40') } : color;
   }, [anchorColors]);
 
   // Undo/Redo functions (memoized)
@@ -1222,6 +1222,7 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
   const handleAnchorClick = useCallback((e, anchor) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent mobile tap delay
 
     // Batch state updates to reduce re-renders
     setSelectedAnchor(anchor.id);
@@ -1410,6 +1411,26 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
       };
     }
   }, [dragState.active]);
+
+  // Lock body scroll when precision modal is open (mobile fix)
+  useEffect(() => {
+    if (showPrecisionModal) {
+      // Prevent mobile scroll/zoom when modal is open
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
+  }, [showPrecisionModal]);
 
   // Update preview anchor when anchors change
   useEffect(() => {
@@ -3202,7 +3223,7 @@ const exportVideo = async () => {
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
   }}
-  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-purple-500/50 transition-all select-none"
+  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
   style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
   title="Double-click to drop anchor"
 >
@@ -3247,7 +3268,8 @@ onMouseLeave={() => {
     setHoveredAnchor(null);
   }
 }}
-  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition`}
+  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition touch-manipulation`}
+  style={{ touchAction: 'none' }}
 >
                         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
                           {formatTime(anchor.end - anchor.start)}
@@ -3410,7 +3432,7 @@ onMouseLeave={() => {
                 <button
                   onClick={saveConfiguration}
                   disabled={anchors.length === 0}
-                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-amber-600/30 hover:border-amber-600/60 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
                 >
                   <Save size={16} />
                   <span className="hidden sm:inline">Save Anchor Config</span>
@@ -3418,7 +3440,7 @@ onMouseLeave={() => {
                 </button>
                 <button
                   onClick={() => loadConfigInputRef.current?.click()}
-                  className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-amber-600/30 hover:border-amber-600/60 rounded-lg transition flex items-center justify-center gap-2 text-sm"
                 >
                   <FolderOpen size={16} />
                   <span className="hidden sm:inline">Load Anchor Config</span>
