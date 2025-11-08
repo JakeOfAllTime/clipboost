@@ -2083,18 +2083,16 @@ const exportVideo = async () => {
                 </label>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* Video Info */}
-                <div className="text-center">
-                  <h2 className="text-2xl font-semibold mb-2">Video Preview</h2>
-                  <p className="text-gray-300 mb-4">
+              <div className="max-w-4xl mx-auto">
+                {/* Video Preview Card */}
+                <div className="bg-slate-800 rounded-xl p-6 shadow-xl">
+                  <h3 className="text-xl font-semibold mb-2">Video Preview</h3>
+                  <p className="text-gray-300 text-sm mb-4">
                     Duration: {formatTime(duration)} • {video.name}
                   </p>
-                </div>
 
-                {/* Video Preview */}
-                <div className="max-w-3xl mx-auto">
-                  <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                  {/* Video Player */}
+                  <div className="relative bg-black rounded-lg overflow-hidden aspect-video mb-4">
                     <video
                       ref={videoRef}
                       src={videoUrl}
@@ -2119,67 +2117,64 @@ const exportVideo = async () => {
                     )}
                   </div>
 
-                  {/* Playback Controls */}
-                  <div className="mt-4 space-y-4">
-                    {/* Timeline */}
-                    <div>
-                      <input
-                        type="range"
-                        min="0"
-                        max={duration}
-                        step="0.1"
-                        value={currentTime}
-                        onChange={(e) => {
-                          const time = parseFloat(e.target.value);
-                          setCurrentTime(time);
-                          if (videoRef.current) {
-                            videoRef.current.currentTime = time;
-                          }
-                        }}
-                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
-                      />
-                      <div className="flex justify-between text-sm text-gray-400 mt-1">
-                        <span>{formatTime(currentTime)}</span>
-                        <span>{formatTime(duration)}</span>
-                      </div>
+                  {/* Timeline Scrubber */}
+                  <div className="mb-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max={duration}
+                      step="0.1"
+                      value={currentTime}
+                      onChange={(e) => {
+                        const time = parseFloat(e.target.value);
+                        setCurrentTime(time);
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = time;
+                        }
+                      }}
+                      className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
                     </div>
+                  </div>
 
-                    {/* Control Buttons */}
-                    <div className="flex justify-center gap-4">
-                      <button
-                        onClick={togglePlay}
-                        className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
-                      >
-                        {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                        {isPlaying ? 'Pause' : 'Play'}
-                      </button>
+                  {/* Control Buttons - Equal Width */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={togglePlay}
+                      className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                    >
+                      {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                      {isPlaying ? 'Pause' : 'Play'}
+                    </button>
 
-                      <button
-                        onClick={() => setShowTrimModal(true)}
-                        className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
-                      >
-                        <Scissors size={18} />
-                        Trim Video
-                      </button>
+                    <button
+                      onClick={() => setShowTrimModal(true)}
+                      className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Scissors size={18} />
+                      Trim Video
+                    </button>
 
-                      <button
-                        onClick={() => {
-                          if (videoUrl) URL.revokeObjectURL(videoUrl);
-                          setVideo(null);
-                          setVideoUrl(null);
-                          setAnchors([]);
-                          setHistory([]);
-                          setHistoryIndex(-1);
-                          setMusic(null);
-                          setMusicUrl(null);
-                          setCurrentTab('materials');
-                        }}
-                        className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition flex items-center gap-2"
-                      >
-                        <X size={18} />
-                        Change Video
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        if (videoUrl) URL.revokeObjectURL(videoUrl);
+                        setVideo(null);
+                        setVideoUrl(null);
+                        setAnchors([]);
+                        setHistory([]);
+                        setHistoryIndex(-1);
+                        setMusic(null);
+                        setMusicUrl(null);
+                        setCurrentTab('materials');
+                      }}
+                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <X size={18} />
+                      Change
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2189,37 +2184,34 @@ const exportVideo = async () => {
 
         {/* TAB 2: FORGE */}
         {currentTab === 'forge' && video && (
-          <div className="space-y-6">
-            {/* Video Preview */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
+          <div className="space-y-4">
+            {/* Compact Music Panel */}
+            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-4 border border-slate-700">
               <div className="flex flex-col sm:flex-row gap-4 items-start">
-                {/* Music Section */}
+                {/* Music Section - Compact */}
                 <div className="flex-1 w-full">
                   {!music ? (
-                    <div>
-                      <label className="block px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition text-center text-sm">
-                        🎵 Add Music (Optional)
-                        <input
-                          type="file"
-                          accept="audio/*"
-                          onChange={handleMusicUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <p className="text-xs text-gray-400 text-center mt-2">Add music to access volume and timing controls</p>
-                    </div>
+                    <label className="block px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition text-center text-sm">
+                      🎵 Add Music (Optional)
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleMusicUpload}
+                        className="hidden"
+                      />
+                    </label>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-300">🎵 {music.name}</span>
+                        <span className="text-xs text-gray-300 truncate">🎵 {music.name}</span>
                         <button
                           onClick={() => {
                             setMusic(null);
                             setMusicUrl(null);
                           }}
-                          className="text-gray-400 hover:text-white"
+                          className="text-gray-400 hover:text-white ml-2"
                         >
-                          <X size={16} />
+                          <X size={14} />
                         </button>
                       </div>
 
@@ -2230,60 +2222,56 @@ const exportVideo = async () => {
                         onEnded={() => setIsMusicPlaying(false)}
                         className="hidden"
                       />
-<div>
-  <div className="flex justify-between items-center mb-1">
-    <label className="text-xs text-gray-300">Audio Balance</label>
-    <span className="text-xs flex items-center gap-2">
-      <span className="text-blue-400">Video: {100 - audioBalance}%</span>
-      <span className="text-gray-500">•</span>
-      <span className="text-green-400">Music: {audioBalance}%</span>
-    </span>
-  </div>
-<div className="relative">
-  <input
-    type="range"
-    min="0"
-    max="100"
-    value={audioBalance}
-    onChange={(e) => setAudioBalance(parseInt(e.target.value))}
-    onInput={(e) => setAudioBalance(parseInt(e.target.value))}
-    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-    style={{
-      background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
-    }}
-  />
-</div>
-</div>
-                      <div>
-  <div className="flex justify-between items-center mb-1">
-    <label className="text-xs text-gray-300">Music Start Position</label>
-    <span className="text-xs text-gray-400">{formatTime(musicStartTime)}</span>
-  </div>
-  <div className="relative">
-    <input
-      type="range"
-      min="0"
-      max={musicDuration}
-      step="0.1"
-      value={musicStartTime}
-      onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
-      className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-      style={{
-        background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) 100%)`
-      }}
-    />
-  </div>
-</div>
 
-                      <div className="flex justify-center">
-                        <button
-                          onClick={toggleMusicPreview}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center gap-2 text-sm"
-                        >
-                          {isMusicPlaying ? <Pause size={16} /> : <Play size={16} />}
-                          {isMusicPlaying ? 'Pause' : 'Preview'} Music
-                        </button>
+                      {/* Audio Balance - Compact */}
+                      <div>
+                        <div className="flex justify-between items-center mb-0.5">
+                          <label className="text-xs text-gray-400">Balance</label>
+                          <span className="text-xs text-gray-500">
+                            Video {100 - audioBalance}% • Music {audioBalance}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={audioBalance}
+                          onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+                          }}
+                        />
                       </div>
+
+                      {/* Music Start - Compact */}
+                      <div>
+                        <div className="flex justify-between items-center mb-0.5">
+                          <label className="text-xs text-gray-400">Start</label>
+                          <span className="text-xs text-gray-500">{formatTime(musicStartTime)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max={musicDuration}
+                          step="0.1"
+                          value={musicStartTime}
+                          onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) 100%)`
+                          }}
+                        />
+                      </div>
+
+                      {/* Preview Button - Inline */}
+                      <button
+                        onClick={toggleMusicPreview}
+                        className="w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center justify-center gap-1.5 text-xs"
+                      >
+                        {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
+                        {isMusicPlaying ? 'Pause' : 'Preview'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2300,7 +2288,7 @@ const exportVideo = async () => {
                     setMusic(null);
                     setMusicUrl(null);
                   }}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm whitespace-nowrap"
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-xs whitespace-nowrap self-start"
                 >
                   Change Video
                 </button>
@@ -2308,16 +2296,16 @@ const exportVideo = async () => {
             </div>
 
             {/* Video Preview */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-            {/* Preview/Export Buttons - NOW AT TOP */}
-  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-4 border border-slate-700">
+            {/* Preview Button */}
+  <div className="flex justify-center mb-3">
     <button
       onClick={isPreviewMode ? stopEnhancedPreview : startEnhancedPreview}
       disabled={isProcessing || anchors.length === 0}
-      className={`flex-1 py-3 rounded-xl font-semibold text-base transition-all ${
+      className={`px-8 py-3 rounded-xl font-semibold text-base transition-all ${
         anchors.length === 0
           ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-          : isPreviewMode 
+          : isPreviewMode
             ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:scale-105'
             : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105'
       } shadow-lg disabled:hover:scale-100`}
@@ -2338,25 +2326,6 @@ const exportVideo = async () => {
           </>
         )}
       </span>
-    </button>
-
-    <button
-      onClick={() => setShowExportModal(true)}
-      disabled={!ffmpegLoaded || isProcessing || isPreviewMode}
-      className="flex-1 py-3 rounded-xl font-semibold text-base transition-all relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-    >
-{isProcessing ? (
-  <div className="flex flex-col items-center gap-1">
-    <span>Processing...</span>
-    <span className="text-sm">{progress}%</span>
-  </div>
-) : (
-        <span className="flex items-center justify-center gap-2">
-          <Download size={18} />
-          <span className="hidden sm:inline">Export Video</span>
-          <span className="sm:inline md:hidden">Export</span>
-        </span>
-      )}
     </button>
   </div>
 
@@ -2760,7 +2729,6 @@ const exportVideo = async () => {
           musicStartTime,
           targetDuration
         });
-        alert('🔍 Auto-Generate started! Check console for detailed logs.');
 
         try {
           setIsAnalyzing(true);
