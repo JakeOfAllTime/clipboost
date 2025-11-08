@@ -2262,18 +2262,19 @@ const exportVideo = async () => {
 
                         {/* Visual range selector */}
                         <div className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer">
-                          {/* Selected range highlight */}
+                          {/* Selected range highlight - Orange gradient */}
                           <div
-                            className="absolute top-0 bottom-0 bg-blue-500/40 rounded pointer-events-none"
+                            className="absolute top-0 bottom-0 rounded pointer-events-none"
                             style={{
                               left: `${(musicStartTime / musicDuration) * 100}%`,
-                              width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`
+                              width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`,
+                              background: 'linear-gradient(to right, #ff6b35, #d4572f)'
                             }}
                           />
 
-                          {/* Start handle */}
+                          {/* Start handle - Yellow */}
                           <div
-                            className="absolute top-0 bottom-0 w-3 bg-green-500 cursor-ew-resize z-10 hover:bg-green-400 rounded-l shadow-md"
+                            className="absolute top-0 bottom-0 w-3 bg-yellow-400 cursor-ew-resize z-10 hover:bg-yellow-300 rounded-sm shadow-md"
                             style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2299,9 +2300,9 @@ const exportVideo = async () => {
                             title="Drag to adjust start"
                           />
 
-                          {/* End handle */}
+                          {/* End handle - Red */}
                           <div
-                            className="absolute top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 rounded-r shadow-md"
+                            className="absolute top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 rounded-sm shadow-md"
                             style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2348,9 +2349,9 @@ const exportVideo = async () => {
                           max="100"
                           value={audioBalance}
                           onChange={(e) => setAudioBalance(parseInt(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)] [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)]"
                           style={{
-                            background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+                            background: `linear-gradient(to right, #ff6b35 0%, #d4572f ${audioBalance}%, #2d2520 ${audioBalance}%, #2d2520 100%)`
                           }}
                         />
                       </div>
@@ -3251,7 +3252,7 @@ onMouseLeave={() => {
 
                         {isSelected && (
                           <>
-                            {/* Left handle - larger and more visible */}
+                            {/* Left handle - Yellow */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -3261,12 +3262,12 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-left');
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-6 bg-green-500 cursor-ew-resize hover:bg-green-400 -ml-3 z-40 transition-all rounded-l shadow-lg"
-                              style={{ minWidth: '24px' }}
+                              className="absolute left-0 top-0 bottom-0 w-3 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-1.5 z-30 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust start time"
                             />
-                            {/* Right handle - larger and more visible */}
+                            {/* Right handle - Red */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -3276,8 +3277,8 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-right');
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-6 bg-red-500 cursor-ew-resize hover:bg-red-400 -mr-3 z-40 transition-all rounded-r shadow-lg"
-                              style={{ minWidth: '24px' }}
+                              className="absolute right-0 top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-1.5 z-30 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust end time"
                             />
