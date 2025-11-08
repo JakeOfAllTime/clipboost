@@ -28,8 +28,10 @@ const ReelForge = () => {
   const [musicUrl, setMusicUrl] = useState(null);
   const [musicDuration, setMusicDuration] = useState(0);
   const [musicStartTime, setMusicStartTime] = useState(0);
+  const [musicEndTime, setMusicEndTime] = useState(0);
   const [audioBalance, setAudioBalance] = useState(70);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [showMusicPrecisionModal, setShowMusicPrecisionModal] = useState(false);
 
   // Trim state
   const [trimStart, setTrimStart] = useState(0);
@@ -1102,7 +1104,11 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
   const handleMusicLoadedMetadata = () => {
     if (musicRef.current) {
-      setMusicDuration(musicRef.current.duration);
+      const dur = musicRef.current.duration;
+      setMusicDuration(dur);
+      if (musicEndTime === 0) {
+        setMusicEndTime(dur); // Initially select full song
+      }
     }
   };
 
@@ -1741,7 +1747,7 @@ const goToNextAnchor = () => {
     }
   }, [currentTab]);
 
-  // TabNav Component - Horizontal minimal design
+  // TabNav Component - Horizontal minimal design with navigation
   const TabNav = ({ currentTab, onChange, hasVideo }) => {
     const tabs = [
       { id: 'materials', label: 'MATERIALS' },
@@ -1769,44 +1775,71 @@ const goToNextAnchor = () => {
 
     return (
       <div className="mb-8">
-        {/* Horizontal tab navigation */}
-        <div className="flex justify-center items-center gap-8 max-w-2xl mx-auto border-b border-gray-700 pb-2">
-          {tabs.map((tab, index) => {
-            const isActive = currentTab === tab.id;
-            const isAccessible = isTabAccessible(tab.id);
+        {/* Horizontal tab navigation with Back/Next */}
+        <div className="flex items-center justify-between max-w-5xl mx-auto border-b border-gray-700 pb-2">
+          {/* Left side - Back button */}
+          <div className="w-24">
+            {currentTab !== 'materials' && (
+              <button
+                onClick={goBack}
+                className="text-gray-400 hover:text-white transition-colors flex items-center gap-1"
+              >
+                ← Back
+              </button>
+            )}
+          </div>
 
-            return (
-              <React.Fragment key={tab.id}>
-                <button
-                  onClick={() => handleTabClick(tab.id)}
-                  disabled={!isAccessible}
-                  className={`
-                    relative pb-3 font-bold text-lg transition-all
-                    ${isActive ? 'text-white' : ''}
-                    ${!isActive && isAccessible ? 'text-gray-500 hover:text-orange-400' : ''}
-                    ${!isAccessible ? 'text-gray-700 cursor-not-allowed' : 'cursor-pointer'}
-                  `}
-                  style={{
-                    textShadow: isActive ? '0 0 10px rgba(255, 107, 53, 0.5)' : 'none'
-                  }}
-                >
-                  {tab.label}
-                  {/* Orange underline for active tab */}
-                  {isActive && (
-                    <div
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"
-                      style={{ backgroundColor: '#ff6b35' }}
-                    />
+          {/* Center - Tabs */}
+          <div className="flex justify-center items-center gap-8">
+            {tabs.map((tab, index) => {
+              const isActive = currentTab === tab.id;
+              const isAccessible = isTabAccessible(tab.id);
+
+              return (
+                <React.Fragment key={tab.id}>
+                  <button
+                    onClick={() => handleTabClick(tab.id)}
+                    disabled={!isAccessible}
+                    className={`
+                      relative pb-3 font-bold text-lg transition-all
+                      ${isActive ? 'text-white' : ''}
+                      ${!isActive && isAccessible ? 'text-gray-500 hover:text-orange-400' : ''}
+                      ${!isAccessible ? 'text-gray-700 cursor-not-allowed' : 'cursor-pointer'}
+                    `}
+                    style={{
+                      textShadow: isActive ? '0 0 10px rgba(255, 107, 53, 0.5)' : 'none'
+                    }}
+                  >
+                    {tab.label}
+                    {/* Orange underline for active tab */}
+                    {isActive && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"
+                        style={{ backgroundColor: '#ff6b35' }}
+                      />
+                    )}
+                  </button>
+
+                  {/* Separator pipe */}
+                  {index < tabs.length - 1 && (
+                    <span className="text-gray-700">|</span>
                   )}
-                </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
 
-                {/* Separator pipe */}
-                {index < tabs.length - 1 && (
-                  <span className="text-gray-700">|</span>
-                )}
-              </React.Fragment>
-            );
-          })}
+          {/* Right side - Next button */}
+          <div className="w-24 text-right">
+            {currentTab !== 'ship' && (
+              <button
+                onClick={goNext}
+                className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 ml-auto"
+              >
+                Next →
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -2223,6 +2256,89 @@ const exportVideo = async () => {
                         className="hidden"
                       />
 
+                      {/* Music Range Selector */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs text-gray-400">Music Range</label>
+                          <span className="text-xs text-gray-500">
+                            {formatTime(musicEndTime - musicStartTime)} selected
+                          </span>
+                        </div>
+
+                        {/* Visual range selector */}
+                        <div className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer">
+                          {/* Selected range highlight */}
+                          <div
+                            className="absolute top-0 bottom-0 bg-blue-500/40 rounded pointer-events-none"
+                            style={{
+                              left: `${(musicStartTime / musicDuration) * 100}%`,
+                              width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`
+                            }}
+                          />
+
+                          {/* Start handle */}
+                          <div
+                            className="absolute top-0 bottom-0 w-3 bg-green-500 cursor-ew-resize z-10 hover:bg-green-400 rounded-l shadow-md"
+                            style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              const startX = e.clientX;
+                              const startTime = musicStartTime;
+                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                              const handleMouseMove = (moveE) => {
+                                const deltaX = moveE.clientX - startX;
+                                const deltaTime = (deltaX / rect.width) * musicDuration;
+                                const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
+                                setMusicStartTime(newTime);
+                              };
+
+                              const handleMouseUp = () => {
+                                document.removeEventListener('mousemove', handleMouseMove);
+                                document.removeEventListener('mouseup', handleMouseUp);
+                              };
+
+                              document.addEventListener('mousemove', handleMouseMove);
+                              document.addEventListener('mouseup', handleMouseUp);
+                            }}
+                            title="Drag to adjust start"
+                          />
+
+                          {/* End handle */}
+                          <div
+                            className="absolute top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 rounded-r shadow-md"
+                            style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              const startX = e.clientX;
+                              const startTime = musicEndTime;
+                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                              const handleMouseMove = (moveE) => {
+                                const deltaX = moveE.clientX - startX;
+                                const deltaTime = (deltaX / rect.width) * musicDuration;
+                                const newTime = Math.min(musicDuration, Math.max(musicStartTime + 1, startTime + deltaTime));
+                                setMusicEndTime(newTime);
+                              };
+
+                              const handleMouseUp = () => {
+                                document.removeEventListener('mousemove', handleMouseMove);
+                                document.removeEventListener('mouseup', handleMouseUp);
+                              };
+
+                              document.addEventListener('mousemove', handleMouseMove);
+                              document.addEventListener('mouseup', handleMouseUp);
+                            }}
+                            title="Drag to adjust end"
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>{formatTime(musicStartTime)}</span>
+                          <span>{formatTime(musicEndTime)}</span>
+                        </div>
+                      </div>
+
                       {/* Audio Balance - Compact */}
                       <div>
                         <div className="flex justify-between items-center mb-0.5">
@@ -2244,25 +2360,14 @@ const exportVideo = async () => {
                         />
                       </div>
 
-                      {/* Music Start - Compact */}
-                      <div>
-                        <div className="flex justify-between items-center mb-0.5">
-                          <label className="text-xs text-gray-400">Start</label>
-                          <span className="text-xs text-gray-500">{formatTime(musicStartTime)}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max={musicDuration}
-                          step="0.1"
-                          value={musicStartTime}
-                          onChange={(e) => setMusicStartTime(parseFloat(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
-                          style={{
-                            background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) ${(musicStartTime / musicDuration) * 100}%, rgb(71, 85, 105) 100%)`
-                          }}
-                        />
-                      </div>
+                      {/* Precision Music Edit Button */}
+                      <button
+                        onClick={() => setShowMusicPrecisionModal(true)}
+                        className="w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition flex items-center justify-center gap-1.5 text-xs"
+                      >
+                        <ZoomIn size={14} />
+                        Precision Music Edit
+                      </button>
 
                       {/* Preview Button - Inline */}
                       <button
@@ -3150,19 +3255,35 @@ onMouseLeave={() => {
 
                         {isSelected && (
                           <>
-                            {/* Left handle */}
+                            {/* Left handle - larger and more visible */}
                             <div
-                              onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-left')}
-                              onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-left')}
-                              className={`absolute left-0 top-0 bottom-0 w-4 ${colors.handle} cursor-ew-resize hover:opacity-80 -ml-2 z-30 transition-all`}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                handleAnchorMouseDown(e, anchor, 'anchor-left');
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                                handleAnchorTouchStart(e, anchor, 'anchor-left');
+                              }}
+                              className="absolute left-0 top-0 bottom-0 w-6 bg-green-500 cursor-ew-resize hover:bg-green-400 -ml-3 z-40 transition-all rounded-l shadow-lg"
+                              style={{ minWidth: '24px' }}
                               onClick={(e) => e.stopPropagation()}
+                              title="Drag to adjust start time"
                             />
-                            {/* Right handle */}
+                            {/* Right handle - larger and more visible */}
                             <div
-                              onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-right')}
-                              onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-right')}
-                              className={`absolute right-0 top-0 bottom-0 w-4 ${colors.handle} cursor-ew-resize hover:opacity-80 -mr-2 z-30 transition-all`}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                handleAnchorMouseDown(e, anchor, 'anchor-right');
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                                handleAnchorTouchStart(e, anchor, 'anchor-right');
+                              }}
+                              className="absolute right-0 top-0 bottom-0 w-6 bg-red-500 cursor-ew-resize hover:bg-red-400 -mr-3 z-40 transition-all rounded-r shadow-lg"
+                              style={{ minWidth: '24px' }}
                               onClick={(e) => e.stopPropagation()}
+                              title="Drag to adjust end time"
                             />
                             {/* Precision button */}
                             
@@ -3228,16 +3349,29 @@ onMouseLeave={() => {
     </div>
   </div>
   
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      openPrecisionModal(anchor);
-    }}
-    className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs flex items-center justify-center gap-2 transition font-semibold"
-  >
-    <ZoomIn size={14} />
-    Open Precision Editor
-  </button>
+  <div className="flex gap-2">
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        openPrecisionModal(anchor);
+      }}
+      className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs flex items-center justify-center gap-1.5 transition font-semibold"
+    >
+      <ZoomIn size={14} />
+      Precision
+    </button>
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        deleteAnchor(anchor.id);
+        setPreviewAnchor(null);
+        setHoveredAnchor(null);
+      }}
+      className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs flex items-center justify-center gap-1.5 transition font-semibold"
+    >
+      <X size={14} />
+    </button>
+  </div>
 </div>
                         </div>
                       )}
@@ -3866,27 +4000,6 @@ onMouseLeave={() => {
             </div>
           </div>
         )}
-
-        {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8">
-          {currentTab !== 'materials' && (
-            <button
-              onClick={goBack}
-              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all flex items-center gap-2 font-semibold"
-            >
-              ← Back
-            </button>
-          )}
-
-          {currentTab !== 'ship' && (
-            <button
-              onClick={goNext}
-              className="px-8 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl transition-all flex items-center gap-2 ml-auto font-semibold"
-            >
-              Next →
-            </button>
-          )}
-        </div>
 
         {/* Export Platform Modal */}
 {/* Export Platform Modal */}
