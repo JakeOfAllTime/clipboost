@@ -181,8 +181,19 @@ html {
 
 /* Smooth mobile interactions */
 @media (max-width: 768px) {
-  button, input[type="range"] {
-    touch-action: manipulation;
+  * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  button, input[type="range"], [role="button"] {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input[type="range"] {
+    position: relative;
+    z-index: 50;
   }
 }

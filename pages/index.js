@@ -1479,6 +1479,29 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     precisionVideoRef.current.currentTime = anchor.end;
   }
 };
+
+  // Mobile-specific precision modal handler to prevent freeze
+  const openPrecisionModalMobile = (anchor) => {
+    // Prevent scroll/interaction during transition
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${window.scrollY}px`;
+    document.body.style.width = '100%';
+
+    const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
+    setPrecisionAnchor({ ...anchor, _index: anchorIndex });
+    setPrecisionTime(anchor.end);
+    setSelectedHandle('end');
+
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      setShowPrecisionModal(true);
+      if (precisionVideoRef.current) {
+        precisionVideoRef.current.currentTime = anchor.end;
+      }
+    });
+  };
+
 const goToPreviousAnchor = () => {
   if (!precisionAnchor || precisionAnchor._index <= 0) return;
   const prevAnchor = anchors[precisionAnchor._index - 1];
@@ -3224,7 +3247,7 @@ const exportVideo = async () => {
     setSelectedAnchor(newAnchor.id);
   }}
   className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
-  style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+  style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
   title="Double-click to drop anchor"
 >
   {/* Current time indicator */}
@@ -3244,10 +3267,11 @@ const exportVideo = async () => {
                   return (
                     <div
                       key={anchor.id}
-                      className="absolute top-0 bottom-0 z-10"
+                      className="absolute top-0 bottom-0"
                       style={{
                         left: `${(anchor.start / duration) * 100}%`,
-                        width: `${width}%`
+                        width: `${width}%`,
+                        zIndex: isSelected ? 50 : 30
                       }}
                     >
 <div
@@ -3257,7 +3281,12 @@ const exportVideo = async () => {
     deleteAnchor(anchor.id);
   }}
   onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-  onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-move')}
+  onTouchStart={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedAnchor(anchor.id);
+    handleAnchorTouchStart(e, anchor, 'anchor-move');
+  }}
 onMouseEnter={() => {
   if (!previewAnchor || previewAnchor.id !== anchor.id) {
     setHoveredAnchor(anchor);
@@ -3269,7 +3298,7 @@ onMouseLeave={() => {
   }
 }}
   className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition touch-manipulation`}
-  style={{ touchAction: 'none' }}
+  style={{ touchAction: 'none', zIndex: 10 }}
 >
                         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
                           {formatTime(anchor.end - anchor.start)}
@@ -3284,11 +3313,12 @@ onMouseLeave={() => {
                                 handleAnchorMouseDown(e, anchor, 'anchor-left');
                               }}
                               onTouchStart={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-left');
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-3 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-1.5 z-30 transition-all rounded-sm touch-none"
-                              style={{ touchAction: 'none' }}
+                              className="absolute left-0 top-0 bottom-0 w-3 sm:w-2 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-1.5 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none', zIndex: 100 }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust start time"
                             />
@@ -3299,11 +3329,12 @@ onMouseLeave={() => {
                                 handleAnchorMouseDown(e, anchor, 'anchor-right');
                               }}
                               onTouchStart={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-right');
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-1.5 z-30 transition-all rounded-sm touch-none"
-                              style={{ touchAction: 'none' }}
+                              className="absolute right-0 top-0 bottom-0 w-3 sm:w-2 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-1.5 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none', zIndex: 100 }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust end time"
                             />
@@ -3318,14 +3349,18 @@ onMouseLeave={() => {
   <div
     onClick={(e) => e.stopPropagation()}
     onMouseDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 z-50 w-64 ${
+    onTouchStart={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
           ? 'right-0'
           : 'left-1/2 -translate-x-1/2'
     }`}
+    style={{ zIndex: 200 }}
   >
     <div className="flex justify-between items-center mb-2">
       <div className="text-xs font-semibold">
@@ -3374,10 +3409,25 @@ onMouseLeave={() => {
   <div className="flex gap-2">
     <button
       onClick={(e) => {
+        e.preventDefault();
         e.stopPropagation();
-        openPrecisionModal(anchor);
+
+        // Detect mobile
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        if (isMobile) {
+          openPrecisionModalMobile(anchor);
+        } else {
+          openPrecisionModal(anchor);
+        }
+      }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPrecisionModalMobile(anchor);
       }}
       className="flex-1 px-3 py-2 forge-button-hot rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
+      style={{ zIndex: 201 }}
     >
       <ZoomIn size={14} />
       Precision
@@ -3622,8 +3672,18 @@ onMouseLeave={() => {
 
         {/* Precision Modal */}
 {showPrecisionModal && precisionAnchor && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-    <div className="forge-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col">
+  <div
+    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
+    style={{ zIndex: 9999, touchAction: 'none', WebkitOverflowScrolling: 'auto' }}
+    onTouchMove={(e) => {
+      // Allow scrolling within modal but prevent body scroll
+      const target = e.target;
+      if (!target.closest('.modal-scroll-container')) {
+        e.preventDefault();
+      }
+    }}
+  >
+    <div className="forge-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
             <div className="space-y-4 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
