@@ -31,3 +31,9 @@ html {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Timeline touch optimizations */
+.cursor-pointer {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
