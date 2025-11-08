@@ -1573,6 +1573,7 @@ const goToNextAnchor = () => {
 
   const handlePrecisionHandleTouchStart = (e, handleType) => {
     e.stopPropagation();
+    e.preventDefault();
     setPrecisionDragState({
       active: true,
       type: handleType,
@@ -2823,7 +2824,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Target/Auto-Gen/Beat-Sync */}
-<div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+<div className={`grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal ? 'hidden' : ''}`}>
   <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-2 sm:col-span-1">
     <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0">Tgt:</label>
     <input
@@ -2833,7 +2834,10 @@ const exportVideo = async () => {
       step="5"
       value={targetDuration}
       onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-      className="flex-1 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+      className="flex-1 sm:w-20 h-2 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)] [&::-moz-range-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)]"
+      style={{
+        background: `linear-gradient(to right, #f59e0b 0%, #f97316 ${((targetDuration - 15) / (120 - 15)) * 100}%, #475569 ${((targetDuration - 15) / (120 - 15)) * 100}%, #475569 100%)`
+      }}
     />
     <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{targetDuration}s</span>
   </div>
@@ -2847,8 +2851,11 @@ const exportVideo = async () => {
       step="10"
       value={motionSensitivity * 100}
       onChange={(e) => setMotionSensitivity(parseInt(e.target.value) / 100)}
-      className="flex-1 sm:w-20 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+      className="flex-1 sm:w-20 h-2 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)] [&::-moz-range-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)]"
       title="Lower = stricter motion detection, Higher = more permissive"
+      style={{
+        background: `linear-gradient(to right, #f59e0b 0%, #f97316 ${motionSensitivity * 100}%, #475569 ${motionSensitivity * 100}%, #475569 100%)`
+      }}
     />
     <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{Math.round(motionSensitivity * 100)}%</span>
   </div>
@@ -3941,17 +3948,10 @@ onMouseLeave={() => {
                       width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
                     }}
                   >
-                    {/* Start handle - Wider on mobile */}
+                    {/* Start handle - Gold/Amber */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        handlePrecisionHandleMouseDown({
-                          ...e,
-                          clientX: e.touches[0].clientX
-                        }, 'start');
-                      }}
+                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedHandle('start');
@@ -3960,24 +3960,18 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.start;
                         }
                       }}
-                      className={`absolute left-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -ml-1 z-30 touch-none ${
+                      className={`absolute left-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -ml-1 touch-none ${
                         selectedHandle === 'start'
-                          ? 'bg-amber-500 shadow-lg shadow-amber-500/50'
-                          : 'bg-amber-600 hover:bg-amber-500'
+                          ? 'bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
+                          : 'bg-amber-600/80 hover:bg-amber-500 hover:shadow-[0_0_8px_rgba(245,158,11,0.6)]'
                       }`}
+                      style={{ zIndex: 100 }}
                     />
 
-                    {/* End handle - Wider on mobile */}
+                    {/* End handle - Dimmer Red */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        handlePrecisionHandleMouseDown({
-                          ...e,
-                          clientX: e.touches[0].clientX
-                        }, 'end');
-                      }}
+                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedHandle('end');
@@ -3986,11 +3980,12 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.end;
                         }
                       }}
-                      className={`absolute right-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -mr-1 z-30 touch-none ${
+                      className={`absolute right-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -mr-1 touch-none ${
                         selectedHandle === 'end'
-                          ? 'bg-red-500 shadow-lg shadow-red-500/50'
-                          : 'bg-red-600 hover:bg-red-500'
+                          ? 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.8)]'
+                          : 'bg-red-700/80 hover:bg-red-600 hover:shadow-[0_0_8px_rgba(220,38,38,0.6)]'
                       }`}
+                      style={{ zIndex: 100 }}
                     />
 
                     {/* Duration label */}
