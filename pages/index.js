@@ -1976,13 +1976,6 @@ const exportVideo = async () => {
           {!ffmpegLoaded && (
             <p className="text-sm text-yellow-400 mt-2">Loading video processor...</p>
           )}
-          
-          {/* Auto-save indicator */}
-          {showAutoSaveIndicator && (
-            <div className="fixed top-20 right-4 px-3 py-1... z-50">
-              ✓ Auto-saved
-            </div>
-          )}
         </div>
 
         {/* Tab Navigation */}
@@ -2286,15 +2279,31 @@ const exportVideo = async () => {
 
   {/* Edit Mode Active Banner */}
   {isEditMode && (
-    <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-500 rounded-xl p-4 mb-4 text-center">
-      <div className="flex items-center justify-center gap-2 mb-2">
-        <Maximize2 size={20} className="text-green-400" />
-        <span className="font-bold text-lg text-green-400">Edit Mode Active</span>
+    <>
+      <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-500 rounded-xl p-4 mb-4 text-center">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Maximize2 size={20} className="text-green-400" />
+          <span className="font-bold text-lg text-green-400">Edit Mode Active</span>
+        </div>
+        <p className="text-sm text-gray-300">
+          📱 Enhanced for mobile • Larger timeline & touch targets • Scroll locked
+        </p>
       </div>
-      <p className="text-sm text-gray-300">
-        📱 Enhanced for mobile • Larger timeline & touch targets • Scroll locked
-      </p>
-    </div>
+
+      {/* Exit Edit Mode Button */}
+      <button
+        onClick={() => {
+          setIsEditMode(false);
+          if (navigator.vibrate) {
+            navigator.vibrate(10);
+          }
+        }}
+        className="fixed top-4 right-4 z-50 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white shadow-lg font-semibold transition-all flex items-center gap-2"
+      >
+        <X size={18} />
+        Exit Edit Mode
+      </button>
+    </>
   )}
 
 {/* Video Player */}
@@ -3005,6 +3014,8 @@ const exportVideo = async () => {
   ref={timelineRef}
   onMouseDown={handleTimelineMouseDown}
   onTouchStart={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const touch = e.touches[0];
     handleTimelineMouseDown({ ...e, clientX: touch.clientX });
   }}
