@@ -3192,18 +3192,15 @@ const exportVideo = async () => {
   ref={timelineRef}
   onMouseDown={handleTimelineMouseDown}
   onTouchStart={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); // Prevent scroll only
     const touch = e.touches[0];
     handleTimelineMouseDown({ ...e, clientX: touch.clientX });
   }}
   onTouchMove={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); // Prevent scroll only
   }}
   onTouchEnd={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); // Prevent scroll only
 
     // Double-tap detection for mobile
     const now = Date.now();
@@ -3324,8 +3321,8 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-left');
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-3 sm:w-2 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-1.5 transition-all rounded-sm touch-none"
-                              style={{ touchAction: 'none', zIndex: 100 }}
+                              className="absolute left-0 top-0 bottom-0 w-4 sm:w-2 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-2 sm:-ml-1 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust start time"
                             />
@@ -3340,8 +3337,8 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-right');
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-3 sm:w-2 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-1.5 transition-all rounded-sm touch-none"
-                              style={{ touchAction: 'none', zIndex: 100 }}
+                              className="absolute right-0 top-0 bottom-0 w-4 sm:w-2 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-2 sm:-mr-1 transition-all rounded-sm touch-none"
+                              style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust end time"
                             />
@@ -3428,7 +3425,7 @@ onMouseLeave={() => {
           openPrecisionModal(anchor);
         }
       }}
-      onTouchEnd={(e) => {
+      onTouchStart={(e) => {
         e.preventDefault();
         e.stopPropagation();
         openPrecisionModalMobile(anchor);
