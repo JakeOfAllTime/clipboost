@@ -325,9 +325,9 @@ const dismissRestoreToast = () => {
 
   const updateAudioMixerVolumes = useCallback(() => {
     if (videoGainRef.current && musicGainRef.current) {
-      // audioBalance: 0 = all music, 50 = balanced, 100 = all video
-      const videoVolume = audioBalance / 100;
-      const musicVolume = 1 - (audioBalance / 100);
+      // audioBalance: 0 = all video, 50 = balanced, 100 = all music
+      const musicVolume = audioBalance / 100;
+      const videoVolume = 1 - (audioBalance / 100);
 
       videoGainRef.current.gain.value = videoVolume;
       musicGainRef.current.gain.value = musicVolume;
@@ -370,9 +370,9 @@ const dismissRestoreToast = () => {
 
   const updatePrecisionAudioMixerVolumes = useCallback(() => {
     if (precisionVideoGainRef.current && precisionMusicGainRef.current) {
-      // audioBalance: 0 = all music, 50 = balanced, 100 = all video
-      const videoVolume = audioBalance / 100;
-      const musicVolume = 1 - (audioBalance / 100);
+      // audioBalance: 0 = all video, 50 = balanced, 100 = all music
+      const musicVolume = audioBalance / 100;
+      const videoVolume = 1 - (audioBalance / 100);
 
       precisionVideoGainRef.current.gain.value = videoVolume;
       precisionMusicGainRef.current.gain.value = musicVolume;
@@ -1809,13 +1809,13 @@ const goToNextAnchor = () => {
     if (precisionVideoRef.current && precisionAnchor) {
       if (precisionPlaying) {
         precisionVideoRef.current.pause();
-        if (precisionMusicRef.current) {
-          precisionMusicRef.current.pause();
+        if (musicRef.current && music) {
+          musicRef.current.pause();
         }
       } else {
         // Set up Web Audio API mixer for precision modal
-        if (precisionVideoRef.current && precisionMusicRef.current && music) {
-          setupPrecisionAudioMixer(precisionVideoRef.current, precisionMusicRef.current);
+        if (precisionVideoRef.current && musicRef.current && music) {
+          setupPrecisionAudioMixer(precisionVideoRef.current, musicRef.current);
 
           // Resume audio context if suspended
           if (precisionAudioContextRef.current?.state === 'suspended') {
@@ -1825,12 +1825,12 @@ const goToNextAnchor = () => {
           // Sync music time with video time
           const videoTime = precisionTime;
           const musicTime = musicStartTime + videoTime;
-          precisionMusicRef.current.currentTime = musicTime;
-          precisionMusicRef.current.play();
+          musicRef.current.currentTime = musicTime;
+          musicRef.current.play().catch(e => console.log('Music play failed:', e));
         }
 
         precisionVideoRef.current.currentTime = precisionTime;
-        precisionVideoRef.current.play();
+        precisionVideoRef.current.play().catch(e => console.log('Video play failed:', e));
       }
       setPrecisionPlaying(!precisionPlaying);
     }
@@ -1904,40 +1904,7 @@ const goToNextAnchor = () => {
   };
 
   // Tab navigation helpers
-  const goNext = useCallback(() => {
-    const tabs = ['materials', 'forge', 'ship'];
-    const currentIndex = tabs.indexOf(currentTab);
-
-    // Validation before advancing
-    if (currentTab === 'materials' && !video) {
-      alert('⚠️ Please upload a video first');
-      return;
-    }
-
-    // Advance to next tab
-    if (currentIndex < tabs.length - 1) {
-      setCurrentTab(tabs[currentIndex + 1]);
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(20);
-      }
-    }
-  }, [currentTab, video]);
-
-  const goBack = useCallback(() => {
-    const tabs = ['materials', 'forge', 'ship'];
-    const currentIndex = tabs.indexOf(currentTab);
-
-    if (currentIndex > 0) {
-      setCurrentTab(tabs[currentIndex - 1]);
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(10);
-      }
-    }
-  }, [currentTab]);
-
-  // TabNav Component - Horizontal minimal design with navigation
+  // TabNav Component - Clean tab-only design
   const TabNav = ({ currentTab, onChange, hasVideo }) => {
     const tabs = [
       { id: 'materials', label: 'MATERIALS' },
@@ -1966,56 +1933,29 @@ const goToNextAnchor = () => {
     return (
       <div className="mb-8">
         {/* Stone Tablet Navigation */}
-        <div className="flex items-center justify-between max-w-5xl mx-auto" style={{ borderBottom: '2px solid var(--border)', paddingBottom: '0' }}>
-          {/* Left side - Back button */}
-          <div className="w-24 mb-2">
-            {currentTab !== 'materials' && (
+        <div className="flex justify-center items-end gap-1 max-w-5xl mx-auto" style={{ borderBottom: '2px solid var(--border)', paddingBottom: '0' }}>
+          {tabs.map((tab) => {
+            const isActive = currentTab === tab.id;
+            const isAccessible = isTabAccessible(tab.id);
+
+            return (
               <button
-                onClick={goBack}
-                className="forge-button px-3 py-2 rounded text-sm flex items-center gap-1"
+                key={tab.id}
+                onClick={() => handleTabClick(tab.id)}
+                disabled={!isAccessible}
+                className={`
+                  px-6 py-3 font-bold text-sm tracking-wider rounded-t-lg
+                  ${isActive ? 'forge-tab-active' : 'forge-tab'}
+                `}
+                style={{
+                  fontFamily: 'serif',
+                  letterSpacing: '0.1em'
+                }}
               >
-                ← Back
+                {tab.label}
               </button>
-            )}
-          </div>
-
-          {/* Center - Stone Tabs */}
-          <div className="flex justify-center items-end gap-1">
-            {tabs.map((tab) => {
-              const isActive = currentTab === tab.id;
-              const isAccessible = isTabAccessible(tab.id);
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabClick(tab.id)}
-                  disabled={!isAccessible}
-                  className={`
-                    px-6 py-3 font-bold text-sm tracking-wider rounded-t-lg
-                    ${isActive ? 'forge-tab-active' : 'forge-tab'}
-                  `}
-                  style={{
-                    fontFamily: 'serif',
-                    letterSpacing: '0.1em'
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Right side - Next button */}
-          <div className="w-24 text-right mb-2">
-            {currentTab !== 'ship' && (
-              <button
-                onClick={goNext}
-                className="forge-button px-3 py-2 rounded text-sm flex items-center gap-1 ml-auto"
-              >
-                Next →
-              </button>
-            )}
-          </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -2445,7 +2385,7 @@ const exportVideo = async () => {
                       />
 
                       {/* Music Range Selector */}
-                      <div>
+                      <div className="mb-4">
                         <div className="flex justify-between items-center mb-1">
                           <label className="text-xs text-gray-400">Music Range</label>
                           <span className="text-xs text-gray-500">
@@ -2490,6 +2430,27 @@ const exportVideo = async () => {
                               document.addEventListener('mousemove', handleMouseMove);
                               document.addEventListener('mouseup', handleMouseUp);
                             }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                              const startX = e.touches[0].clientX;
+                              const startTime = musicStartTime;
+                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                              const handleTouchMove = (moveE) => {
+                                const deltaX = moveE.touches[0].clientX - startX;
+                                const deltaTime = (deltaX / rect.width) * musicDuration;
+                                const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
+                                setMusicStartTime(newTime);
+                              };
+
+                              const handleTouchEnd = () => {
+                                document.removeEventListener('touchmove', handleTouchMove);
+                                document.removeEventListener('touchend', handleTouchEnd);
+                              };
+
+                              document.addEventListener('touchmove', handleTouchMove);
+                              document.addEventListener('touchend', handleTouchEnd);
+                            }}
                             title="Drag to adjust start"
                           />
 
@@ -2517,6 +2478,27 @@ const exportVideo = async () => {
 
                               document.addEventListener('mousemove', handleMouseMove);
                               document.addEventListener('mouseup', handleMouseUp);
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                              const startX = e.touches[0].clientX;
+                              const startTime = musicEndTime;
+                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                              const handleTouchMove = (moveE) => {
+                                const deltaX = moveE.touches[0].clientX - startX;
+                                const deltaTime = (deltaX / rect.width) * musicDuration;
+                                const newTime = Math.min(musicDuration, Math.max(musicStartTime + 1, startTime + deltaTime));
+                                setMusicEndTime(newTime);
+                              };
+
+                              const handleTouchEnd = () => {
+                                document.removeEventListener('touchmove', handleTouchMove);
+                                document.removeEventListener('touchend', handleTouchEnd);
+                              };
+
+                              document.addEventListener('touchmove', handleTouchMove);
+                              document.addEventListener('touchend', handleTouchEnd);
                             }}
                             title="Drag to adjust end"
                           />
@@ -2551,22 +2533,22 @@ const exportVideo = async () => {
                         />
                       </div>
 
-                      {/* Precision Music Edit Button */}
+                      {/* Precision Music Edit Button - Disabled for now */}
                       <button
-                        onClick={() => setShowMusicPrecisionModal(true)}
-                        className="w-full px-3 py-1.5 forge-button-hot rounded-lg flex items-center justify-center gap-1.5 text-xs"
+                        onClick={() => alert('⚒️ Feature coming soon!')}
+                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs opacity-60"
                       >
                         <ZoomIn size={14} />
                         Precision Music Edit
                       </button>
 
-                      {/* Preview Button - Inline */}
+                      {/* Music Preview Button */}
                       <button
                         onClick={toggleMusicPreview}
                         className="w-full px-3 py-1.5 forge-button-hot rounded-lg flex items-center justify-center gap-1.5 text-xs"
                       >
                         {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
-                        {isMusicPlaying ? 'Pause' : 'Preview'}
+                        {isMusicPlaying ? 'Pause Music' : 'Preview Audio'}
                       </button>
                     </div>
                   )}
