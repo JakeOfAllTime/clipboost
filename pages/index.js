@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -94,6 +94,9 @@ const ReelForge = () => {
   const [currentTab, setCurrentTab] = useState('materials');
   // Possible values: 'materials', 'forge', 'ship'
 
+  // Timeline zoom state
+  const [timelineZoom, setTimelineZoom] = useState(1);
+
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
   const [ffmpegLoaded, setFFmpegLoaded] = useState(false);
@@ -108,6 +111,18 @@ const ReelForge = () => {
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
   const precisionTimelineRef = useRef(null);
   const loadConfigInputRef = useRef(null);
+
+  // Web Audio API refs for mixing
+  const audioContextRef = useRef(null);
+  const videoSourceRef = useRef(null);
+  const musicSourceRef = useRef(null);
+  const videoGainRef = useRef(null);
+  const musicGainRef = useRef(null);
+  const precisionAudioContextRef = useRef(null);
+  const precisionVideoSourceRef = useRef(null);
+  const precisionMusicSourceRef = useRef(null);
+  const precisionVideoGainRef = useRef(null);
+  const precisionMusicGainRef = useRef(null);
 
   // Platform configurations
 const platforms = {
@@ -272,6 +287,103 @@ const dismissRestoreToast = () => {
       setHistoryIndex(historyIndex + 1);
     }
   }, [historyIndex, history]);
+
+  // Web Audio API functions for audio mixing
+  const setupAudioMixer = useCallback((videoElement, musicElement) => {
+    if (!videoElement || !musicElement) return;
+
+    try {
+      // Only create new context if it doesn't exist
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      const ctx = audioContextRef.current;
+
+      // Only create sources if they don't exist
+      if (!videoSourceRef.current) {
+        videoSourceRef.current = ctx.createMediaElementSource(videoElement);
+        videoGainRef.current = ctx.createGain();
+        videoSourceRef.current.connect(videoGainRef.current);
+        videoGainRef.current.connect(ctx.destination);
+      }
+
+      if (!musicSourceRef.current && musicElement.src) {
+        musicSourceRef.current = ctx.createMediaElementSource(musicElement);
+        musicGainRef.current = ctx.createGain();
+        musicSourceRef.current.connect(musicGainRef.current);
+        musicGainRef.current.connect(ctx.destination);
+      }
+
+      // Set initial volumes based on audioBalance
+      updateAudioMixerVolumes();
+
+    } catch (error) {
+      console.error('Error setting up audio mixer:', error);
+    }
+  }, [audioBalance]);
+
+  const updateAudioMixerVolumes = useCallback(() => {
+    if (videoGainRef.current && musicGainRef.current) {
+      // audioBalance: 0 = all music, 50 = balanced, 100 = all video
+      const videoVolume = audioBalance / 100;
+      const musicVolume = 1 - (audioBalance / 100);
+
+      videoGainRef.current.gain.value = videoVolume;
+      musicGainRef.current.gain.value = musicVolume;
+    }
+  }, [audioBalance]);
+
+  const setupPrecisionAudioMixer = useCallback((videoElement, musicElement) => {
+    if (!videoElement || !musicElement) return;
+
+    try {
+      // Only create new context if it doesn't exist
+      if (!precisionAudioContextRef.current) {
+        precisionAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      const ctx = precisionAudioContextRef.current;
+
+      // Only create sources if they don't exist
+      if (!precisionVideoSourceRef.current) {
+        precisionVideoSourceRef.current = ctx.createMediaElementSource(videoElement);
+        precisionVideoGainRef.current = ctx.createGain();
+        precisionVideoSourceRef.current.connect(precisionVideoGainRef.current);
+        precisionVideoGainRef.current.connect(ctx.destination);
+      }
+
+      if (!precisionMusicSourceRef.current && musicElement.src) {
+        precisionMusicSourceRef.current = ctx.createMediaElementSource(musicElement);
+        precisionMusicGainRef.current = ctx.createGain();
+        precisionMusicSourceRef.current.connect(precisionMusicGainRef.current);
+        precisionMusicGainRef.current.connect(ctx.destination);
+      }
+
+      // Set initial volumes based on audioBalance
+      updatePrecisionAudioMixerVolumes();
+
+    } catch (error) {
+      console.error('Error setting up precision audio mixer:', error);
+    }
+  }, [audioBalance]);
+
+  const updatePrecisionAudioMixerVolumes = useCallback(() => {
+    if (precisionVideoGainRef.current && precisionMusicGainRef.current) {
+      // audioBalance: 0 = all music, 50 = balanced, 100 = all video
+      const videoVolume = audioBalance / 100;
+      const musicVolume = 1 - (audioBalance / 100);
+
+      precisionVideoGainRef.current.gain.value = videoVolume;
+      precisionMusicGainRef.current.gain.value = musicVolume;
+    }
+  }, [audioBalance]);
+
+  // Update volumes when audioBalance changes
+  useEffect(() => {
+    updateAudioMixerVolumes();
+    updatePrecisionAudioMixerVolumes();
+  }, [audioBalance, updateAudioMixerVolumes, updatePrecisionAudioMixerVolumes]);
 
   // Save/Load functions
   const saveConfiguration = () => {
@@ -784,15 +896,23 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
     setIsPreviewMode(true);
     setPreviewAnchorIndex(0);
-    
+
+    // Set up Web Audio API mixer
+    if (videoRef.current && musicRef.current) {
+      setupAudioMixer(videoRef.current, musicRef.current);
+
+      // Resume audio context if suspended
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    }
+
     if (music && musicRef.current) {
       musicRef.current.currentTime = musicStartTime;
-      musicRef.current.volume = audioBalance / 100;
       musicRef.current.play();
     }
 
     if (videoRef.current) {
-      videoRef.current.volume = 0;
       videoRef.current.currentTime = anchors[0].start;
       videoRef.current.play();
     }
@@ -801,14 +921,13 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   const stopPreviewMode = () => {
     setIsPreviewMode(false);
     setPreviewAnchorIndex(0);
-    
+
     if (musicRef.current) {
       musicRef.current.pause();
       musicRef.current.currentTime = musicStartTime;
     }
 
     if (videoRef.current) {
-      videoRef.current.volume = (100 - audioBalance) / 100;
       videoRef.current.pause();
     }
 
@@ -894,15 +1013,23 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     // Seek to start
     seekPreviewTime(0);
 
+    // Set up Web Audio API mixer
+    if (videoRef.current && musicRef.current) {
+      setupAudioMixer(videoRef.current, musicRef.current);
+
+      // Resume audio context if suspended
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    }
+
     // Start music
     if (music && musicRef.current) {
-      musicRef.current.volume = audioBalance / 100;
       musicRef.current.play();
     }
 
     // Start video
     if (videoRef.current) {
-      videoRef.current.volume = 0;
       videoRef.current.play();
     }
   }, [anchors, buildPreviewTimeline, seekPreviewTime, music, audioBalance]);
@@ -925,10 +1052,9 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     }
 
     if (videoRef.current) {
-      videoRef.current.volume = (100 - audioBalance) / 100;
       videoRef.current.pause();
     }
-  }, [musicStartTime, audioBalance]);
+  }, [musicStartTime]);
 
   // Toggle preview playback
   const togglePreviewPlayback = useCallback(() => {
@@ -1683,7 +1809,26 @@ const goToNextAnchor = () => {
     if (precisionVideoRef.current && precisionAnchor) {
       if (precisionPlaying) {
         precisionVideoRef.current.pause();
+        if (precisionMusicRef.current) {
+          precisionMusicRef.current.pause();
+        }
       } else {
+        // Set up Web Audio API mixer for precision modal
+        if (precisionVideoRef.current && precisionMusicRef.current && music) {
+          setupPrecisionAudioMixer(precisionVideoRef.current, precisionMusicRef.current);
+
+          // Resume audio context if suspended
+          if (precisionAudioContextRef.current?.state === 'suspended') {
+            precisionAudioContextRef.current.resume();
+          }
+
+          // Sync music time with video time
+          const videoTime = precisionTime;
+          const musicTime = musicStartTime + videoTime;
+          precisionMusicRef.current.currentTime = musicTime;
+          precisionMusicRef.current.play();
+        }
+
         precisionVideoRef.current.currentTime = precisionTime;
         precisionVideoRef.current.play();
       }
@@ -2075,7 +2220,7 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
-<div className="min-h-screen p-4 sm:p-8" style={{ color: 'var(--text-primary)' }}>
+<div className="min-h-screen p-4 sm:p-8 overflow-x-hidden" style={{ color: 'var(--text-primary)' }}>
   {/* Stone Texture Overlay */}
   <div className="stone-texture-overlay" />
 
@@ -2397,6 +2542,8 @@ const exportVideo = async () => {
                           max="100"
                           value={audioBalance}
                           onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+                          onTouchStart={(e) => setAudioBalance(parseInt(e.target.value))}
+                          onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
                           className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)] [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)]"
                           style={{
                             background: `linear-gradient(to right, #ff6b35 0%, #d4572f ${audioBalance}%, #2d2520 ${audioBalance}%, #2d2520 100%)`
