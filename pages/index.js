@@ -2251,100 +2251,100 @@ const exportVideo = async () => {
                 </label>
               </div>
             ) : (
-              <div className="max-w-4xl mx-auto">
-                {/* Video Preview Card */}
-                <div className="forge-panel rounded-xl p-6">
-                  <h3 className="text-xl font-semibold mb-2">Video Preview</h3>
-                  <p className="text-gray-300 text-sm mb-4">
+              <div className="h-full flex flex-col">
+                {/* Video Info Header */}
+                <div className="mb-3">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Video Preview</h3>
+                  <p className="text-xs sm:text-sm" style={{ color: 'var(--text-dim)' }}>
                     Duration: {formatTime(duration)} • {video.name}
                   </p>
+                </div>
 
-                  {/* Video Player */}
-                  <div className="relative bg-black rounded-lg overflow-hidden aspect-video mb-4">
-                    <video
-                      ref={videoRef}
-                      src={videoUrl}
-                      className="w-full h-full object-contain"
-                      onLoadedMetadata={(e) => {
-                        setDuration(e.target.duration);
-                      }}
-                      onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
-                      onEnded={() => setIsPlaying(false)}
-                    />
+                {/* Video Player - Full Container */}
+                <div className="relative bg-black rounded-lg overflow-hidden flex-1 mb-4" style={{ minHeight: '300px' }}>
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    className="w-full h-full object-contain"
+                    onLoadedMetadata={(e) => {
+                      setDuration(e.target.duration);
+                    }}
+                    onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
+                    onEnded={() => setIsPlaying(false)}
+                  />
 
-                    {/* Play/Pause Overlay */}
-                    {!isPlaying && (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                        onClick={togglePlay}
-                      >
-                        <div className="bg-white/90 rounded-full p-6">
-                          <Play size={48} className="text-black ml-1" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Timeline Scrubber */}
-                  <div className="mb-4">
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration}
-                      step="0.1"
-                      value={currentTime}
-                      onChange={(e) => {
-                        const time = parseFloat(e.target.value);
-                        setCurrentTime(time);
-                        if (videoRef.current) {
-                          videoRef.current.currentTime = time;
-                        }
-                      }}
-                      className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
-                    />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
-                      <span>{formatTime(currentTime)}</span>
-                      <span>{formatTime(duration)}</span>
-                    </div>
-                  </div>
-
-                  {/* Control Buttons - Equal Width */}
-                  <div className="flex gap-3">
-                    <button
+                  {/* Play/Pause Overlay */}
+                  {!isPlaying && (
+                    <div
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
                       onClick={togglePlay}
-                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
                     >
-                      {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                      {isPlaying ? 'Pause' : 'Play'}
-                    </button>
+                      <div className="bg-white/90 rounded-full p-6">
+                        <Play size={48} className="text-black ml-1" />
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-                    <button
-                      onClick={() => setShowTrimModal(true)}
-                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <Scissors size={18} />
-                      Trim Video
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (videoUrl) URL.revokeObjectURL(videoUrl);
-                        setVideo(null);
-                        setVideoUrl(null);
-                        setAnchors([]);
-                        setHistory([]);
-                        setHistoryIndex(-1);
-                        setMusic(null);
-                        setMusicUrl(null);
-                        setCurrentTab('materials');
-                      }}
-                      className="flex-1 py-3 forge-button rounded-lg flex items-center justify-center gap-2 font-semibold"
-                      style={{ borderColor: 'var(--accent-hot)' }}
-                    >
-                      <X size={18} />
-                      Change
-                    </button>
+                {/* Timeline Scrubber */}
+                <div className="mb-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max={duration}
+                    step="0.1"
+                    value={currentTime}
+                    onChange={(e) => {
+                      const time = parseFloat(e.target.value);
+                      setCurrentTime(time);
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = time;
+                      }
+                    }}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
                   </div>
+                </div>
+
+                {/* Control Buttons - Equal Width, Mobile Optimized */}
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <button
+                    onClick={togglePlay}
+                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                  >
+                    {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowTrimModal(true)}
+                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                  >
+                    <Scissors size={18} />
+                    <span>Trim</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (videoUrl) URL.revokeObjectURL(videoUrl);
+                      setVideo(null);
+                      setVideoUrl(null);
+                      setAnchors([]);
+                      setHistory([]);
+                      setHistoryIndex(-1);
+                      setMusic(null);
+                      setMusicUrl(null);
+                      setCurrentTab('materials');
+                    }}
+                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                    style={{ borderColor: 'var(--accent-hot)' }}
+                  >
+                    <X size={18} />
+                    <span>Change</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -2413,9 +2413,9 @@ const exportVideo = async () => {
                             }}
                           />
 
-                          {/* Start handle - Yellow */}
+                          {/* Start handle - Sleek pill design */}
                           <div
-                            className="absolute top-0 bottom-0 w-5 sm:w-3 bg-yellow-400 cursor-ew-resize z-10 hover:bg-yellow-300 active:bg-yellow-200 rounded-sm shadow-lg transition-all"
+                            className="absolute top-0 bottom-0 w-1 bg-yellow-400/60 cursor-ew-resize z-10 rounded-full group"
                             style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2468,11 +2468,14 @@ const exportVideo = async () => {
                               document.addEventListener('touchend', handleTouchEnd);
                             }}
                             title="Drag to adjust start"
-                          />
+                          >
+                            {/* Pill-shaped grab handle */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-yellow-400 group-hover:bg-yellow-300 group-active:bg-yellow-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
+                          </div>
 
-                          {/* End handle - Red */}
+                          {/* End handle - Sleek pill design */}
                           <div
-                            className="absolute top-0 bottom-0 w-5 sm:w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 active:bg-red-300 rounded-sm shadow-lg transition-all"
+                            className="absolute top-0 bottom-0 w-1 bg-red-500/60 cursor-ew-resize z-10 rounded-full group"
                             style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2525,7 +2528,10 @@ const exportVideo = async () => {
                               document.addEventListener('touchend', handleTouchEnd);
                             }}
                             title="Drag to adjust end"
-                          />
+                          >
+                            {/* Pill-shaped grab handle */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 group-hover:bg-red-400 group-active:bg-red-300 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
+                          </div>
                         </div>
 
                         <div className="flex justify-between text-xs text-gray-500">
@@ -2534,12 +2540,14 @@ const exportVideo = async () => {
                         </div>
                       </div>
 
-                      {/* Audio Balance - Compact */}
+                      {/* Audio Balance - Color-coded */}
                       <div>
                         <div className="flex justify-between items-center mb-0.5">
                           <label className="text-xs text-gray-400">Balance</label>
-                          <span className="text-xs text-gray-500">
-                            Video {100 - audioBalance}% • Music {audioBalance}%
+                          <span className="text-xs flex items-center gap-1.5">
+                            <span className="text-orange-500 font-semibold">Music {audioBalance}%</span>
+                            <span className="text-gray-600">•</span>
+                            <span className="text-yellow-400 font-semibold">Video {100 - audioBalance}%</span>
                           </span>
                         </div>
                         <input
@@ -2552,7 +2560,7 @@ const exportVideo = async () => {
                           onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
                           className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)] [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)]"
                           style={{
-                            background: `linear-gradient(to right, #ff6b35 0%, #d4572f ${audioBalance}%, #2d2520 ${audioBalance}%, #2d2520 100%)`
+                            background: `linear-gradient(to right, #ff6b35 0%, #ff6b35 ${audioBalance}%, #eab308 ${audioBalance}%, #eab308 100%)`
                           }}
                         />
                       </div>
@@ -3504,7 +3512,7 @@ onMouseLeave={() => {
                         )}
                       </div>
 
-{/* Preview/Hover Panel */}
+{/* Preview/Hover Panel - Positioned to avoid control overlap */}
 {(previewAnchor?.id === anchor.id || hoveredAnchor?.id === anchor.id) && (
   <div
     onClick={(e) => e.stopPropagation()}
@@ -3513,7 +3521,7 @@ onMouseLeave={() => {
       e.preventDefault();
       e.stopPropagation();
     }}
-    className={`absolute bottom-full mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
+    className={`absolute bottom-full mb-16 sm:mb-12 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
