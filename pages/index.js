@@ -1944,15 +1944,23 @@ const goToNextAnchor = () => {
                 onClick={() => handleTabClick(tab.id)}
                 disabled={!isAccessible}
                 className={`
-                  px-6 py-3 font-bold text-sm tracking-wider rounded-t-lg
-                  ${isActive ? 'forge-tab-active' : 'forge-tab'}
+                  px-4 sm:px-6 py-3 sm:py-3 min-h-[48px] font-bold text-sm sm:text-base tracking-wider rounded-t-lg
+                  transition-all duration-200 relative
+                  ${isActive ? 'forge-tab-active scale-105' : 'forge-tab'}
+                  ${!isAccessible ? 'opacity-40 cursor-not-allowed' : 'active:scale-95'}
                 `}
                 style={{
                   fontFamily: 'serif',
-                  letterSpacing: '0.1em'
+                  letterSpacing: '0.1em',
+                  ...(isActive && {
+                    boxShadow: '0 -4px 12px rgba(255, 107, 53, 0.4), inset 0 2px 8px rgba(255, 107, 53, 0.2)'
+                  })
                 }}
               >
                 {tab.label}
+                {isActive && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent" />
+                )}
               </button>
             );
           })}
@@ -2407,7 +2415,7 @@ const exportVideo = async () => {
 
                           {/* Start handle - Yellow */}
                           <div
-                            className="absolute top-0 bottom-0 w-3 bg-yellow-400 cursor-ew-resize z-10 hover:bg-yellow-300 rounded-sm shadow-md"
+                            className="absolute top-0 bottom-0 w-5 sm:w-3 bg-yellow-400 cursor-ew-resize z-10 hover:bg-yellow-300 active:bg-yellow-200 rounded-sm shadow-lg transition-all"
                             style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2432,6 +2440,10 @@ const exportVideo = async () => {
                             }}
                             onTouchStart={(e) => {
                               e.stopPropagation();
+                              // Haptic feedback
+                              if (navigator.vibrate) {
+                                navigator.vibrate(10);
+                              }
                               const startX = e.touches[0].clientX;
                               const startTime = musicStartTime;
                               const rect = e.currentTarget.parentElement.getBoundingClientRect();
@@ -2444,6 +2456,10 @@ const exportVideo = async () => {
                               };
 
                               const handleTouchEnd = () => {
+                                // Haptic feedback on release
+                                if (navigator.vibrate) {
+                                  navigator.vibrate(15);
+                                }
                                 document.removeEventListener('touchmove', handleTouchMove);
                                 document.removeEventListener('touchend', handleTouchEnd);
                               };
@@ -2456,7 +2472,7 @@ const exportVideo = async () => {
 
                           {/* End handle - Red */}
                           <div
-                            className="absolute top-0 bottom-0 w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 rounded-sm shadow-md"
+                            className="absolute top-0 bottom-0 w-5 sm:w-3 bg-red-500 cursor-ew-resize z-10 hover:bg-red-400 active:bg-red-300 rounded-sm shadow-lg transition-all"
                             style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
@@ -2481,6 +2497,10 @@ const exportVideo = async () => {
                             }}
                             onTouchStart={(e) => {
                               e.stopPropagation();
+                              // Haptic feedback
+                              if (navigator.vibrate) {
+                                navigator.vibrate(10);
+                              }
                               const startX = e.touches[0].clientX;
                               const startTime = musicEndTime;
                               const rect = e.currentTarget.parentElement.getBoundingClientRect();
@@ -2493,6 +2513,10 @@ const exportVideo = async () => {
                               };
 
                               const handleTouchEnd = () => {
+                                // Haptic feedback on release
+                                if (navigator.vibrate) {
+                                  navigator.vibrate(15);
+                                }
                                 document.removeEventListener('touchmove', handleTouchMove);
                                 document.removeEventListener('touchend', handleTouchEnd);
                               };
@@ -2533,13 +2557,16 @@ const exportVideo = async () => {
                         />
                       </div>
 
-                      {/* Precision Music Edit Button - Disabled for now */}
+                      {/* Precision Music Edit Button - Coming Soon */}
                       <button
                         onClick={() => alert('⚒️ Feature coming soon!')}
-                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs opacity-60"
+                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs opacity-50 cursor-not-allowed relative"
                       >
                         <ZoomIn size={14} />
                         Precision Music Edit
+                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                          SOON
+                        </span>
                       </button>
 
                       {/* Music Preview Button */}
