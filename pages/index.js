@@ -54,6 +54,11 @@ const ReelForge = () => {
   const [precisionPlaying, setPrecisionPlaying] = useState(false);
   const [selectedHandle, setSelectedHandle] = useState('end'); // 'start' or 'end'
 
+  // Music precision modal state
+  const [showMusicPrecisionModal, setShowMusicPrecisionModal] = useState(false);
+  const [musicPrecisionTime, setMusicPrecisionTime] = useState(0);
+  const [musicPrecisionPlaying, setMusicPrecisionPlaying] = useState(false);
+
   // Unified drag state
   const [dragState, setDragState] = useState({
     active: false,
@@ -106,6 +111,7 @@ const ReelForge = () => {
   const previewVideoRef = useRef(null);
   const precisionVideoRef = useRef(null);
   const musicRef = useRef(null);
+  const musicPrecisionRef = useRef(null);
   const timelineRef = useRef(null);
   const lastTapTimeRef = useRef(0);
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
@@ -1597,7 +1603,13 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   // Precision modal handlers
   const openPrecisionModal = (anchor) => {
   const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
-  setPrecisionAnchor({ ...anchor, _index: anchorIndex });
+
+  // Calculate this anchor's position in the FINAL TIMELINE
+  const timelineOffset = anchors
+    .slice(0, anchorIndex)
+    .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+  setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
   setPrecisionTime(anchor.end);
   setSelectedHandle('end');
   setShowPrecisionModal(true);
@@ -1615,7 +1627,13 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     document.body.style.width = '100%';
 
     const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
-    setPrecisionAnchor({ ...anchor, _index: anchorIndex });
+
+    // Calculate this anchor's position in the FINAL TIMELINE
+    const timelineOffset = anchors
+      .slice(0, anchorIndex)
+      .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+    setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
     setPrecisionTime(anchor.end);
     setSelectedHandle('end');
 
@@ -1630,8 +1648,15 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
 const goToPreviousAnchor = () => {
   if (!precisionAnchor || precisionAnchor._index <= 0) return;
-  const prevAnchor = anchors[precisionAnchor._index - 1];
-  setPrecisionAnchor({ ...prevAnchor, _index: precisionAnchor._index - 1 });
+  const prevIndex = precisionAnchor._index - 1;
+  const prevAnchor = anchors[prevIndex];
+
+  // Recalculate timeline offset for previous anchor
+  const timelineOffset = anchors
+    .slice(0, prevIndex)
+    .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+  setPrecisionAnchor({ ...prevAnchor, _index: prevIndex, _timelineOffset: timelineOffset });
   setPrecisionTime(prevAnchor.end);
   setSelectedHandle('end');
   if (precisionVideoRef.current) {
@@ -1641,8 +1666,15 @@ const goToPreviousAnchor = () => {
 
 const goToNextAnchor = () => {
   if (!precisionAnchor || precisionAnchor._index >= anchors.length - 1) return;
-  const nextAnchor = anchors[precisionAnchor._index + 1];
-  setPrecisionAnchor({ ...nextAnchor, _index: precisionAnchor._index + 1 });
+  const nextIndex = precisionAnchor._index + 1;
+  const nextAnchor = anchors[nextIndex];
+
+  // Recalculate timeline offset for next anchor
+  const timelineOffset = anchors
+    .slice(0, nextIndex)
+    .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+  setPrecisionAnchor({ ...nextAnchor, _index: nextIndex, _timelineOffset: timelineOffset });
   setPrecisionTime(nextAnchor.end);
   setSelectedHandle('end');
   if (precisionVideoRef.current) {
@@ -1822,9 +1854,15 @@ const goToNextAnchor = () => {
             precisionAudioContextRef.current.resume();
           }
 
-          // Sync music time with video time
-          const videoTime = precisionTime;
-          const musicTime = musicStartTime + videoTime;
+          // Sync music time with FINAL TIMELINE position
+          // Calculate how far into the anchor we are
+          const anchorRelativeTime = precisionTime - precisionAnchor.start;
+          // Add the anchor's timeline offset to get position in final edit
+          const timelineOffset = precisionAnchor._timelineOffset || 0;
+          const finalTimelinePosition = timelineOffset + anchorRelativeTime;
+          // Apply music start offset
+          const musicTime = musicStartTime + finalTimelinePosition;
+
           musicRef.current.currentTime = musicTime;
           musicRef.current.play().catch(e => console.log('Music play failed:', e));
         }
@@ -1842,11 +1880,32 @@ const goToNextAnchor = () => {
       if (currentTime >= precisionAnchor.end) {
         precisionVideoRef.current.currentTime = precisionAnchor.start;
         setPrecisionTime(precisionAnchor.start);
+
+        // Loop music as well
+        if (musicRef.current && music && precisionPlaying) {
+          const timelineOffset = precisionAnchor._timelineOffset || 0;
+          const musicTime = musicStartTime + timelineOffset;
+          musicRef.current.currentTime = musicTime;
+        }
+
         if (precisionPlaying) {
           precisionVideoRef.current.play();
         }
       } else {
         setPrecisionTime(currentTime);
+
+        // Keep music in sync during playback
+        if (musicRef.current && music && precisionPlaying) {
+          const anchorRelativeTime = currentTime - precisionAnchor.start;
+          const timelineOffset = precisionAnchor._timelineOffset || 0;
+          const finalTimelinePosition = timelineOffset + anchorRelativeTime;
+          const musicTime = musicStartTime + finalTimelinePosition;
+
+          // Only update if music has drifted more than 0.1s (avoid constant seeking)
+          if (Math.abs(musicRef.current.currentTime - musicTime) > 0.1) {
+            musicRef.current.currentTime = musicTime;
+          }
+        }
       }
     }
   };
@@ -2565,16 +2624,19 @@ const exportVideo = async () => {
                         />
                       </div>
 
-                      {/* Precision Music Edit Button - Coming Soon */}
+                      {/* Precision Music Edit Button */}
                       <button
-                        onClick={() => alert('⚒️ Feature coming soon!')}
-                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs opacity-50 cursor-not-allowed relative"
+                        onClick={() => {
+                          if (music) {
+                            setMusicPrecisionTime(musicStartTime);
+                            setShowMusicPrecisionModal(true);
+                          }
+                        }}
+                        disabled={!music}
+                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
                       >
                         <ZoomIn size={14} />
                         Precision Music Edit
-                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          SOON
-                        </span>
                       </button>
 
                       {/* Music Preview Button */}
@@ -3521,7 +3583,7 @@ onMouseLeave={() => {
       e.preventDefault();
       e.stopPropagation();
     }}
-    className={`absolute bottom-full mb-16 sm:mb-12 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
+    className={`absolute bottom-full mb-32 sm:mb-24 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
@@ -4191,6 +4253,177 @@ onMouseLeave={() => {
     Apply Changes
   </button>
 </div>
+            </div>
+          </div>
+        )}
+
+        {/* Music Precision Modal */}
+        {showMusicPrecisionModal && music && (
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            style={{ zIndex: 9999 }}
+            onClick={() => setShowMusicPrecisionModal(false)}
+          >
+            <div
+              className="forge-panel p-6 rounded-2xl max-w-2xl w-full"
+              style={{ zIndex: 10000 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-2xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+                Precision Music Start Time
+              </h2>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-dim)' }}>
+                Adjust the music start position with frame-precision
+              </p>
+
+              {/* Audio Player */}
+              <div className="bg-black rounded-lg p-4 mb-4">
+                <audio
+                  ref={musicPrecisionRef}
+                  src={musicUrl}
+                  onTimeUpdate={(e) => {
+                    if (musicPrecisionPlaying) {
+                      setMusicPrecisionTime(e.target.currentTime);
+                    }
+                  }}
+                  onEnded={() => setMusicPrecisionPlaying(false)}
+                />
+
+                {/* Current Time Display */}
+                <div className="text-center mb-4">
+                  <div className="text-sm text-gray-400 mb-1">Music Start Time</div>
+                  <div className="text-3xl font-mono font-bold text-orange-500">
+                    {formatTime(musicPrecisionTime)}
+                  </div>
+                </div>
+
+                {/* Play/Pause Button */}
+                <div className="flex justify-center mb-4">
+                  <button
+                    onClick={() => {
+                      if (musicPrecisionRef.current) {
+                        if (musicPrecisionPlaying) {
+                          musicPrecisionRef.current.pause();
+                        } else {
+                          musicPrecisionRef.current.currentTime = musicPrecisionTime;
+                          musicPrecisionRef.current.play();
+                        }
+                        setMusicPrecisionPlaying(!musicPrecisionPlaying);
+                      }
+                    }}
+                    className="p-4 forge-button-hot rounded-full shadow-lg transition hover:scale-110"
+                  >
+                    {musicPrecisionPlaying ? <Pause size={24} /> : <Play size={24} />}
+                  </button>
+                </div>
+
+                {/* Timeline Scrubber */}
+                <div className="relative mb-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max={music.duration || 100}
+                    step="0.033"
+                    value={musicPrecisionTime}
+                    onChange={(e) => {
+                      const time = parseFloat(e.target.value);
+                      setMusicPrecisionTime(time);
+                      if (musicPrecisionRef.current) {
+                        musicPrecisionRef.current.currentTime = time;
+                      }
+                    }}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, #ff6b35 0%, #ff6b35 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 100%)`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>0:00</span>
+                    <span>{formatTime(music.duration || 0)}</span>
+                  </div>
+                </div>
+
+                {/* Frame-by-Frame Controls */}
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => {
+                      const newTime = Math.max(0, musicPrecisionTime - 1);
+                      setMusicPrecisionTime(newTime);
+                      if (musicPrecisionRef.current) {
+                        musicPrecisionRef.current.currentTime = newTime;
+                      }
+                    }}
+                    className="px-4 py-2 forge-button rounded-lg text-sm"
+                  >
+                    -1s
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newTime = Math.max(0, musicPrecisionTime - 0.1);
+                      setMusicPrecisionTime(newTime);
+                      if (musicPrecisionRef.current) {
+                        musicPrecisionRef.current.currentTime = newTime;
+                      }
+                    }}
+                    className="px-4 py-2 forge-button rounded-lg text-sm"
+                  >
+                    -0.1s
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newTime = Math.min(music.duration || 100, musicPrecisionTime + 0.1);
+                      setMusicPrecisionTime(newTime);
+                      if (musicPrecisionRef.current) {
+                        musicPrecisionRef.current.currentTime = newTime;
+                      }
+                    }}
+                    className="px-4 py-2 forge-button rounded-lg text-sm"
+                  >
+                    +0.1s
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newTime = Math.min(music.duration || 100, musicPrecisionTime + 1);
+                      setMusicPrecisionTime(newTime);
+                      if (musicPrecisionRef.current) {
+                        musicPrecisionRef.current.currentTime = newTime;
+                      }
+                    }}
+                    className="px-4 py-2 forge-button rounded-lg text-sm"
+                  >
+                    +1s
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowMusicPrecisionModal(false);
+                    setMusicPrecisionPlaying(false);
+                    if (musicPrecisionRef.current) {
+                      musicPrecisionRef.current.pause();
+                    }
+                  }}
+                  className="px-6 py-3 forge-button rounded-lg font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setMusicStartTime(musicPrecisionTime);
+                    setShowMusicPrecisionModal(false);
+                    setMusicPrecisionPlaying(false);
+                    if (musicPrecisionRef.current) {
+                      musicPrecisionRef.current.pause();
+                    }
+                  }}
+                  className="px-6 py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold transition"
+                >
+                  Apply
+                </button>
+              </div>
             </div>
           </div>
         )}
