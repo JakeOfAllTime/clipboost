@@ -31,7 +31,6 @@ const ReelForge = () => {
   const [musicEndTime, setMusicEndTime] = useState(0);
   const [audioBalance, setAudioBalance] = useState(70);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const [showMusicPrecisionModal, setShowMusicPrecisionModal] = useState(false);
 
   // Trim state
   const [trimStart, setTrimStart] = useState(0);
