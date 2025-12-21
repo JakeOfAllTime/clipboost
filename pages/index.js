@@ -4,6 +4,9 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
 const ReelForge = () => {
+  // ⚠️ TESTING ONLY - Replace with user's API key or environment variable in production
+  const ANTHROPIC_API_KEY = 'sk-ant-api03-fMi9OOadJznEBYfk0k3ycgx32qkPz_LW9l_pNc-UYABxQ8lKcgY53nH9Iui_-u9Mpp92OJw1qm-iVtzGC-d6sQ-JdAanAAA';
+
   // Core video state
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -822,6 +825,170 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     };
 
     video.onerror = () => reject(new Error("Error loading video for analysis"));
+  });
+};
+
+// Frame Extraction for Narrative Analysis
+const extractFramesForNarrative = async (videoFile, frameCount = 12) => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    video.src = URL.createObjectURL(videoFile);
+    video.muted = true;
+
+    video.onloadedmetadata = async () => {
+      const duration = video.duration;
+      canvas.width = 640;  // Reasonable size for API
+      canvas.height = 360;
+
+      const frames = [];
+      const interval = duration / (frameCount - 1); // Evenly spaced
+
+      for (let i = 0; i < frameCount; i++) {
+        const timestamp = i * interval;
+
+        await new Promise((seekResolve) => {
+          video.onseeked = () => {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = imageData.split(',')[1];
+
+            frames.push({
+              timestamp: timestamp,
+              base64: base64Data
+            });
+
+            seekResolve();
+          };
+          video.currentTime = timestamp;
+        });
+      }
+
+      URL.revokeObjectURL(video.src);
+      resolve(frames);
+    };
+
+    video.onerror = () => reject(new Error('Failed to load video'));
+  });
+};
+
+// Claude API Narrative Analysis
+const analyzeNarrative = async (frames, targetDuration = 60, apiKey) => {
+  try {
+    const content = [
+      {
+        type: "text",
+        text: `Analyze these ${frames.length} frames from a video to create a compelling short-form edit.
+
+TARGET DURATION: ${targetDuration} seconds
+
+Your task:
+1. Identify the story type (tutorial, transformation, vlog, product_demo, performance, other)
+2. Understand the narrative arc and key moments
+3. Suggest 5-7 cut points that tell a cohesive story
+4. Each clip should be 2-5 seconds long
+5. Prioritize moments with visual interest or emotional weight
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "storyType": "string",
+  "narrative": "brief description of the story",
+  "suggestedCuts": [
+    {
+      "startTime": number,
+      "endTime": number,
+      "reason": "why this moment matters",
+      "importance": number between 0-1
+    }
+  ]
+}`
+      }
+    ];
+
+    // Add all frames as images
+    frames.forEach((frame, index) => {
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/jpeg",
+          data: frame.base64
+        }
+      });
+      content.push({
+        type: "text",
+        text: `Frame ${index + 1}/${frames.length} at ${frame.timestamp.toFixed(1)}s`
+      });
+    });
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        temperature: 0.5,
+        messages: [{
+          role: "user",
+          content: content
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const textContent = data.content.find(c => c.type === 'text')?.text || '';
+    const narrative = JSON.parse(textContent);
+
+    return narrative;
+
+  } catch (error) {
+    console.error('Narrative analysis failed:', error);
+    throw error;
+  }
+};
+
+// Refine Claude's cuts with motion detection for cleaner edits
+const refineWithMotionDetection = (claudeCuts, videoAnalysis) => {
+  if (!videoAnalysis || videoAnalysis.length === 0) {
+    return claudeCuts; // No motion data, use Claude's suggestions as-is
+  }
+
+  return claudeCuts.map(cut => {
+    // Find motion moments within ±2 seconds of Claude's suggestion
+    const nearbyStart = videoAnalysis.filter(m =>
+      Math.abs(m.time - cut.startTime) < 2
+    );
+
+    const nearbyEnd = videoAnalysis.filter(m =>
+      Math.abs(m.time - cut.endTime) < 2
+    );
+
+    // Prefer scene changes for clean cuts
+    const refinedStart = nearbyStart.find(m => m.sceneChange)?.time
+      || nearbyStart.sort((a, b) => b.motionScore - a.motionScore)[0]?.time
+      || cut.startTime;
+
+    const refinedEnd = nearbyEnd.find(m => m.sceneChange)?.time
+      || nearbyEnd.sort((a, b) => b.motionScore - a.motionScore)[0]?.time
+      || cut.endTime;
+
+    return {
+      start: refinedStart,
+      end: refinedEnd,
+      reason: cut.reason,
+      importance: cut.importance
+    };
   });
 };
 
@@ -3062,238 +3229,116 @@ const exportVideo = async () => {
       onClick={async () => {
         if (!video || isAnalyzing) return;
 
-        console.log('🚀 AUTO-GENERATE CLICKED!', {
-          hasVideo: !!video,
-          hasMusic: !!music,
-          musicStartTime,
-          targetDuration,
-          motionSensitivity
-        });
-
         try {
           setIsAnalyzing(true);
 
-          // Analyze video for motion detection
-          const videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-          setVideoAnalysis(videoAnalysisResult);
+          console.log('🎬 NARRATIVE AUTO-GENERATE STARTING');
 
-          console.log('🎬 Video Analysis Complete:', {
-            totalMoments: videoAnalysisResult.length,
-            firstFew: videoAnalysisResult.slice(0, 3),
-            timesInFirst30s: videoAnalysisResult.filter(m => m.time <= 30).map(m => m.time.toFixed(1))
-          });
+          // Step 1: Extract frames
+          console.log('📸 Extracting frames...');
+          const frames = await extractFramesForNarrative(video, 12);
+          console.log(`✅ Extracted ${frames.length} frames`);
 
-          // Score all moments by motion quality
-          const scoredMoments = videoAnalysisResult.map(moment => {
-            let score = moment.motionScore * 0.8;
-            if (moment.sceneChange) score += 0.6;
-            return { ...moment, score };
-          });
+          // Step 2: Analyze with Claude
+          console.log('🤖 Analyzing narrative...');
+          const narrative = await analyzeNarrative(frames, targetDuration, ANTHROPIC_API_KEY);
 
-          const sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
-
-          console.log('🎯 Starting anchor generation:', {
-            totalCandidates: sortedMoments.length,
-            targetDuration,
-            firstMoments: sortedMoments.slice(0, 5).map(m => ({ time: m.time, score: m.score }))
-          });
-
-          const newAnchors = [];
-          let totalDuration = 0;
-
-          for (let i = 0; i < sortedMoments.length && totalDuration < targetDuration; i++) {
-            const moment = sortedMoments[i];
-
-            console.log(`🔄 Loop iteration ${i}:`, {
-              momentTime: moment.time,
-              currentTotalDuration: totalDuration,
-              targetDuration,
-              anchorsCreated: newAnchors.length
-            });
-            
-            let clipLength = 2.5;
-            
-            if (musicAnalysisResult) {
-              const nearbyBeat = musicAnalysisResult.moments.find(
-                m => Math.abs(m.time - moment.time) < 0.5
-              );
-              
-              if (nearbyBeat?.onPhraseBoundary) {
-                clipLength = 4;
-              } else if (nearbyBeat && nearbyBeat.strength > 0.7) {
-                clipLength = 3;
-              }
-            }
-              
-            const start = Math.max(0, moment.time - 0.5);
-            const end = Math.min(duration, start + clipLength);
-
-            const hasOverlap = newAnchors.some(a =>
-              (start >= a.start && start < a.end) ||
-              (end > a.start && end <= a.end) ||
-              (start <= a.start && end >= a.end)
-            );
-
-            if (hasOverlap) {
-              console.log(`❌ Overlap detected for moment ${i}:`, {
-                proposedStart: start,
-                proposedEnd: end,
-                existingAnchors: newAnchors.map(a => ({ start: a.start, end: a.end }))
-              });
-            } else {
-              newAnchors.push({
-                id: Date.now() + i,
-                start: start,
-                end: end
-              });
-              totalDuration += (end - start);
-              console.log(`✅ Anchor ${newAnchors.length - 1} added:`, {
-                start,
-                end,
-                duration: end - start,
-                totalDuration
-              });
-            }
+          if (!narrative) {
+            alert('Narrative analysis failed. Please try again.');
+            return;
           }
 
-          console.log('📦 Anchors before beat-snapping:', {
-            count: newAnchors.length,
-            totalDuration,
-            anchors: newAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
-          });
+          console.log('📖 Story Type:', narrative.storyType);
+          console.log('📝 Narrative:', narrative.narrative);
+          console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
 
-          let finalAnchors = newAnchors.sort((a, b) => a.start - b.start);
+          // Step 3: Run motion detection if not already done
+          let videoAnalysisResult = videoAnalysis;
+          if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+            console.log('🎬 Running motion detection...');
+            videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+            setVideoAnalysis(videoAnalysisResult);
+          }
 
-          if (musicAnalysisResult?.beatGrid && finalAnchors.length > 0) {
-            const beatGrid = musicAnalysisResult.beatGrid;
-            const beatGridStart = beatGrid[0];
-            const beatGridEnd = beatGrid[beatGrid.length - 1];
+          // Step 4: Refine with motion detection
+          console.log('🔍 Refining with motion detection...');
+          let refinedCuts = refineWithMotionDetection(
+            narrative.suggestedCuts,
+            videoAnalysisResult
+          );
 
-            console.log('🎵 Beat-snapping enabled:', {
-              beatGridLength: beatGrid.length,
-              beatGridRange: `${beatGridStart.toFixed(2)}s - ${beatGridEnd.toFixed(2)}s`,
-              anchorsToSnap: finalAnchors.length
-            });
+          // Step 5: Snap to beats if music available
+          if (musicAnalysis?.beatGrid && music) {
+            console.log('🎵 Snapping to music beats...');
+            refinedCuts = refinedCuts.map(cut => {
+              const beatGrid = musicAnalysis.beatGrid;
 
-            // Calculate beat interval from grid
-            const beatInterval = beatGrid.length > 1 ? beatGrid[1] - beatGrid[0] : 0.5;
-
-            console.log('⏱️ Beat interval calculated:', beatInterval);
-
-            finalAnchors = finalAnchors.map((anchor, idx) => {
-              const originalStart = anchor.start;
-              const originalEnd = anchor.end;
-
-              // Check if anchor is within beat grid range
-              const anchorInBeatRange = anchor.start >= beatGridStart - 5 && anchor.start <= beatGridEnd + 5;
-
-              if (!anchorInBeatRange) {
-                console.log(`⏭️ Anchor ${idx} outside beat grid - keeping original:`, {
-                  anchorStart: originalStart.toFixed(2),
-                  beatGridRange: `${beatGridStart.toFixed(2)} - ${beatGridEnd.toFixed(2)}`
-                });
-                return anchor; // Keep original anchor unchanged
-              }
-
+              // Find nearest beat for start
               let nearestStartBeat = beatGrid[0];
-              let minStartDiff = Math.abs(anchor.start - beatGrid[0]);
-
+              let minDiff = Math.abs(cut.start - beatGrid[0]);
               for (const beat of beatGrid) {
-                const diff = Math.abs(anchor.start - beat);
-                if (diff < minStartDiff) {
-                  minStartDiff = diff;
+                const diff = Math.abs(cut.start - beat);
+                if (diff < minDiff) {
+                  minDiff = diff;
                   nearestStartBeat = beat;
                 }
               }
 
-              // Default to 4 beats (1 bar in 4/4 time) instead of 2 seconds
-              let nearestEndBeat = nearestStartBeat + (beatInterval * 4);
+              // Find appropriate end beat
+              const targetDuration = cut.end - cut.start;
+              let nearestEndBeat = nearestStartBeat + targetDuration;
               for (const beat of beatGrid) {
-                if (beat > nearestStartBeat + 1.5) {
-                  const diff = Math.abs(anchor.end - beat);
-                  if (diff < Math.abs(anchor.end - nearestEndBeat)) {
+                if (beat > nearestStartBeat + 1) {
+                  const diff = Math.abs((beat - nearestStartBeat) - targetDuration);
+                  if (diff < Math.abs((nearestEndBeat - nearestStartBeat) - targetDuration)) {
                     nearestEndBeat = beat;
                   }
                 }
               }
 
-              const beatsSpanned = beatGrid.filter(b => b >= nearestStartBeat && b <= nearestEndBeat).length;
-
-              if (beatsSpanned >= 6 && beatsSpanned < 8) {
-                const targetBeatIndex = beatGrid.indexOf(nearestStartBeat) + 8;
-                if (targetBeatIndex < beatGrid.length) {
-                  nearestEndBeat = beatGrid[targetBeatIndex];
-                }
-              }
-
-              const snappedAnchor = {
-                ...anchor,
+              return {
+                ...cut,
                 start: nearestStartBeat,
                 end: Math.min(nearestEndBeat, duration)
               };
-
-              console.log(`🎯 Snapped anchor ${idx}:`, {
-                original: { start: originalStart.toFixed(2), end: originalEnd.toFixed(2) },
-                snapped: { start: snappedAnchor.start.toFixed(2), end: snappedAnchor.end.toFixed(2) },
-                beatsSpanned
-              });
-
-              return snappedAnchor;
-            });
-
-            console.log('📦 After beat-snapping, before overlap filter:', {
-              count: finalAnchors.length,
-              anchors: finalAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
-            });
-
-            // Filter overlaps by checking against KEPT anchors, not original array
-            finalAnchors = finalAnchors.reduce((kept, anchor, index) => {
-              if (index === 0) {
-                kept.push(anchor);
-                console.log(`✅ Kept anchor 0 (first):`, { start: anchor.start.toFixed(2), end: anchor.end.toFixed(2) });
-                return kept;
-              }
-
-              // Check against the LAST KEPT anchor, not the original array
-              const lastKept = kept[kept.length - 1];
-              if (anchor.start >= lastKept.end) {
-                kept.push(anchor);
-                console.log(`✅ Kept anchor ${index}:`, {
-                  start: anchor.start.toFixed(2),
-                  end: anchor.end.toFixed(2),
-                  lastKeptEnd: lastKept.end.toFixed(2),
-                  gap: (anchor.start - lastKept.end).toFixed(2)
-                });
-              } else {
-                console.log(`❌ Rejected anchor ${index} (overlap):`, {
-                  start: anchor.start.toFixed(2),
-                  end: anchor.end.toFixed(2),
-                  lastKeptEnd: lastKept.end.toFixed(2),
-                  overlap: (lastKept.end - anchor.start).toFixed(2)
-                });
-              }
-
-              return kept;
-            }, []);
-
-            console.log('🏁 Final anchors after overlap filter:', {
-              count: finalAnchors.length,
-              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(2),
-              anchors: finalAnchors.map(a => ({ start: a.start.toFixed(2), end: a.end.toFixed(2) }))
             });
           }
 
-          console.log('🎉 AUTO-GENERATE COMPLETE:', {
-            finalAnchorCount: finalAnchors.length,
-            totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(2),
-            targetDuration
+          // Step 6: Create anchors
+          const newAnchors = refinedCuts.map((cut, index) => ({
+            id: Date.now() + index,
+            start: Math.max(0, cut.start),
+            end: Math.min(duration, cut.end),
+            _narrativeReason: cut.reason,
+            _importance: cut.importance
+          }));
+
+          // Step 7: Filter overlaps
+          const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
+            if (index === 0) {
+              kept.push(anchor);
+              return kept;
+            }
+
+            const lastKept = kept[kept.length - 1];
+            if (anchor.start >= lastKept.end) {
+              kept.push(anchor);
+            }
+
+            return kept;
+          }, []);
+
+          console.log('✅ NARRATIVE GENERATION COMPLETE:', {
+            storyType: narrative.storyType,
+            anchorsCreated: finalAnchors.length,
+            totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
           });
 
           setAnchors(finalAnchors);
           saveToHistory(finalAnchors);
         } catch (error) {
-          console.error('Auto-generate error:', error);
-          alert('Error analyzing video');
+          console.error('Narrative auto-generate error:', error);
+          alert('Error during narrative generation: ' + error.message);
         } finally {
           setIsAnalyzing(false);
         }
@@ -3302,7 +3347,7 @@ const exportVideo = async () => {
       className="px-4 py-2 forge-button-hot rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition w-full sm:w-auto justify-center"
     >
       <Sparkles size={18} />
-      <span className="hidden sm:inline">{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
+      <span className="hidden sm:inline">{isAnalyzing ? 'Analyzing Story...' : 'Auto-Generate'}</span>
       <span className="sm:hidden">{isAnalyzing ? 'Analyzing...' : 'Auto-Gen'}</span>
     </button>
 
