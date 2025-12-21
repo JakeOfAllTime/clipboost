@@ -4,9 +4,6 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
 const ReelForge = () => {
-  // ⚠️ TESTING ONLY - Replace with user's API key or environment variable in production
-  const ANTHROPIC_API_KEY = 'sk-ant-api03-fMi9OOadJznEBYfk0k3ycgx32qkPz_LW9l_pNc-UYABxQ8lKcgY53nH9Iui_-u9Mpp92OJw1qm-iVtzGC-d6sQ-JdAanAAA';
-
   // Core video state
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -874,87 +871,33 @@ const extractFramesForNarrative = async (videoFile, frameCount = 12) => {
   });
 };
 
-// Claude API Narrative Analysis
-const analyzeNarrative = async (frames, targetDuration = 60, apiKey) => {
+// Claude API Narrative Analysis (via API route to avoid CORS)
+const analyzeNarrative = async (frames, targetDuration = 60) => {
   try {
-    const content = [
-      {
-        type: "text",
-        text: `Analyze these ${frames.length} frames from a video to create a compelling short-form edit.
-
-TARGET DURATION: ${targetDuration} seconds
-
-Your task:
-1. Identify the story type (tutorial, transformation, vlog, product_demo, performance, other)
-2. Understand the narrative arc and key moments
-3. Suggest 5-7 cut points that tell a cohesive story
-4. Each clip should be 2-5 seconds long
-5. Prioritize moments with visual interest or emotional weight
-
-Respond with ONLY valid JSON (no markdown, no explanation):
-{
-  "storyType": "string",
-  "narrative": "brief description of the story",
-  "suggestedCuts": [
-    {
-      "startTime": number,
-      "endTime": number,
-      "reason": "why this moment matters",
-      "importance": number between 0-1
-    }
-  ]
-}`
-      }
-    ];
-
-    // Add all frames as images
-    frames.forEach((frame, index) => {
-      content.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: "image/jpeg",
-          data: frame.base64
-        }
-      });
-      content.push({
-        type: "text",
-        text: `Frame ${index + 1}/${frames.length} at ${frame.timestamp.toFixed(1)}s`
-      });
-    });
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // Call OUR API route (no CORS issues, API key handled server-side)
+    const response = await fetch("/api/analyze-narrative", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        temperature: 0.5,
-        messages: [{
-          role: "user",
-          content: content
-        }]
+        frames: frames,
+        targetDuration: targetDuration
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+      const error = await response.json();
+      console.error('API error:', error);
+      throw new Error(error.error || 'Failed to analyze narrative');
     }
 
-    const data = await response.json();
-    const textContent = data.content.find(c => c.type === 'text')?.text || '';
-    const narrative = JSON.parse(textContent);
-
+    const narrative = await response.json();
     return narrative;
 
   } catch (error) {
     console.error('Narrative analysis failed:', error);
-    throw error;
+    return null;
   }
 };
 
@@ -3241,7 +3184,7 @@ const exportVideo = async () => {
 
           // Step 2: Analyze with Claude
           console.log('🤖 Analyzing narrative...');
-          const narrative = await analyzeNarrative(frames, targetDuration, ANTHROPIC_API_KEY);
+          const narrative = await analyzeNarrative(frames, targetDuration);
 
           if (!narrative) {
             alert('Narrative analysis failed. Please try again.');
