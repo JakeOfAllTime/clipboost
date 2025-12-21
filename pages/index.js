@@ -825,8 +825,9 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   });
 };
 
-// Frame Extraction for Narrative Analysis
-const extractFramesForNarrative = async (videoFile, frameCount = 12) => {
+// Smart Frame Extraction for Narrative Analysis
+// Uses motion analysis to capture key moments (scene changes, transitions)
+const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frameCount = 12) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     const canvas = document.createElement('canvas');
@@ -840,31 +841,104 @@ const extractFramesForNarrative = async (videoFile, frameCount = 12) => {
       canvas.width = 640;  // Reasonable size for API
       canvas.height = 360;
 
-      const frames = [];
-      const interval = duration / (frameCount - 1); // Evenly spaced
+      // Build smart sampling strategy
+      const timestamps = [];
 
-      for (let i = 0; i < frameCount; i++) {
-        const timestamp = i * interval;
+      if (motionAnalysis && motionAnalysis.length > 0) {
+        console.log('📊 Using smart frame sampling with motion analysis');
 
-        await new Promise((seekResolve) => {
-          video.onseeked = () => {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
-            const base64Data = imageData.split(',')[1];
+        // Strategic frames (guaranteed coverage)
+        timestamps.push({ time: 0, reason: 'start' });
+        timestamps.push({ time: duration / 2, reason: 'middle' });
+        timestamps.push({ time: duration * 0.95, reason: 'end' });
 
-            frames.push({
-              timestamp: timestamp,
-              base64: base64Data
-            });
+        // Scene change frames (up to 4)
+        const sceneChanges = motionAnalysis
+          .filter(m => m.sceneChange)
+          .sort((a, b) => b.motionScore - a.motionScore)
+          .slice(0, 4);
 
-            seekResolve();
-          };
-          video.currentTime = timestamp;
+        sceneChanges.forEach(sc => {
+          timestamps.push({ time: sc.time, reason: 'scene_change' });
         });
-      }
 
-      URL.revokeObjectURL(video.src);
-      resolve(frames);
+        // Fill remaining budget with even spacing
+        const remaining = frameCount - timestamps.length;
+        const interval = duration / (remaining + 1);
+        for (let i = 1; i <= remaining; i++) {
+          timestamps.push({ time: i * interval, reason: 'coverage' });
+        }
+
+        // Deduplicate (remove frames within 5 seconds of each other)
+        const sorted = timestamps.sort((a, b) => a.time - b.time);
+        const unique = [];
+        for (const ts of sorted) {
+          if (unique.length === 0 || ts.time - unique[unique.length - 1].time >= 5) {
+            unique.push(ts);
+          }
+        }
+
+        // Take first frameCount frames
+        const finalTimestamps = unique.slice(0, frameCount);
+        console.log('✅ Smart sampling plan:', {
+          total: finalTimestamps.length,
+          sceneChanges: finalTimestamps.filter(t => t.reason === 'scene_change').length,
+          coverage: finalTimestamps.filter(t => t.reason === 'coverage').length
+        });
+
+        // Extract frames at these specific times
+        const frames = [];
+        for (const ts of finalTimestamps) {
+          await new Promise((seekResolve) => {
+            video.onseeked = () => {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const imageData = canvas.toDataURL('image/jpeg', 0.8);
+              const base64Data = imageData.split(',')[1];
+
+              frames.push({
+                timestamp: ts.time,
+                base64: base64Data,
+                reason: ts.reason
+              });
+
+              seekResolve();
+            };
+            video.currentTime = ts.time;
+          });
+        }
+
+        URL.revokeObjectURL(video.src);
+        resolve(frames);
+
+      } else {
+        // Fallback to even spacing if no motion analysis
+        console.log('📊 Using fallback even spacing (no motion analysis)');
+        const frames = [];
+        const interval = duration / (frameCount - 1);
+
+        for (let i = 0; i < frameCount; i++) {
+          const timestamp = i * interval;
+
+          await new Promise((seekResolve) => {
+            video.onseeked = () => {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const imageData = canvas.toDataURL('image/jpeg', 0.8);
+              const base64Data = imageData.split(',')[1];
+
+              frames.push({
+                timestamp: timestamp,
+                base64: base64Data
+              });
+
+              seekResolve();
+            };
+            video.currentTime = timestamp;
+          });
+        }
+
+        URL.revokeObjectURL(video.src);
+        resolve(frames);
+      }
     };
 
     video.onerror = () => reject(new Error('Failed to load video'));
@@ -932,6 +1006,52 @@ const refineWithMotionDetection = (claudeCuts, videoAnalysis) => {
       reason: cut.reason,
       importance: cut.importance
     };
+  });
+};
+
+// Gentle Beat-Sync - Snap to beats only when close (non-destructive)
+const applyGentleBeatSync = (cuts, musicAnalysis) => {
+  if (!musicAnalysis?.beatGrid || musicAnalysis.beatGrid.length === 0) {
+    return cuts; // No music, no changes
+  }
+
+  const beatGrid = musicAnalysis.beatGrid;
+
+  // Helper: Find closest value in array
+  const findClosest = (target, array) => {
+    return array.reduce((closest, current) => {
+      return Math.abs(current - target) < Math.abs(closest - target)
+        ? current
+        : closest;
+    });
+  };
+
+  return cuts.map((cut, index) => {
+    // Find nearest beat to start time
+    const nearestStartBeat = findClosest(cut.start, beatGrid);
+    const startDistance = Math.abs(nearestStartBeat - cut.start);
+
+    // Find nearest beat to end time
+    const nearestEndBeat = findClosest(cut.end, beatGrid);
+    const endDistance = Math.abs(nearestEndBeat - cut.end);
+
+    // Only snap if beat is CLOSE (within 0.5 seconds)
+    const newStart = startDistance < 0.5 ? nearestStartBeat : cut.start;
+    const newEnd = endDistance < 0.5 ? nearestEndBeat : cut.end;
+
+    // Ensure anchor is still valid (start < end, minimum 1s duration)
+    if (newEnd - newStart >= 1.0) {
+      const snapped = startDistance < 0.5 || endDistance < 0.5;
+      if (snapped) {
+        console.log(`🎵 Beat-snapped cut ${index}:`, {
+          original: { start: cut.start.toFixed(2), end: cut.end.toFixed(2) },
+          snapped: { start: newStart.toFixed(2), end: newEnd.toFixed(2) }
+        });
+      }
+      return { ...cut, start: newStart, end: newEnd };
+    }
+
+    return cut; // Keep original if snap would break it
   });
 };
 
@@ -3175,14 +3295,24 @@ const exportVideo = async () => {
         try {
           setIsAnalyzing(true);
 
-          console.log('🎬 NARRATIVE AUTO-GENERATE STARTING');
+          console.log('🎬 NARRATIVE AUTO-GENERATE STARTING (V2 - Smart Sampling + Gentle Beat-Sync)');
 
-          // Step 1: Extract frames
-          console.log('📸 Extracting frames...');
-          const frames = await extractFramesForNarrative(video, 12);
+          // Step 1: Run motion detection FIRST (for smart frame sampling)
+          let videoAnalysisResult = videoAnalysis;
+          if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+            console.log('🎬 Running motion detection for smart sampling...');
+            videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+            setVideoAnalysis(videoAnalysisResult);
+          } else {
+            console.log('✅ Using cached motion analysis');
+          }
+
+          // Step 2: Extract frames with SMART SAMPLING (using motion data)
+          console.log('📸 Extracting frames with smart sampling...');
+          const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
           console.log(`✅ Extracted ${frames.length} frames`);
 
-          // Step 2: Analyze with Claude
+          // Step 3: Analyze with Claude (better understanding from smart frames)
           console.log('🤖 Analyzing narrative...');
           const narrative = await analyzeNarrative(frames, targetDuration);
 
@@ -3195,14 +3325,6 @@ const exportVideo = async () => {
           console.log('📝 Narrative:', narrative.narrative);
           console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
 
-          // Step 3: Run motion detection if not already done
-          let videoAnalysisResult = videoAnalysis;
-          if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
-            console.log('🎬 Running motion detection...');
-            videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-            setVideoAnalysis(videoAnalysisResult);
-          }
-
           // Step 4: Refine with motion detection
           console.log('🔍 Refining with motion detection...');
           let refinedCuts = refineWithMotionDetection(
@@ -3210,41 +3332,12 @@ const exportVideo = async () => {
             videoAnalysisResult
           );
 
-          // Step 5: Snap to beats if music available
+          // Step 5: Apply GENTLE beat-sync (if music exists)
           if (musicAnalysis?.beatGrid && music) {
-            console.log('🎵 Snapping to music beats...');
-            refinedCuts = refinedCuts.map(cut => {
-              const beatGrid = musicAnalysis.beatGrid;
-
-              // Find nearest beat for start
-              let nearestStartBeat = beatGrid[0];
-              let minDiff = Math.abs(cut.start - beatGrid[0]);
-              for (const beat of beatGrid) {
-                const diff = Math.abs(cut.start - beat);
-                if (diff < minDiff) {
-                  minDiff = diff;
-                  nearestStartBeat = beat;
-                }
-              }
-
-              // Find appropriate end beat
-              const targetDuration = cut.end - cut.start;
-              let nearestEndBeat = nearestStartBeat + targetDuration;
-              for (const beat of beatGrid) {
-                if (beat > nearestStartBeat + 1) {
-                  const diff = Math.abs((beat - nearestStartBeat) - targetDuration);
-                  if (diff < Math.abs((nearestEndBeat - nearestStartBeat) - targetDuration)) {
-                    nearestEndBeat = beat;
-                  }
-                }
-              }
-
-              return {
-                ...cut,
-                start: nearestStartBeat,
-                end: Math.min(nearestEndBeat, duration)
-              };
-            });
+            console.log('🎵 Applying gentle beat-sync...');
+            refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
+          } else {
+            console.log('⏭️ Skipping beat-sync (no music or beat analysis)');
           }
 
           // Step 6: Create anchors
