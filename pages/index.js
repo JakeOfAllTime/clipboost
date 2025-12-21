@@ -83,7 +83,6 @@ const ReelForge = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [targetDuration, setTargetDuration] = useState(60);
   const [musicAnalysis, setMusicAnalysis] = useState(null);
-  const [useBeatSync, setUseBeatSync] = useState(false);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
   // Auto-save state
   const [showRestoreToast, setShowRestoreToast] = useState(false);
@@ -3035,23 +3034,10 @@ const exportVideo = async () => {
   </button>
 </div>
 
-{/* Center: DROP ANCHOR - Hero Button */}
-<div className="flex justify-center w-full sm:w-auto sm:flex-shrink-0">
-  <button
-    onClick={addAnchor}
-    disabled={!duration}
-    className="px-4 py-2 sm:px-6 sm:py-3 forge-button-hot rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-bold shadow-lg hover:scale-105 transition-all"
-    title="Add anchor at current time (Double-click timeline)"
-  >
-    <Sparkles size={24} />
-    <span>Drop Anchor</span>
-  </button>
-</div>
-
-{/* Right Group: Target/Auto-Gen/Beat-Sync */}
-<div className={`grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal ? 'hidden' : ''}`}>
-  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-2 sm:col-span-1">
-    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0">Tgt:</label>
+{/* Right Group: Target/Auto-Gen */}
+<div className={`flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal ? 'hidden' : ''}`}>
+  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg">
+    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0">Target:</label>
     <input
       type="range"
       min="15"
@@ -3066,38 +3052,6 @@ const exportVideo = async () => {
     />
     <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{targetDuration}s</span>
   </div>
-
-  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg col-span-2 sm:col-span-1">
-    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0" title="Motion detection sensitivity">Sens:</label>
-    <input
-      type="range"
-      min="0"
-      max="100"
-      step="10"
-      value={motionSensitivity * 100}
-      onChange={(e) => setMotionSensitivity(parseInt(e.target.value) / 100)}
-      className="flex-1 sm:w-20 h-2 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)] [&::-moz-range-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)]"
-      title="Lower = stricter motion detection, Higher = more permissive"
-      style={{
-        background: `linear-gradient(to right, #f59e0b 0%, #f97316 ${motionSensitivity * 100}%, #475569 ${motionSensitivity * 100}%, #475569 100%)`
-      }}
-    />
-    <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{Math.round(motionSensitivity * 100)}%</span>
-  </div>
-
-      <label className={`flex items-center gap-1 cursor-pointer bg-slate-700/50 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg ${!music ? 'opacity-50 cursor-not-allowed' : ''}`}>
-<input
-          type="checkbox"
-          checked={useBeatSync}
-          onChange={(e) => setUseBeatSync(e.target.checked)}
-          disabled={!music}
-          className="w-4 h-4 rounded cursor-pointer accent-green-500 disabled:cursor-not-allowed"
-          style={{
-            accentColor: 'rgb(34, 197, 94)'
-          }}
-        />
-       <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">Beat-Sync</span>
-      </label>
     
     <button
       onClick={async () => {
@@ -3106,56 +3060,15 @@ const exportVideo = async () => {
         console.log('🚀 AUTO-GENERATE CLICKED!', {
           hasVideo: !!video,
           hasMusic: !!music,
-          useBeatSync,
           musicStartTime,
-          targetDuration
+          targetDuration,
+          motionSensitivity
         });
 
         try {
           setIsAnalyzing(true);
 
-          // Analyze audio FIRST if beat-sync is enabled
-          let musicAnalysisResult = null;
-          if (useBeatSync) {
-            console.log('🎵 Beat-Sync is ENABLED');
-            if (music) {
-              console.log('🎵 Using MUSIC FILE for beat analysis', {
-                musicStartTime,
-                targetDuration
-              });
-              musicAnalysisResult = await analyzeMusicStructure(music, musicStartTime, targetDuration);
-              setMusicAnalysis(musicAnalysisResult);
-              console.log('🎵 Music analysis complete:', {
-                bpm: musicAnalysisResult.bpm,
-                beatGridLength: musicAnalysisResult.beatGrid?.length,
-                momentsFound: musicAnalysisResult.moments?.length
-              });
-            } else if (video) {
-              console.log('⚠️ No music file - extracting audio from VIDEO');
-
-              if (!ffmpegLoaded) {
-                alert('Video processor not ready yet');
-                setIsAnalyzing(false);
-                return;
-              }
-              
-              try {
-                await ffmpeg.writeFile('temp_video.mp4', await fetchFile(video));
-                await ffmpeg.exec(['-i', 'temp_video.mp4', '-vn', '-acodec', 'mp3', 'extracted_audio.mp3']);
-                const audioData = await ffmpeg.readFile('extracted_audio.mp3');
-                const audioBlob = new Blob([audioData.buffer], { type: 'audio/mp3' });
-                
-                musicAnalysisResult = await analyzeMusicStructure(audioBlob);
-                setMusicAnalysis(musicAnalysisResult);
-              } catch (error) {
-                console.error('Failed to extract video audio:', error);
-                alert('Could not extract audio from video for beat-sync');
-                setIsAnalyzing(false);
-                return;
-              }
-            }
-          }
-          
+          // Analyze video for motion detection
           const videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
           setVideoAnalysis(videoAnalysisResult);
 
@@ -3166,35 +3079,13 @@ const exportVideo = async () => {
           });
 
           // Score all moments by motion quality
-          const scoredMoments = [];
-
-          for (const moment of videoAnalysisResult) {
+          const scoredMoments = videoAnalysisResult.map(moment => {
             let score = moment.motionScore * 0.8;
             if (moment.sceneChange) score += 0.6;
-
-            // BOOST score if moment is near music when beat-sync is enabled
-            if (musicAnalysisResult?.beatGrid) {
-              const beatGrid = musicAnalysisResult.beatGrid;
-              const musicStart = beatGrid[0];
-              const musicEnd = beatGrid[beatGrid.length - 1];
-              const expandedRange = 10; // seconds before/after music
-
-              if (moment.time >= musicStart - expandedRange && moment.time <= musicEnd + expandedRange) {
-                score *= 3; // 3x boost for moments near music section
-                console.log(`🎵 Boosted moment at ${moment.time.toFixed(1)}s (near music ${musicStart.toFixed(1)}-${musicEnd.toFixed(1)}s)`);
-              }
-            }
-
-            scoredMoments.push({ ...moment, score });
-          }
+            return { ...moment, score };
+          });
 
           const sortedMoments = scoredMoments.sort((a, b) => b.score - a.score);
-
-          if (musicAnalysisResult?.beatGrid) {
-            console.log('🎵 Beat-Sync Mode - Prioritizing moments near music section');
-          } else {
-            console.log('📊 No Beat-Sync - Using motion scores only');
-          }
 
           console.log('🎯 Starting anchor generation:', {
             totalCandidates: sortedMoments.length,
@@ -3582,7 +3473,7 @@ onMouseLeave={() => {
       e.preventDefault();
       e.stopPropagation();
     }}
-    className={`absolute bottom-full mb-32 sm:mb-24 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
+    className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
@@ -3684,7 +3575,7 @@ onMouseLeave={() => {
 
               <div className="text-xs text-gray-400 text-center mb-4">
                 {anchors.length === 0
-                  ? 'No anchors: Export will use full video (up to 60s)'
+                  ? '💡 Double-click timeline to add anchor'
                   : 'Click to preview • Double-click to delete • Drag handles to resize • Drag middle to move • Click "Precision" for zoom'}
               </div>
 
