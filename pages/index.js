@@ -1582,9 +1582,26 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   const togglePreviewPlay = () => {
     if (previewVideoRef.current && previewAnchor) {
       if (previewVideoRef.current.paused) {
-        previewVideoRef.current.play();
+        // Start playback with music sync if music exists
+        if (music && musicRef.current && !previewMuted) {
+          // Calculate timeline offset for this anchor
+          const anchorIndex = anchors.findIndex(a => a.id === previewAnchor.id);
+          const timelineOffset = anchors
+            .slice(0, anchorIndex)
+            .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+          // Sync music to timeline position
+          const musicTime = musicStartTime + timelineOffset;
+          musicRef.current.currentTime = musicTime;
+          musicRef.current.play().catch(e => console.log('Music play failed:', e));
+        }
+
+        previewVideoRef.current.play().catch(e => console.log('Preview play failed:', e));
       } else {
         previewVideoRef.current.pause();
+        if (musicRef.current) {
+          musicRef.current.pause();
+        }
       }
     }
   };
@@ -1594,6 +1611,16 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
       const currentTime = previewVideoRef.current.currentTime;
       if (currentTime >= previewAnchor.end) {
         previewVideoRef.current.currentTime = previewAnchor.start;
+
+        // Loop music as well
+        if (music && musicRef.current && !musicRef.current.paused) {
+          const anchorIndex = anchors.findIndex(a => a.id === previewAnchor.id);
+          const timelineOffset = anchors
+            .slice(0, anchorIndex)
+            .reduce((sum, a) => sum + (a.end - a.start), 0);
+          const musicTime = musicStartTime + timelineOffset;
+          musicRef.current.currentTime = musicTime;
+        }
       }
     }
   };
@@ -1601,6 +1628,12 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
   // Precision modal handlers
   const openPrecisionModal = (anchor) => {
   const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
+
+  // Stop any playing music
+  if (musicRef.current) {
+    musicRef.current.pause();
+  }
+  setIsMusicPlaying(false);
 
   // Calculate this anchor's position in the FINAL TIMELINE
   const timelineOffset = anchors
@@ -1623,6 +1656,12 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
     document.body.style.position = 'fixed';
     document.body.style.top = `-${window.scrollY}px`;
     document.body.style.width = '100%';
+
+    // Stop any playing music
+    if (musicRef.current) {
+      musicRef.current.pause();
+    }
+    setIsMusicPlaying(false);
 
     const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
 
@@ -2602,9 +2641,9 @@ const exportVideo = async () => {
                         <div className="flex justify-between items-center mb-0.5">
                           <label className="text-xs text-gray-400">Balance</label>
                           <span className="text-xs flex items-center gap-1.5">
-                            <span className="text-orange-500 font-semibold">Music {audioBalance}%</span>
+                            <span className="text-red-500 font-semibold">Music {audioBalance}%</span>
                             <span className="text-gray-600">•</span>
-                            <span className="text-yellow-400 font-semibold">Video {100 - audioBalance}%</span>
+                            <span className="text-red-400 font-semibold">Video {100 - audioBalance}%</span>
                           </span>
                         </div>
                         <input
@@ -2615,9 +2654,9 @@ const exportVideo = async () => {
                           onChange={(e) => setAudioBalance(parseInt(e.target.value))}
                           onTouchStart={(e) => setAudioBalance(parseInt(e.target.value))}
                           onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)] [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(255,107,53,0.6)]"
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                           style={{
-                            background: `linear-gradient(to right, #ff6b35 0%, #ff6b35 ${audioBalance}%, #eab308 ${audioBalance}%, #eab308 100%)`
+                            background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${audioBalance}%, #dc2626 ${audioBalance}%, #dc2626 100%)`
                           }}
                         />
                       </div>
@@ -2648,23 +2687,6 @@ const exportVideo = async () => {
                     </div>
                   )}
                 </div>
-
-                {/* Change Video Button */}
-                <button
-                  onClick={() => {
-                    if (videoUrl) URL.revokeObjectURL(videoUrl);
-                    setVideo(null);
-                    setVideoUrl(null);
-                    setAnchors([]);
-                    setHistory([]);
-                    setHistoryIndex(-1);
-                    setMusic(null);
-                    setMusicUrl(null);
-                  }}
-                  className="px-3 py-2 forge-button rounded-lg text-xs whitespace-nowrap self-start"
-                >
-                  Change Video
-                </button>
               </div>
             </div>
 
@@ -3034,26 +3056,9 @@ const exportVideo = async () => {
   </button>
 </div>
 
-{/* Right Group: Target/Auto-Gen */}
-<div className={`flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal ? 'hidden' : ''}`}>
-  <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-2 rounded-lg">
-    <label className="text-xs sm:text-sm text-gray-300 whitespace-nowrap flex-shrink-0">Target:</label>
-    <input
-      type="range"
-      min="15"
-      max="120"
-      step="5"
-      value={targetDuration}
-      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-      className="flex-1 sm:w-20 h-2 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)] [&::-moz-range-thumb]:shadow-[0_0_8px_rgba(251,146,60,0.6)]"
-      style={{
-        background: `linear-gradient(to right, #f59e0b 0%, #f97316 ${((targetDuration - 15) / (120 - 15)) * 100}%, #475569 ${((targetDuration - 15) / (120 - 15)) * 100}%, #475569 100%)`
-      }}
-    />
-    <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0 w-8">{targetDuration}s</span>
-  </div>
-    
-    <button
+{/* Right Group: Auto-Gen */}
+<div className={`flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'hidden' : ''}`}>
+  <button
       onClick={async () => {
         if (!video || isAnalyzing) return;
 
@@ -3294,10 +3299,11 @@ const exportVideo = async () => {
         }
       }}
       disabled={!duration || isAnalyzing}
-      className="px-4 py-2 forge-button-hot rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition"
+      className="px-4 py-2 forge-button-hot rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition w-full sm:w-auto justify-center"
     >
       <Sparkles size={18} />
-      <span>{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
+      <span className="hidden sm:inline">{isAnalyzing ? 'Analyzing...' : 'Auto-Generate'}</span>
+      <span className="sm:hidden">{isAnalyzing ? 'Analyzing...' : 'Auto-Gen'}</span>
     </button>
 
  
@@ -3370,12 +3376,13 @@ const exportVideo = async () => {
   style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
   title="Double-click to drop anchor"
 >
-  {/* Current time indicator */}
+  {/* Current time indicator - Red pill style */}
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none"
+                  className="absolute top-0 bottom-0 w-1 bg-red-400/60 cursor-ew-resize z-20 rounded-full pointer-events-none"
                   style={{ left: `${(currentTime / duration) * 100}%` }}
                 >
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full" />
+                  {/* Pill-shaped grab handle */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 rounded-full shadow-lg border-2 border-white/30" />
                 </div>
 
                 {/* Anchors */}
@@ -4043,14 +4050,15 @@ onMouseLeave={() => {
     }}
     className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
   >
-                  {/* Current time indicator */}
+                  {/* Current time indicator - Red pill style */}
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none"
+                    className="absolute top-0 bottom-0 w-1 bg-red-400/60 cursor-ew-resize z-20 rounded-full pointer-events-none"
                     style={{
                       left: `${((precisionTime - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
                     }}
                   >
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full" />
+                    {/* Pill-shaped grab handle */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 rounded-full shadow-lg border-2 border-white/30" />
                   </div>
 
                   {/* Anchor visualization */}
@@ -4207,7 +4215,7 @@ onMouseLeave={() => {
                   </button>
                 </div>
 
-                {/* Timeline Scrubber */}
+                {/* Timeline Scrubber - Red ball */}
                 <div className="relative mb-4">
                   <input
                     type="range"
@@ -4222,9 +4230,9 @@ onMouseLeave={() => {
                         musicPrecisionRef.current.currentTime = time;
                       }
                     }}
-                    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                     style={{
-                      background: `linear-gradient(to right, #ff6b35 0%, #ff6b35 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 100%)`
+                      background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 100%)`
                     }}
                   />
                   <div className="flex justify-between text-xs text-gray-400 mt-1">
