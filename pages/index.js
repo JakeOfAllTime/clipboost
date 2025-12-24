@@ -100,6 +100,11 @@ const ReelForge = () => {
   // Timeline zoom state
   const [timelineZoom, setTimelineZoom] = useState(1);
 
+  // Auto-generate V3 state
+  const [autoGenMode, setAutoGenMode] = useState('smart'); // 'quick' | 'smart' | 'pro'
+  const [enableBeatSync, setEnableBeatSync] = useState(false);
+  const [userApiKey, setUserApiKey] = useState('');
+
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
   const [ffmpegLoaded, setFFmpegLoaded] = useState(false);
@@ -1052,6 +1057,176 @@ const applyGentleBeatSync = (cuts, musicAnalysis) => {
     }
 
     return cut; // Keep original if snap would break it
+  });
+};
+
+// Extract audio from video and transcribe with Whisper
+const transcribeVideo = async (videoFile) => {
+  try {
+    console.log('🎤 Extracting audio for transcription...');
+
+    // Use FFmpeg to extract audio
+    if (!ffmpeg || !ffmpegLoaded) {
+      throw new Error('FFmpeg not loaded');
+    }
+
+    await ffmpeg.writeFile('input_video.mp4', await fetchFile(videoFile));
+
+    // Extract audio as MP3
+    await ffmpeg.exec([
+      '-i', 'input_video.mp4',
+      '-vn', // No video
+      '-acodec', 'libmp3lame',
+      '-ar', '16000', // 16kHz sample rate (Whisper optimal)
+      '-ac', '1', // Mono
+      '-b:a', '32k', // Low bitrate (smaller file)
+      'audio.mp3'
+    ]);
+
+    const audioData = await ffmpeg.readFile('audio.mp3');
+    const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioData)));
+
+    console.log('📤 Sending audio to Whisper API...');
+
+    // Call our API route
+    const response = await fetch('/api/transcribe-audio', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        audioBase64: audioBase64
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Transcription failed');
+    }
+
+    const transcript = await response.json();
+
+    console.log('✅ Transcription complete:', {
+      duration: transcript.duration,
+      segments: transcript.segments?.length,
+      language: transcript.language
+    });
+
+    return transcript;
+
+  } catch (error) {
+    console.error('Transcription error:', error);
+    return null;
+  }
+};
+
+// Analyze transcript to find topic transitions and key quotes
+const analyzeTranscriptTopics = (transcript) => {
+  if (!transcript || !transcript.segments) {
+    return { topics: [], keyQuotes: [], pauses: [] };
+  }
+
+  const topics = [];
+  const keyQuotes = [];
+  const pauses = [];
+
+  let currentTopic = {
+    start: 0,
+    end: 0,
+    text: ''
+  };
+
+  transcript.segments.forEach((segment, index) => {
+    const nextSegment = transcript.segments[index + 1];
+
+    // Detect topic transitions (long pauses or significant text changes)
+    if (nextSegment) {
+      const pauseDuration = nextSegment.start - segment.end;
+
+      // If pause > 2 seconds, likely a topic transition
+      if (pauseDuration > 2.0) {
+        currentTopic.end = segment.end;
+        if (currentTopic.text.length > 0) {
+          topics.push({ ...currentTopic });
+        }
+
+        currentTopic = {
+          start: nextSegment.start,
+          end: nextSegment.end,
+          text: nextSegment.text
+        };
+
+        pauses.push({
+          time: segment.end,
+          duration: pauseDuration
+        });
+      } else {
+        currentTopic.end = segment.end;
+        currentTopic.text += ' ' + segment.text;
+      }
+    }
+
+    // Identify potential key quotes (sentences with emphasis words)
+    const emphasisWords = ['secret', 'important', 'key', 'critical', 'exactly', 'perfect', 'amazing'];
+    const hasEmphasis = emphasisWords.some(word =>
+      segment.text.toLowerCase().includes(word)
+    );
+
+    if (hasEmphasis && segment.text.split(' ').length > 5) {
+      keyQuotes.push({
+        time: segment.start,
+        text: segment.text,
+        importance: 0.8
+      });
+    }
+  });
+
+  // Add final topic
+  if (currentTopic.text.length > 0) {
+    topics.push(currentTopic);
+  }
+
+  return { topics, keyQuotes, pauses };
+};
+
+// Refine cuts to align with speech pauses
+const refineWithSpeechPauses = (cuts, pauses) => {
+  if (!pauses || pauses.length === 0) {
+    return cuts; // No pause data, return as-is
+  }
+
+  return cuts.map(cut => {
+    // Find nearest pause to start time
+    const nearbyStartPauses = pauses.filter(p =>
+      Math.abs(p.time - cut.startTime) < 2
+    ).sort((a, b) =>
+      Math.abs(a.time - cut.startTime) - Math.abs(b.time - cut.startTime)
+    );
+
+    // Find nearest pause to end time
+    const nearbyEndPauses = pauses.filter(p =>
+      Math.abs(p.time - cut.endTime) < 2
+    ).sort((a, b) =>
+      Math.abs(a.time - cut.endTime) - Math.abs(b.time - cut.endTime)
+    );
+
+    const refinedStart = nearbyStartPauses[0]?.time || cut.startTime;
+    const refinedEnd = nearbyEndPauses[0]?.time || cut.endTime;
+
+    // Ensure valid duration (at least 1 second)
+    if (refinedEnd - refinedStart >= 1.0) {
+      return {
+        ...cut,
+        start: refinedStart,
+        end: refinedEnd
+      };
+    }
+
+    return {
+      ...cut,
+      start: cut.startTime,
+      end: cut.endTime
+    };
   });
 };
 
