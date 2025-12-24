@@ -980,6 +980,47 @@ const analyzeNarrative = async (frames, targetDuration = 60) => {
   }
 };
 
+// Multi-modal analysis combining vision and audio
+const analyzeMultiModal = async (frames, transcript, audioTopics, targetDuration = 60) => {
+  try {
+    console.log('🎬 Starting multi-modal analysis (Vision + Audio)...');
+
+    const response = await fetch("/api/analyze-narrative", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        frames: frames,
+        targetDuration: targetDuration,
+        isMultiModal: true,
+        transcript: transcript,
+        audioTopics: audioTopics
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Multi-modal API error:', error);
+      throw new Error(error.error || 'Failed to analyze');
+    }
+
+    const narrative = await response.json();
+
+    console.log('✅ Multi-modal analysis complete:', {
+      storyType: narrative.storyType,
+      cuts: narrative.suggestedCuts?.length,
+      confidence: narrative.confidence
+    });
+
+    return narrative;
+
+  } catch (error) {
+    console.error('Multi-modal analysis failed:', error);
+    return null;
+  }
+};
+
 // Refine Claude's cuts with motion detection for cleaner edits
 const refineWithMotionDetection = (claudeCuts, videoAnalysis) => {
   if (!videoAnalysis || videoAnalysis.length === 0) {
@@ -3462,7 +3503,70 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Auto-Gen */}
-<div className={`flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'hidden' : ''}`}>
+<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'hidden' : ''}`}>
+
+  {/* Mode Selection */}
+  <div className="flex items-center gap-3 text-xs">
+    <div className="flex items-center gap-2">
+      <input
+        type="radio"
+        id="mode-quick"
+        name="autoGenMode"
+        value="quick"
+        checked={autoGenMode === 'quick'}
+        onChange={(e) => setAutoGenMode(e.target.value)}
+        className="w-3 h-3"
+      />
+      <label htmlFor="mode-quick" className="cursor-pointer text-stone-300">
+        Quick <span className="text-green-400">(FREE)</span>
+      </label>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <input
+        type="radio"
+        id="mode-smart"
+        name="autoGenMode"
+        value="smart"
+        checked={autoGenMode === 'smart'}
+        onChange={(e) => setAutoGenMode(e.target.value)}
+        className="w-3 h-3"
+      />
+      <label htmlFor="mode-smart" className="cursor-pointer text-stone-300">
+        Smart <span className="text-blue-400">($0.60)</span>
+      </label>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <input
+        type="radio"
+        id="mode-pro"
+        name="autoGenMode"
+        value="pro"
+        checked={autoGenMode === 'pro'}
+        onChange={(e) => setAutoGenMode(e.target.value)}
+        className="w-3 h-3"
+      />
+      <label htmlFor="mode-pro" className="cursor-pointer text-stone-300">
+        Pro <span className="text-purple-400">($1.20)</span>
+      </label>
+    </div>
+
+    <div className="flex items-center gap-2 ml-2 pl-2 border-l border-stone-700">
+      <input
+        type="checkbox"
+        id="beat-sync-toggle"
+        checked={enableBeatSync}
+        onChange={(e) => setEnableBeatSync(e.target.checked)}
+        disabled={!musicAnalysis?.beatGrid || !music}
+        className="w-3 h-3"
+      />
+      <label htmlFor="beat-sync-toggle" className="cursor-pointer text-stone-300">
+        Beat-Sync
+      </label>
+    </div>
+  </div>
+
   <button
       onClick={async () => {
         if (!video || isAnalyzing) return;
@@ -3470,86 +3574,258 @@ const exportVideo = async () => {
         try {
           setIsAnalyzing(true);
 
-          console.log('🎬 NARRATIVE AUTO-GENERATE STARTING (V2 - Smart Sampling + Gentle Beat-Sync)');
+          console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
 
-          // Step 1: Run motion detection FIRST (for smart frame sampling)
-          let videoAnalysisResult = videoAnalysis;
-          if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
-            console.log('🎬 Running motion detection for smart sampling...');
-            videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-            setVideoAnalysis(videoAnalysisResult);
-          } else {
-            console.log('✅ Using cached motion analysis');
-          }
+          // === MODE 1: QUICK GEN (FREE - Motion Only) ===
+          if (autoGenMode === 'quick') {
+            console.log('⚡ Quick Gen: Motion detection only (FREE)');
 
-          // Step 2: Extract frames with SMART SAMPLING (using motion data)
-          console.log('📸 Extracting frames with smart sampling...');
-          const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
-          console.log(`✅ Extracted ${frames.length} frames`);
+            // Step 1: Motion detection
+            let videoAnalysisResult = videoAnalysis;
+            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+              console.log('🎬 Running motion detection...');
+              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+              setVideoAnalysis(videoAnalysisResult);
+            } else {
+              console.log('✅ Using cached motion analysis');
+            }
 
-          // Step 3: Analyze with Claude (better understanding from smart frames)
-          console.log('🤖 Analyzing narrative...');
-          const narrative = await analyzeNarrative(frames, targetDuration);
+            // Step 2: Find high-motion moments
+            const motionCuts = videoAnalysisResult
+              .filter(m => m.motionScore > 0.6 || m.sceneChange)
+              .sort((a, b) => b.motionScore - a.motionScore)
+              .slice(0, 8)
+              .map((m, index) => ({
+                start: Math.max(0, m.time - 1),
+                end: Math.min(duration, m.time + 3),
+                reason: m.sceneChange ? 'Scene change' : 'High motion',
+                importance: m.motionScore
+              }));
 
-          if (!narrative) {
-            alert('Narrative analysis failed. Please try again.');
-            return;
-          }
+            // Step 3: Apply gentle beat-sync if enabled
+            let finalCuts = motionCuts;
+            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+              console.log('🎵 Applying gentle beat-sync...');
+              finalCuts = applyGentleBeatSync(motionCuts, musicAnalysis);
+            }
 
-          console.log('📖 Story Type:', narrative.storyType);
-          console.log('📝 Narrative:', narrative.narrative);
-          console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
+            // Step 4: Create anchors
+            const newAnchors = finalCuts.map((cut, index) => ({
+              id: Date.now() + index,
+              start: Math.max(0, cut.start),
+              end: Math.min(duration, cut.end),
+              _narrativeReason: cut.reason,
+              _importance: cut.importance
+            }));
 
-          // Step 4: Refine with motion detection
-          console.log('🔍 Refining with motion detection...');
-          let refinedCuts = refineWithMotionDetection(
-            narrative.suggestedCuts,
-            videoAnalysisResult
-          );
-
-          // Step 5: Apply GENTLE beat-sync (if music exists)
-          if (musicAnalysis?.beatGrid && music) {
-            console.log('🎵 Applying gentle beat-sync...');
-            refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
-          } else {
-            console.log('⏭️ Skipping beat-sync (no music or beat analysis)');
-          }
-
-          // Step 6: Create anchors
-          const newAnchors = refinedCuts.map((cut, index) => ({
-            id: Date.now() + index,
-            start: Math.max(0, cut.start),
-            end: Math.min(duration, cut.end),
-            _narrativeReason: cut.reason,
-            _importance: cut.importance
-          }));
-
-          // Step 7: Filter overlaps
-          const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
-            if (index === 0) {
-              kept.push(anchor);
+            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
+              if (index === 0) {
+                kept.push(anchor);
+                return kept;
+              }
+              const lastKept = kept[kept.length - 1];
+              if (anchor.start >= lastKept.end) {
+                kept.push(anchor);
+              }
               return kept;
+            }, []);
+
+            console.log('✅ QUICK GEN COMPLETE:', {
+              anchorsCreated: finalAnchors.length,
+              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+            });
+
+            setAnchors(finalAnchors);
+            saveToHistory(finalAnchors);
+          }
+
+          // === MODE 2: SMART GEN (Current V2 - Visual AI) ===
+          else if (autoGenMode === 'smart') {
+            console.log('🧠 Smart Gen: Visual narrative analysis (~$0.60)');
+
+            // Step 1: Motion detection for smart sampling
+            let videoAnalysisResult = videoAnalysis;
+            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+              console.log('🎬 Running motion detection for smart sampling...');
+              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+              setVideoAnalysis(videoAnalysisResult);
+            } else {
+              console.log('✅ Using cached motion analysis');
             }
 
-            const lastKept = kept[kept.length - 1];
-            if (anchor.start >= lastKept.end) {
-              kept.push(anchor);
+            // Step 2: Extract frames with smart sampling
+            console.log('📸 Extracting frames with smart sampling...');
+            const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
+            console.log(`✅ Extracted ${frames.length} frames`);
+
+            // Step 3: Analyze with Claude (visual only)
+            console.log('🤖 Analyzing narrative (visual only)...');
+            const narrative = await analyzeNarrative(frames, targetDuration);
+
+            if (!narrative) {
+              alert('Narrative analysis failed. Please try again.');
+              return;
             }
 
-            return kept;
-          }, []);
+            console.log('📖 Story Type:', narrative.storyType);
+            console.log('📝 Narrative:', narrative.narrative);
+            console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
 
-          console.log('✅ NARRATIVE GENERATION COMPLETE:', {
-            storyType: narrative.storyType,
-            anchorsCreated: finalAnchors.length,
-            totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
-          });
+            // Step 4: Refine with motion detection
+            console.log('🔍 Refining with motion detection...');
+            let refinedCuts = refineWithMotionDetection(
+              narrative.suggestedCuts,
+              videoAnalysisResult
+            );
 
-          setAnchors(finalAnchors);
-          saveToHistory(finalAnchors);
+            // Step 5: Apply gentle beat-sync if enabled
+            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+              console.log('🎵 Applying gentle beat-sync...');
+              refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
+            }
+
+            // Step 6: Create anchors
+            const newAnchors = refinedCuts.map((cut, index) => ({
+              id: Date.now() + index,
+              start: Math.max(0, cut.start),
+              end: Math.min(duration, cut.end),
+              _narrativeReason: cut.reason,
+              _importance: cut.importance
+            }));
+
+            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
+              if (index === 0) {
+                kept.push(anchor);
+                return kept;
+              }
+              const lastKept = kept[kept.length - 1];
+              if (anchor.start >= lastKept.end) {
+                kept.push(anchor);
+              }
+              return kept;
+            }, []);
+
+            console.log('✅ SMART GEN COMPLETE:', {
+              storyType: narrative.storyType,
+              anchorsCreated: finalAnchors.length,
+              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+            });
+
+            setAnchors(finalAnchors);
+            saveToHistory(finalAnchors);
+          }
+
+          // === MODE 3: PRO GEN (NEW - Vision + Audio) ===
+          else if (autoGenMode === 'pro') {
+            console.log('🎬 Pro Gen: Multi-modal analysis (Vision + Audio) (~$1.20)');
+
+            // Step 1: Motion detection for smart sampling
+            let videoAnalysisResult = videoAnalysis;
+            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+              console.log('🎬 Running motion detection for smart sampling...');
+              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+              setVideoAnalysis(videoAnalysisResult);
+            } else {
+              console.log('✅ Using cached motion analysis');
+            }
+
+            // Step 2: Transcribe audio
+            console.log('🎤 Transcribing audio with Whisper...');
+            const transcript = await transcribeVideo(video);
+
+            if (!transcript) {
+              alert('Audio transcription failed. Falling back to Smart Gen mode.');
+              setAutoGenMode('smart');
+              return;
+            }
+
+            console.log('✅ Transcription complete:', {
+              duration: transcript.duration,
+              segments: transcript.segments?.length,
+              language: transcript.language
+            });
+
+            // Step 3: Analyze transcript for topics and quotes
+            console.log('📊 Analyzing audio topics...');
+            const audioTopics = analyzeTranscriptTopics(transcript);
+
+            console.log('✅ Audio analysis complete:', {
+              topics: audioTopics.topics?.length,
+              keyQuotes: audioTopics.keyQuotes?.length,
+              pauses: audioTopics.pauses?.length
+            });
+
+            // Step 4: Extract frames with smart sampling
+            console.log('📸 Extracting frames with smart sampling...');
+            const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
+            console.log(`✅ Extracted ${frames.length} frames`);
+
+            // Step 5: Multi-modal analysis (vision + audio)
+            console.log('🤖 Running multi-modal analysis...');
+            const narrative = await analyzeMultiModal(frames, transcript, audioTopics, targetDuration);
+
+            if (!narrative) {
+              alert('Multi-modal analysis failed. Please try again.');
+              return;
+            }
+
+            console.log('📖 Story Type:', narrative.storyType);
+            console.log('📝 Narrative:', narrative.narrative);
+            console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
+
+            // Step 6: Refine with speech pauses
+            console.log('🗣️ Refining with speech pauses...');
+            let refinedCuts = refineWithSpeechPauses(
+              narrative.suggestedCuts,
+              audioTopics.pauses
+            );
+
+            // Step 7: Further refine with motion detection
+            console.log('🔍 Refining with motion detection...');
+            refinedCuts = refineWithMotionDetection(refinedCuts, videoAnalysisResult);
+
+            // Step 8: Apply gentle beat-sync if enabled
+            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+              console.log('🎵 Applying gentle beat-sync...');
+              refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
+            }
+
+            // Step 9: Create anchors
+            const newAnchors = refinedCuts.map((cut, index) => ({
+              id: Date.now() + index,
+              start: Math.max(0, cut.start || cut.startTime),
+              end: Math.min(duration, cut.end || cut.endTime),
+              _narrativeReason: cut.visualReason || cut.audioReason || cut.reason,
+              _importance: cut.importance,
+              _narrativeRole: cut.narrativeRole
+            }));
+
+            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
+              if (index === 0) {
+                kept.push(anchor);
+                return kept;
+              }
+              const lastKept = kept[kept.length - 1];
+              if (anchor.start >= lastKept.end) {
+                kept.push(anchor);
+              }
+              return kept;
+            }, []);
+
+            console.log('✅ PRO GEN COMPLETE:', {
+              storyType: narrative.storyType,
+              anchorsCreated: finalAnchors.length,
+              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1),
+              confidence: narrative.confidence
+            });
+
+            setAnchors(finalAnchors);
+            saveToHistory(finalAnchors);
+          }
+
         } catch (error) {
-          console.error('Narrative auto-generate error:', error);
-          alert('Error during narrative generation: ' + error.message);
+          console.error('Auto-generate error:', error);
+          alert('Error during generation: ' + error.message);
         } finally {
           setIsAnalyzing(false);
         }

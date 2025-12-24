@@ -8,19 +8,71 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { frames, targetDuration } = req.body;
+    const { frames, targetDuration, isMultiModal, transcript, audioTopics } = req.body;
 
     if (!frames || !Array.isArray(frames)) {
       return res.status(400).json({ error: 'Invalid frames data' });
     }
 
-    console.log(`📸 API: Analyzing ${frames.length} frames for ${targetDuration}s target`);
+    const mode = isMultiModal ? 'Multi-Modal (Vision + Audio)' : 'Visual Only';
+    console.log(`📸 API: Analyzing ${frames.length} frames for ${targetDuration}s target [${mode}]`);
 
-    // Build the content array for Claude
-    const content = [
-      {
-        type: "text",
-        text: `Analyze these ${frames.length} frames from a video to create a compelling short-form edit.
+    let promptText = '';
+
+    // Multi-modal prompt (vision + audio)
+    if (isMultiModal && transcript) {
+      promptText = `Analyze this video using BOTH visual and audio information to create compelling short-form clips.
+
+TARGET DURATION: ${targetDuration} seconds
+
+VISUAL INFORMATION:
+You'll see ${frames.length} strategic frames showing key visual moments.
+
+AUDIO TRANSCRIPT:
+Full transcript with timestamps:
+${transcript.segments?.map(s => `[${s.start.toFixed(1)}s] ${s.text}`).join('\n').substring(0, 8000) || transcript.text?.substring(0, 8000)}
+
+TOPIC TRANSITIONS (from audio analysis):
+${audioTopics?.topics?.map((t, i) => `Topic ${i + 1}: ${t.start.toFixed(1)}s - ${t.end.toFixed(1)}s`).join('\n') || 'No topics detected'}
+
+KEY QUOTES (emphasis moments):
+${audioTopics?.keyQuotes?.map(q => `[${q.time.toFixed(1)}s] "${q.text}"`).join('\n') || 'No key quotes'}
+
+Your task:
+1. Identify the story type and overall narrative
+2. Find moments where VISUAL + AUDIO align powerfully
+3. Suggest 5-8 anchor points that tell a complete story
+4. Each clip can be 1-15 seconds (flexible based on what the moment needs)
+5. Avoid cutting mid-sentence - use natural speech pauses
+6. Prioritize moments with strong visual + audio synergy
+
+For the video type, consider these specific strategies:
+- Tutorial: Show setup → key steps → result (4-12 sec clips, complete thoughts)
+- Transformation: Emphasize before/after contrast (5-15 sec clips, build tension)
+- Vlog: Fast-paced energy moments (2-8 sec clips, quick cuts)
+- Product demo: Reveal → features → demo (1-6 sec clips, punchy)
+- Interview: Insightful quotes with reactions (4-10 sec clips, complete answers)
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "storyType": "tutorial|transformation|vlog|product_demo|interview|other",
+  "narrative": "brief description combining visual and audio story",
+  "suggestedCuts": [
+    {
+      "startTime": number (use transcript timestamps for precision),
+      "endTime": number (align with speech pauses when possible),
+      "visualReason": "what's happening visually",
+      "audioReason": "what's being said/emphasized",
+      "narrativeRole": "hook|build|climax|payoff",
+      "importance": number between 0-1
+    }
+  ],
+  "confidence": number between 0-1,
+  "recommendations": ["any suggestions for improvement"]
+}`;
+    } else {
+      // Standard visual-only prompt (V2)
+      promptText = `Analyze these ${frames.length} frames from a video to create a compelling short-form edit.
 
 TARGET DURATION: ${targetDuration} seconds
 
@@ -43,7 +95,14 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       "importance": number between 0-1
     }
   ]
-}`
+}`;
+    }
+
+    // Build the content array for Claude
+    const content = [
+      {
+        type: "text",
+        text: promptText
       }
     ];
 
