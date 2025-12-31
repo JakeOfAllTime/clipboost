@@ -57,6 +57,7 @@ const ReelForge = () => {
   const [showMusicPrecisionModal, setShowMusicPrecisionModal] = useState(false);
   const [musicPrecisionTime, setMusicPrecisionTime] = useState(0);
   const [musicPrecisionPlaying, setMusicPrecisionPlaying] = useState(false);
+  const [editingHandle, setEditingHandle] = useState('start'); // 'start' or 'end' for music precision
 
   // Unified drag state
   const [dragState, setDragState] = useState({
@@ -1700,6 +1701,119 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   };
 
+  // Audio preview for precision music editing
+  const previewMusicPosition = useCallback(() => {
+    const currentPos = editingHandle === 'start' ? musicStartTime : (musicEndTime || music?.duration || 0);
+    const previewStart = Math.max(0, currentPos - 1.0);
+
+    if (musicPrecisionRef.current) {
+      musicPrecisionRef.current.currentTime = previewStart;
+      musicPrecisionRef.current.play();
+
+      setTimeout(() => {
+        if (musicPrecisionRef.current) {
+          musicPrecisionRef.current.pause();
+          musicPrecisionRef.current.currentTime = currentPos;
+        }
+      }, 1000);
+    }
+  }, [editingHandle, musicStartTime, musicEndTime, music]);
+
+  // Keyboard shortcuts for music precision modal
+  useEffect(() => {
+    if (!showMusicPrecisionModal) return;
+
+    const handleKeyDown = (e) => {
+      // Prevent default for handled keys
+      if (['ArrowLeft', 'ArrowRight', ' ', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      const shift = e.shiftKey;
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          {
+            const delta = ctrl ? -10 : shift ? -5 : -1;
+            const otherTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
+            const newTime = editingHandle === 'start'
+              ? Math.max(0, musicPrecisionTime + delta)
+              : Math.max(musicStartTime, musicPrecisionTime + delta);
+
+            if (editingHandle === 'start' && newTime < otherTime) {
+              setMusicStartTime(newTime);
+              setMusicPrecisionTime(newTime);
+              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
+              previewMusicPosition();
+            } else if (editingHandle === 'end' && newTime > musicStartTime) {
+              setMusicEndTime(newTime);
+              setMusicPrecisionTime(newTime);
+              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
+              previewMusicPosition();
+            }
+          }
+          break;
+
+        case 'ArrowRight':
+          {
+            const delta = ctrl ? 10 : shift ? 5 : 1;
+            const otherTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
+            const newTime = editingHandle === 'start'
+              ? Math.min(otherTime, musicPrecisionTime + delta)
+              : Math.min(music?.duration || 100, musicPrecisionTime + delta);
+
+            if (editingHandle === 'start' && newTime < otherTime) {
+              setMusicStartTime(newTime);
+              setMusicPrecisionTime(newTime);
+              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
+              previewMusicPosition();
+            } else if (editingHandle === 'end' && newTime > musicStartTime) {
+              setMusicEndTime(newTime);
+              setMusicPrecisionTime(newTime);
+              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
+              previewMusicPosition();
+            }
+          }
+          break;
+
+        case ' ':
+          if (musicPrecisionRef.current) {
+            if (musicPrecisionPlaying) {
+              musicPrecisionRef.current.pause();
+            } else {
+              musicPrecisionRef.current.currentTime = musicPrecisionTime;
+              musicPrecisionRef.current.play();
+            }
+            setMusicPrecisionPlaying(!musicPrecisionPlaying);
+          }
+          break;
+
+        case 'Tab':
+          setEditingHandle(editingHandle === 'start' ? 'end' : 'start');
+          const newTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
+          setMusicPrecisionTime(newTime);
+          if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
+          break;
+
+        case 'Enter':
+          setShowMusicPrecisionModal(false);
+          setMusicPrecisionPlaying(false);
+          if (musicPrecisionRef.current) musicPrecisionRef.current.pause();
+          break;
+
+        case 'Escape':
+          setShowMusicPrecisionModal(false);
+          setMusicPrecisionPlaying(false);
+          if (musicPrecisionRef.current) musicPrecisionRef.current.pause();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMusicPrecisionModal, editingHandle, musicPrecisionTime, musicStartTime, musicEndTime, music, musicPrecisionPlaying, previewMusicPosition]);
+
   // Timeline interaction (memoized)
   const seekToPosition = useCallback((e) => {
     if (!timelineRef.current || !videoRef.current) return;
@@ -2561,12 +2675,22 @@ const exportVideo = async () => {
       const videoVolume = (100 - audioBalance) / 100;
       const musicVolume = audioBalance / 100;
 
+      // Trim music to start→end range
+      const musicDuration = (musicEndTime || musicDuration) - musicStartTime;
+
+      await ffmpeg.exec([
+        '-ss', musicStartTime.toFixed(3),
+        '-t', musicDuration.toFixed(3),
+        '-i', 'music.mp3',
+        '-c:a', 'copy',
+        'trimmed_music.mp3'
+      ]);
+
       await ffmpeg.exec([
         '-f', 'concat',
         '-safe', '0',
         '-i', 'concat.txt',
-        '-ss', musicStartTime.toFixed(3),
-        '-i', 'music.mp3',
+        '-i', 'trimmed_music.mp3',
         '-filter_complex',
         `[0:a]volume=${videoVolume}[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]`,
         '-map', '0:v',
@@ -3565,6 +3689,24 @@ const exportVideo = async () => {
         Beat-Sync
       </label>
     </div>
+  </div>
+
+  {/* Target Duration Slider */}
+  <div className="flex items-center gap-3 text-xs mt-2">
+    <label htmlFor="target-duration" className="text-stone-300 whitespace-nowrap">
+      Target: {targetDuration}s
+    </label>
+    <input
+      type="range"
+      id="target-duration"
+      min="15"
+      max="180"
+      step="1"
+      value={targetDuration}
+      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+      className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-amber-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-amber-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+    />
+    <span className="text-stone-500 text-xs">15s - 180s</span>
   </div>
 
   <button
@@ -4700,11 +4842,50 @@ onMouseLeave={() => {
               onClick={(e) => e.stopPropagation()}
             >
               <h2 className="text-2xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                Precision Music Start Time
+                Precision Music Editor
               </h2>
-              <p className="text-sm mb-6" style={{ color: 'var(--text-dim)' }}>
-                Adjust the music start position with frame-precision
+              <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+                Set music start and end times with frame-precision
               </p>
+
+              {/* Start/End Toggle Buttons */}
+              <div className="flex gap-3 mb-6">
+                <button
+                  onClick={() => {
+                    setEditingHandle('start');
+                    setMusicPrecisionTime(musicStartTime);
+                    if (musicPrecisionRef.current) {
+                      musicPrecisionRef.current.currentTime = musicStartTime;
+                    }
+                  }}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                    editingHandle === 'start'
+                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/50'
+                      : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                  }`}
+                >
+                  <span className="text-xl">🟢</span>
+                  Music Start
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingHandle('end');
+                    const endTime = musicEndTime || music.duration;
+                    setMusicPrecisionTime(endTime);
+                    if (musicPrecisionRef.current) {
+                      musicPrecisionRef.current.currentTime = endTime;
+                    }
+                  }}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                    editingHandle === 'end'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
+                      : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                  }`}
+                >
+                  <span className="text-xl">🔴</span>
+                  Music End
+                </button>
+              </div>
 
               {/* Audio Player */}
               <div className="bg-black rounded-lg p-4 mb-4">
@@ -4721,9 +4902,16 @@ onMouseLeave={() => {
 
                 {/* Current Time Display */}
                 <div className="text-center mb-4">
-                  <div className="text-sm text-gray-400 mb-1">Music Start Time</div>
-                  <div className="text-3xl font-mono font-bold text-orange-500">
+                  <div className="text-sm text-gray-400 mb-1">
+                    {editingHandle === 'start' ? 'Music Start Time' : 'Music End Time'}
+                  </div>
+                  <div className={`text-3xl font-mono font-bold ${
+                    editingHandle === 'start' ? 'text-green-500' : 'text-red-500'
+                  }`}>
                     {formatTime(musicPrecisionTime)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Duration: {formatTime((musicEndTime || music.duration) - musicStartTime)}
                   </div>
                 </div>
 
@@ -4764,7 +4952,13 @@ onMouseLeave={() => {
                     }}
                     className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                     style={{
-                      background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 100%)`
+                      background: `linear-gradient(to right,
+                        #475569 0%,
+                        #475569 ${(musicStartTime / (music.duration || 100)) * 100}%,
+                        #22c55e ${(musicStartTime / (music.duration || 100)) * 100}%,
+                        #ef4444 ${((musicEndTime || music.duration) / (music.duration || 100)) * 100}%,
+                        #475569 ${((musicEndTime || music.duration) / (music.duration || 100)) * 100}%,
+                        #475569 100%)`
                     }}
                   />
                   <div className="flex justify-between text-xs text-gray-400 mt-1">
@@ -4774,14 +4968,26 @@ onMouseLeave={() => {
                 </div>
 
                 {/* Frame-by-Frame Controls */}
-                <div className="flex justify-center gap-2">
+                <div className="flex justify-center gap-2 mb-4">
                   <button
                     onClick={() => {
-                      const newTime = Math.max(0, musicPrecisionTime - 1);
-                      setMusicPrecisionTime(newTime);
+                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
+                      const newTime = editingHandle === 'start'
+                        ? Math.max(0, musicPrecisionTime - 1)
+                        : Math.max(musicStartTime, musicPrecisionTime - 1);
+
+                      if (editingHandle === 'start' && newTime < otherTime) {
+                        setMusicStartTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                        setMusicEndTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      }
+
                       if (musicPrecisionRef.current) {
                         musicPrecisionRef.current.currentTime = newTime;
                       }
+                      previewMusicPosition();
                     }}
                     className="px-4 py-2 forge-button rounded-lg text-sm"
                   >
@@ -4789,11 +4995,23 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.max(0, musicPrecisionTime - 0.1);
-                      setMusicPrecisionTime(newTime);
+                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
+                      const newTime = editingHandle === 'start'
+                        ? Math.max(0, musicPrecisionTime - 0.1)
+                        : Math.max(musicStartTime, musicPrecisionTime - 0.1);
+
+                      if (editingHandle === 'start' && newTime < otherTime) {
+                        setMusicStartTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                        setMusicEndTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      }
+
                       if (musicPrecisionRef.current) {
                         musicPrecisionRef.current.currentTime = newTime;
                       }
+                      previewMusicPosition();
                     }}
                     className="px-4 py-2 forge-button rounded-lg text-sm"
                   >
@@ -4801,11 +5019,23 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.min(music.duration || 100, musicPrecisionTime + 0.1);
-                      setMusicPrecisionTime(newTime);
+                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
+                      const newTime = editingHandle === 'start'
+                        ? Math.min(otherTime, musicPrecisionTime + 0.1)
+                        : Math.min(music.duration || 100, musicPrecisionTime + 0.1);
+
+                      if (editingHandle === 'start' && newTime < otherTime) {
+                        setMusicStartTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                        setMusicEndTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      }
+
                       if (musicPrecisionRef.current) {
                         musicPrecisionRef.current.currentTime = newTime;
                       }
+                      previewMusicPosition();
                     }}
                     className="px-4 py-2 forge-button rounded-lg text-sm"
                   >
@@ -4813,16 +5043,34 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.min(music.duration || 100, musicPrecisionTime + 1);
-                      setMusicPrecisionTime(newTime);
+                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
+                      const newTime = editingHandle === 'start'
+                        ? Math.min(otherTime, musicPrecisionTime + 1)
+                        : Math.min(music.duration || 100, musicPrecisionTime + 1);
+
+                      if (editingHandle === 'start' && newTime < otherTime) {
+                        setMusicStartTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                        setMusicEndTime(newTime);
+                        setMusicPrecisionTime(newTime);
+                      }
+
                       if (musicPrecisionRef.current) {
                         musicPrecisionRef.current.currentTime = newTime;
                       }
+                      previewMusicPosition();
                     }}
                     className="px-4 py-2 forge-button rounded-lg text-sm"
                   >
                     +1s
                   </button>
+                </div>
+
+                {/* Keyboard Shortcuts Hint */}
+                <div className="text-xs text-center text-gray-500">
+                  <div className="mb-1">Keyboard shortcuts:</div>
+                  <div>← → (±1s) • Shift+← → (±5s) • Space (play) • Tab (toggle start/end)</div>
                 </div>
               </div>
 
