@@ -1896,6 +1896,22 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, [hoveredAnchor, previewAnchor]);
 
+  // Click outside to deselect anchor
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Check if clicking outside anchor areas and preview panel
+      const clickedAnchor = e.target.closest('[data-anchor-element]');
+      const clickedPreview = e.target.closest('[data-preview-panel]');
+
+      if (!clickedAnchor && !clickedPreview && previewAnchor) {
+        setPreviewAnchor(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [previewAnchor]);
+
   const handleAnchorMouseDown = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
@@ -1984,8 +2000,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
         // Update preview video if this anchor is being previewed
         if (previewAnchor?.id === selectedAnchor && previewVideoRef.current) {
-          if (dragState.type === 'anchor-left' || dragState.type === 'anchor-right') {
+          if (dragState.type === 'anchor-left') {
+            // Dragging start handle → show start frame
             previewVideoRef.current.currentTime = newStart;
+          } else if (dragState.type === 'anchor-right') {
+            // Dragging end handle → show end frame
+            previewVideoRef.current.currentTime = newEnd;
           }
         }
       }
@@ -3218,7 +3238,7 @@ const exportVideo = async () => {
                           onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
                           className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                           style={{
-                            background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${100 - audioBalance}%, rgb(74, 222, 128) ${100 - audioBalance}%, rgb(74, 222, 128) 100%)`
+                            background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
                           }}
                         />
                       </div>
@@ -4112,6 +4132,7 @@ const exportVideo = async () => {
                       }}
                     >
 <div
+  data-anchor-element="true"
   onClick={(e) => handleAnchorClick(e, anchor)}
   onDoubleClick={(e) => {
     e.stopPropagation();
@@ -4125,7 +4146,7 @@ const exportVideo = async () => {
     handleAnchorTouchStart(e, anchor, 'anchor-move');
   }}
 onMouseEnter={() => {
-  if (!previewAnchor || previewAnchor.id !== anchor.id) {
+  if (!previewAnchor) {
     setHoveredAnchor(anchor);
   }
 }}
@@ -4184,13 +4205,16 @@ onMouseLeave={() => {
 {/* Preview/Hover Panel - Positioned to avoid control overlap */}
 {(previewAnchor?.id === anchor.id || hoveredAnchor?.id === anchor.id) && (
   <div
+    data-preview-panel="true"
     onClick={(e) => e.stopPropagation()}
     onMouseDown={(e) => e.stopPropagation()}
     onTouchStart={(e) => {
       e.preventDefault();
       e.stopPropagation();
     }}
-    className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 border-amber-600/60 p-3 w-64 ${
+    className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
+      previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-amber-600/60'
+    } p-3 w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
