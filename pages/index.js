@@ -1733,34 +1733,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, [editingHandle, musicStartTime, musicEndTime, music]);
 
-  // Calculate smart timeline range for music precision modal
+  // Get full timeline range for music precision modal
   const getMusicTimelineRange = useCallback(() => {
     if (!music?.duration) return { min: 0, max: 100 };
 
-    const duration = music.duration;
-    const currentPos = editingHandle === 'start' ? musicStartTime : (musicEndTime || duration);
-
-    // For short files (< 2 min), show full timeline
-    if (duration < 120) {
-      return { min: 0, max: duration };
-    }
-
-    // For medium files (< 10 min), show ±2.5 min from current position
-    if (duration < 600) {
-      const windowSize = 150; // 2.5 minutes
-      const halfWindow = windowSize / 2;
-      const min = Math.max(0, currentPos - halfWindow);
-      const max = Math.min(duration, currentPos + halfWindow);
-      return { min, max };
-    }
-
-    // For long files (> 10 min), show ±1 min from current position (tight zoom)
-    const windowSize = 60; // 1 minute
-    const halfWindow = windowSize / 2;
-    const min = Math.max(0, currentPos - halfWindow);
-    const max = Math.min(duration, currentPos + halfWindow);
-    return { min, max };
-  }, [music, editingHandle, musicStartTime, musicEndTime]);
+    // Always show full music duration
+    return { min: 0, max: music.duration };
+  }, [music]);
 
   // Keyboard shortcuts for music precision modal
   useEffect(() => {
@@ -1779,17 +1758,21 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         case 'ArrowLeft':
           {
             const delta = ctrl ? -10 : shift ? -5 : -1;
-            const otherTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
-            const newTime = editingHandle === 'start'
-              ? Math.max(0, musicPrecisionTime + delta)
-              : Math.max(musicStartTime, musicPrecisionTime + delta);
+            const minDuration = 1.0; // Minimum 1 second duration
+            let newTime;
 
-            if (editingHandle === 'start' && newTime < otherTime) {
+            if (editingHandle === 'start') {
+              // Ensure start doesn't exceed end minus minimum duration
+              const maxStart = (musicEndTime || music?.duration || 0) - minDuration;
+              newTime = Math.max(0, Math.min(musicPrecisionTime + delta, maxStart));
               setMusicStartTime(newTime);
               setMusicPrecisionTime(newTime);
               if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
               previewMusicPosition();
-            } else if (editingHandle === 'end' && newTime > musicStartTime) {
+            } else {
+              // Ensure end is at least minimum duration after start
+              const minEnd = musicStartTime + minDuration;
+              newTime = Math.max(minEnd, musicPrecisionTime + delta);
               setMusicEndTime(newTime);
               setMusicPrecisionTime(newTime);
               if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
@@ -1801,17 +1784,21 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         case 'ArrowRight':
           {
             const delta = ctrl ? 10 : shift ? 5 : 1;
-            const otherTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
-            const newTime = editingHandle === 'start'
-              ? Math.min(otherTime, musicPrecisionTime + delta)
-              : Math.min(music?.duration || 100, musicPrecisionTime + delta);
+            const minDuration = 1.0; // Minimum 1 second duration
+            let newTime;
 
-            if (editingHandle === 'start' && newTime < otherTime) {
+            if (editingHandle === 'start') {
+              // Ensure start doesn't exceed end minus minimum duration
+              const maxStart = (musicEndTime || music?.duration || 0) - minDuration;
+              newTime = Math.max(0, Math.min(musicPrecisionTime + delta, maxStart));
               setMusicStartTime(newTime);
               setMusicPrecisionTime(newTime);
               if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
               previewMusicPosition();
-            } else if (editingHandle === 'end' && newTime > musicStartTime) {
+            } else {
+              // Ensure end is at least minimum duration after start
+              const minEnd = musicStartTime + minDuration;
+              newTime = Math.min(music?.duration || 100, Math.max(minEnd, musicPrecisionTime + delta));
               setMusicEndTime(newTime);
               setMusicPrecisionTime(newTime);
               if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
@@ -4953,8 +4940,11 @@ onMouseLeave={() => {
                   }`}>
                     {formatTime(musicPrecisionTime)}
                   </div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    Duration: {formatTime((musicEndTime || music.duration) - musicStartTime)}
+                  <div className="text-sm text-gray-400 mt-3">
+                    <span className="font-semibold">Duration:</span>{' '}
+                    <span className="text-purple-400 font-mono">
+                      {formatTime((musicEndTime || music.duration) - musicStartTime)}
+                    </span>
                   </div>
                 </div>
 
@@ -4998,14 +4988,26 @@ onMouseLeave={() => {
                           value={musicPrecisionTime}
                           onChange={(e) => {
                             const time = parseFloat(e.target.value);
-                            setMusicPrecisionTime(time);
+                            const minDuration = 1.0; // Minimum 1 second duration
+
                             if (editingHandle === 'start') {
-                              setMusicStartTime(time);
+                              // Ensure start doesn't exceed end minus minimum duration
+                              const maxStart = (musicEndTime || music.duration) - minDuration;
+                              const validTime = Math.min(time, maxStart);
+                              setMusicStartTime(validTime);
+                              setMusicPrecisionTime(validTime);
+                              if (musicPrecisionRef.current) {
+                                musicPrecisionRef.current.currentTime = validTime;
+                              }
                             } else {
-                              setMusicEndTime(time);
-                            }
-                            if (musicPrecisionRef.current) {
-                              musicPrecisionRef.current.currentTime = time;
+                              // Ensure end is at least minimum duration after start
+                              const minEnd = musicStartTime + minDuration;
+                              const validTime = Math.max(time, minEnd);
+                              setMusicEndTime(validTime);
+                              setMusicPrecisionTime(validTime);
+                              if (musicPrecisionRef.current) {
+                                musicPrecisionRef.current.currentTime = validTime;
+                              }
                             }
                           }}
                           className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
@@ -5021,9 +5023,7 @@ onMouseLeave={() => {
                         />
                         <div className="flex justify-between text-xs text-gray-400 mt-1">
                           <span>{formatTime(range.min)}</span>
-                          {music.duration > 120 && (
-                            <span className="text-gray-500">Zoomed: {formatTime(rangeSize)} visible</span>
-                          )}
+                          <span className="text-gray-500">{formatTime(music.duration / 2)}</span>
                           <span>{formatTime(range.max)}</span>
                         </div>
                       </>
@@ -5035,15 +5035,19 @@ onMouseLeave={() => {
                 <div className="flex justify-center gap-2 mb-4">
                   <button
                     onClick={() => {
-                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
-                      const newTime = editingHandle === 'start'
-                        ? Math.max(0, musicPrecisionTime - 1)
-                        : Math.max(musicStartTime, musicPrecisionTime - 1);
+                      const minDuration = 1.0; // Minimum 1 second duration
+                      let newTime;
 
-                      if (editingHandle === 'start' && newTime < otherTime) {
+                      if (editingHandle === 'start') {
+                        // Ensure start doesn't exceed end minus minimum duration
+                        const maxStart = (musicEndTime || music.duration) - minDuration;
+                        newTime = Math.max(0, Math.min(musicPrecisionTime - 1, maxStart));
                         setMusicStartTime(newTime);
                         setMusicPrecisionTime(newTime);
-                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                      } else {
+                        // Ensure end is at least minimum duration after start
+                        const minEnd = musicStartTime + minDuration;
+                        newTime = Math.max(minEnd, musicPrecisionTime - 1);
                         setMusicEndTime(newTime);
                         setMusicPrecisionTime(newTime);
                       }
@@ -5059,15 +5063,19 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
-                      const newTime = editingHandle === 'start'
-                        ? Math.max(0, musicPrecisionTime - 0.1)
-                        : Math.max(musicStartTime, musicPrecisionTime - 0.1);
+                      const minDuration = 1.0; // Minimum 1 second duration
+                      let newTime;
 
-                      if (editingHandle === 'start' && newTime < otherTime) {
+                      if (editingHandle === 'start') {
+                        // Ensure start doesn't exceed end minus minimum duration
+                        const maxStart = (musicEndTime || music.duration) - minDuration;
+                        newTime = Math.max(0, Math.min(musicPrecisionTime - 0.1, maxStart));
                         setMusicStartTime(newTime);
                         setMusicPrecisionTime(newTime);
-                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                      } else {
+                        // Ensure end is at least minimum duration after start
+                        const minEnd = musicStartTime + minDuration;
+                        newTime = Math.max(minEnd, musicPrecisionTime - 0.1);
                         setMusicEndTime(newTime);
                         setMusicPrecisionTime(newTime);
                       }
@@ -5083,15 +5091,19 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
-                      const newTime = editingHandle === 'start'
-                        ? Math.min(otherTime, musicPrecisionTime + 0.1)
-                        : Math.min(music.duration || 100, musicPrecisionTime + 0.1);
+                      const minDuration = 1.0; // Minimum 1 second duration
+                      let newTime;
 
-                      if (editingHandle === 'start' && newTime < otherTime) {
+                      if (editingHandle === 'start') {
+                        // Ensure start doesn't exceed end minus minimum duration
+                        const maxStart = (musicEndTime || music.duration) - minDuration;
+                        newTime = Math.max(0, Math.min(musicPrecisionTime + 0.1, maxStart));
                         setMusicStartTime(newTime);
                         setMusicPrecisionTime(newTime);
-                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                      } else {
+                        // Ensure end is at least minimum duration after start
+                        const minEnd = musicStartTime + minDuration;
+                        newTime = Math.min(music.duration, Math.max(minEnd, musicPrecisionTime + 0.1));
                         setMusicEndTime(newTime);
                         setMusicPrecisionTime(newTime);
                       }
@@ -5107,15 +5119,19 @@ onMouseLeave={() => {
                   </button>
                   <button
                     onClick={() => {
-                      const otherTime = editingHandle === 'start' ? (musicEndTime || music.duration) : musicStartTime;
-                      const newTime = editingHandle === 'start'
-                        ? Math.min(otherTime, musicPrecisionTime + 1)
-                        : Math.min(music.duration || 100, musicPrecisionTime + 1);
+                      const minDuration = 1.0; // Minimum 1 second duration
+                      let newTime;
 
-                      if (editingHandle === 'start' && newTime < otherTime) {
+                      if (editingHandle === 'start') {
+                        // Ensure start doesn't exceed end minus minimum duration
+                        const maxStart = (musicEndTime || music.duration) - minDuration;
+                        newTime = Math.max(0, Math.min(musicPrecisionTime + 1, maxStart));
                         setMusicStartTime(newTime);
                         setMusicPrecisionTime(newTime);
-                      } else if (editingHandle === 'end' && newTime > musicStartTime) {
+                      } else {
+                        // Ensure end is at least minimum duration after start
+                        const minEnd = musicStartTime + minDuration;
+                        newTime = Math.min(music.duration, Math.max(minEnd, musicPrecisionTime + 1));
                         setMusicEndTime(newTime);
                         setMusicPrecisionTime(newTime);
                       }
