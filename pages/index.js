@@ -4188,9 +4188,19 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-left');
                               }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Select anchor and show start frame in preview
+                                setSelectedAnchor(anchor.id);
+                                setHoveredAnchor(null);
+                                setPreviewAnchor(anchor);
+                                setPreviewHandle('start');
+                                if (previewVideoRef.current) {
+                                  previewVideoRef.current.currentTime = anchor.start;
+                                }
+                              }}
                               className="absolute left-0 top-0 bottom-0 w-8 sm:w-2 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 active:opacity-100 active:scale-110 -ml-4 sm:-ml-1 transition-all rounded-md touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                              onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust start time"
                             />
                             {/* Right handle - Red (End) */}
@@ -4204,9 +4214,19 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-right');
                               }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Select anchor and show end frame in preview
+                                setSelectedAnchor(anchor.id);
+                                setHoveredAnchor(null);
+                                setPreviewAnchor(anchor);
+                                setPreviewHandle('end');
+                                if (previewVideoRef.current) {
+                                  previewVideoRef.current.currentTime = anchor.end;
+                                }
+                              }}
                               className="absolute right-0 top-0 bottom-0 w-8 sm:w-2 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 active:opacity-100 active:scale-110 -mr-4 sm:-mr-1 transition-all rounded-md touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                              onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust end time"
                             />
                             {/* Precision button */}
