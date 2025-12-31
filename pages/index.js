@@ -4263,10 +4263,10 @@ onMouseLeave={() => {
       </div>
                             <button
                               onClick={() => setPreviewAnchor(null)}
-                              className="text-gray-400 hover:text-red-400 transition-colors"
+                              className="text-gray-400 hover:text-white transition-colors"
                               title="Close preview"
                             >
-                              <Trash2 size={14} />
+                              <X size={14} />
                             </button>
                           </div>
 
@@ -4335,10 +4335,11 @@ onMouseLeave={() => {
         setPreviewAnchor(null);
         setHoveredAnchor(null);
       }}
-      className="px-3 py-2 forge-button rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
+      className="px-3 py-2 forge-button rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold hover:bg-red-600/20"
       style={{ borderColor: 'var(--accent-hot)' }}
+      title="Delete anchor"
     >
-      <X size={14} />
+      <Trash2 size={14} />
     </button>
   </div>
 </div>
