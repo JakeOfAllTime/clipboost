@@ -3558,8 +3558,8 @@ const exportVideo = async () => {
         id="beat-sync-toggle"
         checked={enableBeatSync}
         onChange={(e) => setEnableBeatSync(e.target.checked)}
-        disabled={!musicAnalysis?.beatGrid || !music}
-        className="w-3 h-3"
+        disabled={!music}
+        className="w-3 h-3 cursor-pointer"
       />
       <label htmlFor="beat-sync-toggle" className="cursor-pointer text-stone-300">
         Beat-Sync
@@ -3965,7 +3965,7 @@ onMouseLeave={() => {
 
                         {isSelected && (
                           <>
-                            {/* Left handle - Yellow */}
+                            {/* Left handle - Green (Start) */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -3976,12 +3976,12 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-left');
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-4 sm:w-2 bg-yellow-400 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -ml-2 sm:-ml-1 transition-all rounded-sm touch-none"
+                              className="absolute left-0 top-0 bottom-0 w-8 sm:w-2 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 active:opacity-100 active:scale-110 -ml-4 sm:-ml-1 transition-all rounded-md touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust start time"
                             />
-                            {/* Right handle - Red */}
+                            {/* Right handle - Red (End) */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -3992,7 +3992,7 @@ onMouseLeave={() => {
                                 e.stopPropagation();
                                 handleAnchorTouchStart(e, anchor, 'anchor-right');
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-4 sm:w-2 bg-red-500 cursor-ew-resize hover:opacity-80 active:opacity-100 active:scale-110 -mr-2 sm:-mr-1 transition-all rounded-sm touch-none"
+                              className="absolute right-0 top-0 bottom-0 w-8 sm:w-2 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 active:opacity-100 active:scale-110 -mr-4 sm:-mr-1 transition-all rounded-md touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               onClick={(e) => e.stopPropagation()}
                               title="Drag to adjust end time"
@@ -4601,7 +4601,7 @@ onMouseLeave={() => {
                       width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
                     }}
                   >
-                    {/* Start handle - Gold/Amber */}
+                    {/* Start handle - Green */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
                       onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
@@ -4613,15 +4613,15 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.start;
                         }
                       }}
-                      className={`absolute left-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -ml-1 touch-none ${
+                      className={`absolute left-0 top-0 bottom-0 w-8 sm:w-2 cursor-ew-resize transition -ml-4 sm:-ml-1 touch-none rounded-md ${
                         selectedHandle === 'start'
-                          ? 'bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
-                          : 'bg-amber-600/80 hover:bg-amber-500 hover:shadow-[0_0_8px_rgba(245,158,11,0.6)]'
+                          ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.8)]'
+                          : 'bg-green-500/80 hover:bg-green-400 hover:shadow-[0_0_8px_rgba(34,197,94,0.6)]'
                       }`}
                       style={{ zIndex: 100 }}
                     />
 
-                    {/* End handle - Dimmer Red */}
+                    {/* End handle - Red */}
                     <div
                       onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
                       onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
@@ -4633,10 +4633,10 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.end;
                         }
                       }}
-                      className={`absolute right-0 top-0 bottom-0 w-3 sm:w-2 cursor-ew-resize transition -mr-1 touch-none ${
+                      className={`absolute right-0 top-0 bottom-0 w-8 sm:w-2 cursor-ew-resize transition -mr-4 sm:-mr-1 touch-none rounded-md ${
                         selectedHandle === 'end'
-                          ? 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.8)]'
-                          : 'bg-red-700/80 hover:bg-red-600 hover:shadow-[0_0_8px_rgba(220,38,38,0.6)]'
+                          ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]'
+                          : 'bg-red-500/80 hover:bg-red-400 hover:shadow-[0_0_8px_rgba(239,68,68,0.6)]'
                       }`}
                       style={{ zIndex: 100 }}
                     />
@@ -4762,7 +4762,7 @@ onMouseLeave={() => {
                         musicPrecisionRef.current.currentTime = time;
                       }
                     }}
-                    className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                     style={{
                       background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 ${(musicPrecisionTime / (music.duration || 100)) * 100}%, #475569 100%)`
                     }}
