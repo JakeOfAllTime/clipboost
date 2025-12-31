@@ -1703,21 +1703,64 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Audio preview for precision music editing
   const previewMusicPosition = useCallback(() => {
-    const currentPos = editingHandle === 'start' ? musicStartTime : (musicEndTime || music?.duration || 0);
-    const previewStart = Math.max(0, currentPos - 1.0);
+    if (!musicPrecisionRef.current) return;
 
-    if (musicPrecisionRef.current) {
+    if (editingHandle === 'start') {
+      // START: Play 1 second FROM the start position (hear what begins)
+      musicPrecisionRef.current.currentTime = musicStartTime;
+      musicPrecisionRef.current.play();
+
+      setTimeout(() => {
+        if (musicPrecisionRef.current) {
+          musicPrecisionRef.current.pause();
+          musicPrecisionRef.current.currentTime = musicStartTime;
+        }
+      }, 1000);
+    } else {
+      // END: Play 1 second BEFORE the end position (hear what's ending)
+      const endPos = musicEndTime || music?.duration || 0;
+      const previewStart = Math.max(0, endPos - 1.0);
+
       musicPrecisionRef.current.currentTime = previewStart;
       musicPrecisionRef.current.play();
 
       setTimeout(() => {
         if (musicPrecisionRef.current) {
           musicPrecisionRef.current.pause();
-          musicPrecisionRef.current.currentTime = currentPos;
+          musicPrecisionRef.current.currentTime = endPos;
         }
       }, 1000);
     }
   }, [editingHandle, musicStartTime, musicEndTime, music]);
+
+  // Calculate smart timeline range for music precision modal
+  const getMusicTimelineRange = useCallback(() => {
+    if (!music?.duration) return { min: 0, max: 100 };
+
+    const duration = music.duration;
+    const currentPos = editingHandle === 'start' ? musicStartTime : (musicEndTime || duration);
+
+    // For short files (< 2 min), show full timeline
+    if (duration < 120) {
+      return { min: 0, max: duration };
+    }
+
+    // For medium files (< 10 min), show ±2.5 min from current position
+    if (duration < 600) {
+      const windowSize = 150; // 2.5 minutes
+      const halfWindow = windowSize / 2;
+      const min = Math.max(0, currentPos - halfWindow);
+      const max = Math.min(duration, currentPos + halfWindow);
+      return { min, max };
+    }
+
+    // For long files (> 10 min), show ±1 min from current position (tight zoom)
+    const windowSize = 60; // 1 minute
+    const halfWindow = windowSize / 2;
+    const min = Math.max(0, currentPos - halfWindow);
+    const max = Math.min(duration, currentPos + halfWindow);
+    return { min, max };
+  }, [music, editingHandle, musicStartTime, musicEndTime]);
 
   // Keyboard shortcuts for music precision modal
   useEffect(() => {
@@ -4935,36 +4978,57 @@ onMouseLeave={() => {
                   </button>
                 </div>
 
-                {/* Timeline Scrubber - Red ball */}
+                {/* Timeline Scrubber with smart range */}
                 <div className="relative mb-4">
-                  <input
-                    type="range"
-                    min="0"
-                    max={music.duration || 100}
-                    step="0.033"
-                    value={musicPrecisionTime}
-                    onChange={(e) => {
-                      const time = parseFloat(e.target.value);
-                      setMusicPrecisionTime(time);
-                      if (musicPrecisionRef.current) {
-                        musicPrecisionRef.current.currentTime = time;
-                      }
-                    }}
-                    className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
-                    style={{
-                      background: `linear-gradient(to right,
-                        #475569 0%,
-                        #475569 ${(musicStartTime / (music.duration || 100)) * 100}%,
-                        #22c55e ${(musicStartTime / (music.duration || 100)) * 100}%,
-                        #ef4444 ${((musicEndTime || music.duration) / (music.duration || 100)) * 100}%,
-                        #475569 ${((musicEndTime || music.duration) / (music.duration || 100)) * 100}%,
-                        #475569 100%)`
-                    }}
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>0:00</span>
-                    <span>{formatTime(music.duration || 0)}</span>
-                  </div>
+                  {(() => {
+                    const range = getMusicTimelineRange();
+                    const rangeSize = range.max - range.min;
+
+                    // Calculate gradient positions relative to visible range
+                    const startPercent = Math.max(0, Math.min(100, ((musicStartTime - range.min) / rangeSize) * 100));
+                    const endPercent = Math.max(0, Math.min(100, (((musicEndTime || music.duration) - range.min) / rangeSize) * 100));
+
+                    return (
+                      <>
+                        <input
+                          type="range"
+                          min={range.min}
+                          max={range.max}
+                          step="0.033"
+                          value={musicPrecisionTime}
+                          onChange={(e) => {
+                            const time = parseFloat(e.target.value);
+                            setMusicPrecisionTime(time);
+                            if (editingHandle === 'start') {
+                              setMusicStartTime(time);
+                            } else {
+                              setMusicEndTime(time);
+                            }
+                            if (musicPrecisionRef.current) {
+                              musicPrecisionRef.current.currentTime = time;
+                            }
+                          }}
+                          className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
+                          style={{
+                            background: `linear-gradient(to right,
+                              #475569 0%,
+                              #475569 ${startPercent}%,
+                              #22c55e ${startPercent}%,
+                              #ef4444 ${endPercent}%,
+                              #475569 ${endPercent}%,
+                              #475569 100%)`
+                          }}
+                        />
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                          <span>{formatTime(range.min)}</span>
+                          {music.duration > 120 && (
+                            <span className="text-gray-500">Zoomed: {formatTime(rangeSize)} visible</span>
+                          )}
+                          <span>{formatTime(range.max)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Frame-by-Frame Controls */}
