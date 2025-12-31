@@ -3696,7 +3696,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Auto-Gen */}
-<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'hidden' : ''}`}>
+<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'invisible' : ''}`}>
 
   {/* Mode Selection */}
   <div className="flex items-center gap-3 text-xs">
@@ -4117,7 +4117,7 @@ const exportVideo = async () => {
   }}
   className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
   style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
-  title="Double-click to drop anchor"
+  title="Double-click to add anchor"
 >
   {/* Current time indicator - Red pill style */}
                 <div
@@ -4245,6 +4245,7 @@ onMouseLeave={() => {
       e.preventDefault();
       e.stopPropagation();
     }}
+    title=""
     className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
       previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-amber-600/60'
     } p-3 w-64 ${
@@ -4262,9 +4263,10 @@ onMouseLeave={() => {
       </div>
                             <button
                               onClick={() => setPreviewAnchor(null)}
-                              className="text-gray-400 hover:text-white"
+                              className="text-gray-400 hover:text-red-400 transition-colors"
+                              title="Close preview"
                             >
-                              <X size={14} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
 
