@@ -54,10 +54,7 @@ const ReelForge = () => {
   const [selectedHandle, setSelectedHandle] = useState('end'); // 'start' or 'end'
 
   // Music precision modal state
-  const [showMusicPrecisionModal, setShowMusicPrecisionModal] = useState(false);
-  const [musicPrecisionTime, setMusicPrecisionTime] = useState(0);
-  const [musicPrecisionPlaying, setMusicPrecisionPlaying] = useState(false);
-  const [editingHandle, setEditingHandle] = useState('start'); // 'start' or 'end' for music precision
+  const [selectedMusicHandle, setSelectedMusicHandle] = useState(null); // 'start' | 'end' | null
 
   // Unified drag state
   const [dragState, setDragState] = useState({
@@ -115,7 +112,6 @@ const ReelForge = () => {
   const previewVideoRef = useRef(null);
   const precisionVideoRef = useRef(null);
   const musicRef = useRef(null);
-  const musicPrecisionRef = useRef(null);
   const timelineRef = useRef(null);
   const lastTapTimeRef = useRef(0);
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
@@ -1701,148 +1697,84 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   };
 
-  // Audio preview for precision music editing
-  const previewMusicPosition = useCallback(() => {
-    if (!musicPrecisionRef.current) return;
+  // Adjust music handle with audio preview
+  const adjustMusicHandle = useCallback((delta) => {
+    if (!selectedMusicHandle || !music) return;
 
-    if (editingHandle === 'start') {
-      // START: Play 1 second FROM the start position (hear what begins)
-      musicPrecisionRef.current.currentTime = musicStartTime;
-      musicPrecisionRef.current.play();
+    const minDuration = 1.0; // Minimum 1 second duration
 
-      setTimeout(() => {
-        if (musicPrecisionRef.current) {
-          musicPrecisionRef.current.pause();
-          musicPrecisionRef.current.currentTime = musicStartTime;
-        }
-      }, 1000);
-    } else {
-      // END: Play 1 second BEFORE the end position (hear what's ending)
-      const endPos = musicEndTime || music?.duration || 0;
-      const previewStart = Math.max(0, endPos - 1.0);
+    if (selectedMusicHandle === 'start') {
+      const newStart = Math.max(0, Math.min((musicEndTime || musicDuration) - minDuration, musicStartTime + delta));
+      setMusicStartTime(newStart);
 
-      musicPrecisionRef.current.currentTime = previewStart;
-      musicPrecisionRef.current.play();
+      // Preview: Play 1s FROM start position
+      if (musicRef.current) {
+        musicRef.current.currentTime = newStart;
+        musicRef.current.play();
+        setTimeout(() => {
+          if (musicRef.current) {
+            musicRef.current.pause();
+            musicRef.current.currentTime = newStart;
+          }
+        }, 1000);
+      }
+    } else if (selectedMusicHandle === 'end') {
+      const newEnd = Math.max(musicStartTime + minDuration, Math.min(musicDuration, (musicEndTime || musicDuration) + delta));
+      setMusicEndTime(newEnd);
 
-      setTimeout(() => {
-        if (musicPrecisionRef.current) {
-          musicPrecisionRef.current.pause();
-          musicPrecisionRef.current.currentTime = endPos;
-        }
-      }, 1000);
+      // Preview: Play 1s BEFORE end position
+      if (musicRef.current) {
+        const previewStart = Math.max(0, newEnd - 1.0);
+        musicRef.current.currentTime = previewStart;
+        musicRef.current.play();
+        setTimeout(() => {
+          if (musicRef.current) {
+            musicRef.current.pause();
+            musicRef.current.currentTime = newEnd;
+          }
+        }, 1000);
+      }
     }
-  }, [editingHandle, musicStartTime, musicEndTime, music]);
+  }, [selectedMusicHandle, music, musicStartTime, musicEndTime, musicDuration]);
 
-  // Get full timeline range for music precision modal
-  const getMusicTimelineRange = useCallback(() => {
-    if (!music?.duration) return { min: 0, max: 100 };
-
-    // Always show full music duration
-    return { min: 0, max: music.duration };
-  }, [music]);
-
-  // Keyboard shortcuts for music precision modal
+  // Keyboard shortcuts for music handle adjustment
   useEffect(() => {
-    if (!showMusicPrecisionModal) return;
+    if (!selectedMusicHandle || !music) return;
 
     const handleKeyDown = (e) => {
-      // Prevent default for handled keys
-      if (['ArrowLeft', 'ArrowRight', ' ', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
+      // Prevent if typing in input field
+      if (e.target.tagName === 'INPUT') return;
+
+      let delta = 0;
+
+      if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        delta = e.shiftKey ? -5 : -1;
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        delta = e.shiftKey ? 5 : 1;
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        toggleMusicPreview();
+        return;
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        setSelectedMusicHandle(prev =>
+          prev === 'start' ? 'end' :
+          prev === 'end' ? 'start' :
+          'start'
+        );
+        return;
       }
 
-      const shift = e.shiftKey;
-      const ctrl = e.ctrlKey || e.metaKey;
-
-      switch (e.key) {
-        case 'ArrowLeft':
-          {
-            const delta = ctrl ? -10 : shift ? -5 : -1;
-            const minDuration = 1.0; // Minimum 1 second duration
-            let newTime;
-
-            if (editingHandle === 'start') {
-              // Ensure start doesn't exceed end minus minimum duration
-              const maxStart = (musicEndTime || music?.duration || 0) - minDuration;
-              newTime = Math.max(0, Math.min(musicPrecisionTime + delta, maxStart));
-              setMusicStartTime(newTime);
-              setMusicPrecisionTime(newTime);
-              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
-              previewMusicPosition();
-            } else {
-              // Ensure end is at least minimum duration after start
-              const minEnd = musicStartTime + minDuration;
-              newTime = Math.max(minEnd, musicPrecisionTime + delta);
-              setMusicEndTime(newTime);
-              setMusicPrecisionTime(newTime);
-              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
-              previewMusicPosition();
-            }
-          }
-          break;
-
-        case 'ArrowRight':
-          {
-            const delta = ctrl ? 10 : shift ? 5 : 1;
-            const minDuration = 1.0; // Minimum 1 second duration
-            let newTime;
-
-            if (editingHandle === 'start') {
-              // Ensure start doesn't exceed end minus minimum duration
-              const maxStart = (musicEndTime || music?.duration || 0) - minDuration;
-              newTime = Math.max(0, Math.min(musicPrecisionTime + delta, maxStart));
-              setMusicStartTime(newTime);
-              setMusicPrecisionTime(newTime);
-              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
-              previewMusicPosition();
-            } else {
-              // Ensure end is at least minimum duration after start
-              const minEnd = musicStartTime + minDuration;
-              newTime = Math.min(music?.duration || 100, Math.max(minEnd, musicPrecisionTime + delta));
-              setMusicEndTime(newTime);
-              setMusicPrecisionTime(newTime);
-              if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
-              previewMusicPosition();
-            }
-          }
-          break;
-
-        case ' ':
-          if (musicPrecisionRef.current) {
-            if (musicPrecisionPlaying) {
-              musicPrecisionRef.current.pause();
-            } else {
-              musicPrecisionRef.current.currentTime = musicPrecisionTime;
-              musicPrecisionRef.current.play();
-            }
-            setMusicPrecisionPlaying(!musicPrecisionPlaying);
-          }
-          break;
-
-        case 'Tab':
-          setEditingHandle(editingHandle === 'start' ? 'end' : 'start');
-          const newTime = editingHandle === 'start' ? (musicEndTime || music?.duration || 0) : musicStartTime;
-          setMusicPrecisionTime(newTime);
-          if (musicPrecisionRef.current) musicPrecisionRef.current.currentTime = newTime;
-          break;
-
-        case 'Enter':
-          setShowMusicPrecisionModal(false);
-          setMusicPrecisionPlaying(false);
-          if (musicPrecisionRef.current) musicPrecisionRef.current.pause();
-          break;
-
-        case 'Escape':
-          setShowMusicPrecisionModal(false);
-          setMusicPrecisionPlaying(false);
-          if (musicPrecisionRef.current) musicPrecisionRef.current.pause();
-          break;
+      if (delta !== 0) {
+        adjustMusicHandle(delta);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showMusicPrecisionModal, editingHandle, musicPrecisionTime, musicStartTime, musicEndTime, music, musicPrecisionPlaying, previewMusicPosition]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedMusicHandle, music, musicStartTime, musicEndTime, musicDuration, adjustMusicHandle, toggleMusicPreview]);
 
   // Timeline interaction (memoized)
   const seekToPosition = useCallback((e) => {
@@ -3098,7 +3030,10 @@ const exportVideo = async () => {
                         </div>
 
                         {/* Visual range selector */}
-                        <div className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer">
+                        <div
+                          className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer"
+                          onClick={() => setSelectedMusicHandle(null)}
+                        >
                           {/* Selected range highlight - Orange gradient */}
                           <div
                             className="absolute top-0 bottom-0 rounded pointer-events-none"
@@ -3111,10 +3046,19 @@ const exportVideo = async () => {
 
                           {/* Start handle - Sleek pill design */}
                           <div
-                            className="absolute top-0 bottom-0 w-1 bg-yellow-400/60 cursor-ew-resize z-10 rounded-full group"
+                            className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
+                              selectedMusicHandle === 'start'
+                                ? 'bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]'
+                                : 'bg-yellow-400/60'
+                            }`}
                             style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMusicHandle('start');
+                            }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
+                              setSelectedMusicHandle('start');
                               const startX = e.clientX;
                               const startTime = musicStartTime;
                               const rect = e.currentTarget.parentElement.getBoundingClientRect();
@@ -3171,10 +3115,19 @@ const exportVideo = async () => {
 
                           {/* End handle - Sleek pill design */}
                           <div
-                            className="absolute top-0 bottom-0 w-1 bg-red-500/60 cursor-ew-resize z-10 rounded-full group"
+                            className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
+                              selectedMusicHandle === 'end'
+                                ? 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.8)]'
+                                : 'bg-red-500/60'
+                            }`}
                             style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMusicHandle('end');
+                            }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
+                              setSelectedMusicHandle('end');
                               const startX = e.clientX;
                               const startTime = musicEndTime;
                               const rect = e.currentTarget.parentElement.getBoundingClientRect();
@@ -3261,20 +3214,58 @@ const exportVideo = async () => {
                         />
                       </div>
 
-                      {/* Precision Music Edit Button */}
-                      <button
-                        onClick={() => {
-                          if (music) {
-                            setMusicPrecisionTime(musicStartTime);
-                            setShowMusicPrecisionModal(true);
-                          }
-                        }}
-                        disabled={!music}
-                        className="w-full px-3 py-1.5 forge-button rounded-lg flex items-center justify-center gap-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                      >
-                        <ZoomIn size={14} />
-                        Precision Music Edit
-                      </button>
+                      {/* Time Display */}
+                      <div className="flex justify-between items-center mt-2 text-sm mb-3">
+                        <div className={selectedMusicHandle === 'start' ? 'font-bold text-green-400' : 'text-gray-300'}>
+                          🟢 Start: {formatTime(musicStartTime)}
+                        </div>
+                        <div className="text-gray-400">
+                          Duration: {formatTime((musicEndTime || musicDuration) - musicStartTime)}
+                        </div>
+                        <div className={selectedMusicHandle === 'end' ? 'font-bold text-red-400' : 'text-gray-300'}>
+                          🔴 End: {formatTime(musicEndTime || musicDuration)}
+                        </div>
+                      </div>
+
+                      {/* Fine-tune Buttons */}
+                      <div className="mb-3">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <span className="text-xs text-gray-400 mr-2">
+                            {selectedMusicHandle ? `Adjusting: ${selectedMusicHandle === 'start' ? 'Start' : 'End'}` : 'Select a handle'}
+                          </span>
+                          <button
+                            onClick={() => adjustMusicHandle(-1)}
+                            disabled={!selectedMusicHandle}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                          >
+                            -1s
+                          </button>
+                          <button
+                            onClick={() => adjustMusicHandle(-0.1)}
+                            disabled={!selectedMusicHandle}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                          >
+                            -0.1s
+                          </button>
+                          <button
+                            onClick={() => adjustMusicHandle(+0.1)}
+                            disabled={!selectedMusicHandle}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                          >
+                            +0.1s
+                          </button>
+                          <button
+                            onClick={() => adjustMusicHandle(+1)}
+                            disabled={!selectedMusicHandle}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                          >
+                            +1s
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 text-center">
+                          Tip: Arrow keys ±1s • Shift+Arrow ±5s • Space to preview
+                        </p>
+                      </div>
 
                       {/* Music Preview Button */}
                       <button
@@ -4860,332 +4851,6 @@ onMouseLeave={() => {
         )}
 
         {/* Music Precision Modal */}
-        {showMusicPrecisionModal && music && (
-          <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            style={{ zIndex: 9999 }}
-            onClick={() => setShowMusicPrecisionModal(false)}
-          >
-            <div
-              className="forge-panel p-6 rounded-2xl max-w-2xl w-full"
-              style={{ zIndex: 10000 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-2xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                Precision Music Editor
-              </h2>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
-                Set music start and end times with frame-precision
-              </p>
-
-              {/* Start/End Toggle Buttons */}
-              <div className="flex gap-3 mb-6">
-                <button
-                  onClick={() => {
-                    setEditingHandle('start');
-                    setMusicPrecisionTime(musicStartTime);
-                    if (musicPrecisionRef.current) {
-                      musicPrecisionRef.current.currentTime = musicStartTime;
-                    }
-                  }}
-                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                    editingHandle === 'start'
-                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/50'
-                      : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                  }`}
-                >
-                  <span className="text-xl">🟢</span>
-                  Music Start
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingHandle('end');
-                    const endTime = musicEndTime || music.duration;
-                    setMusicPrecisionTime(endTime);
-                    if (musicPrecisionRef.current) {
-                      musicPrecisionRef.current.currentTime = endTime;
-                    }
-                  }}
-                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                    editingHandle === 'end'
-                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
-                      : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                  }`}
-                >
-                  <span className="text-xl">🔴</span>
-                  Music End
-                </button>
-              </div>
-
-              {/* Audio Player */}
-              <div className="bg-black rounded-lg p-4 mb-4">
-                <audio
-                  ref={musicPrecisionRef}
-                  src={musicUrl}
-                  onTimeUpdate={(e) => {
-                    if (musicPrecisionPlaying) {
-                      setMusicPrecisionTime(e.target.currentTime);
-                    }
-                  }}
-                  onEnded={() => setMusicPrecisionPlaying(false)}
-                />
-
-                {/* Current Time Display */}
-                <div className="text-center mb-4">
-                  <div className="text-sm text-gray-400 mb-1">
-                    {editingHandle === 'start' ? 'Music Start Time' : 'Music End Time'}
-                  </div>
-                  <div className={`text-3xl font-mono font-bold ${
-                    editingHandle === 'start' ? 'text-green-500' : 'text-red-500'
-                  }`}>
-                    {formatTime(musicPrecisionTime)}
-                  </div>
-                  <div className="text-sm text-gray-400 mt-3">
-                    <span className="font-semibold">Duration:</span>{' '}
-                    <span className="text-purple-400 font-mono">
-                      {formatTime((musicEndTime || music.duration) - musicStartTime)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Play/Pause Button */}
-                <div className="flex justify-center mb-4">
-                  <button
-                    onClick={() => {
-                      if (musicPrecisionRef.current) {
-                        if (musicPrecisionPlaying) {
-                          musicPrecisionRef.current.pause();
-                        } else {
-                          musicPrecisionRef.current.currentTime = musicPrecisionTime;
-                          musicPrecisionRef.current.play();
-                        }
-                        setMusicPrecisionPlaying(!musicPrecisionPlaying);
-                      }
-                    }}
-                    className="p-4 forge-button-hot rounded-full shadow-lg transition hover:scale-110"
-                  >
-                    {musicPrecisionPlaying ? <Pause size={24} /> : <Play size={24} />}
-                  </button>
-                </div>
-
-                {/* Timeline Scrubber with smart range */}
-                <div className="relative mb-4">
-                  {(() => {
-                    const range = getMusicTimelineRange();
-                    const rangeSize = range.max - range.min;
-
-                    // Calculate gradient positions relative to visible range
-                    const startPercent = Math.max(0, Math.min(100, ((musicStartTime - range.min) / rangeSize) * 100));
-                    const endPercent = Math.max(0, Math.min(100, (((musicEndTime || music.duration) - range.min) / rangeSize) * 100));
-
-                    return (
-                      <>
-                        <input
-                          type="range"
-                          min={range.min}
-                          max={range.max}
-                          step="0.033"
-                          value={musicPrecisionTime}
-                          onChange={(e) => {
-                            const time = parseFloat(e.target.value);
-                            const minDuration = 1.0; // Minimum 1 second duration
-
-                            if (editingHandle === 'start') {
-                              // Ensure start doesn't exceed end minus minimum duration
-                              const maxStart = (musicEndTime || music.duration) - minDuration;
-                              const validTime = Math.min(time, maxStart);
-                              setMusicStartTime(validTime);
-                              setMusicPrecisionTime(validTime);
-                              if (musicPrecisionRef.current) {
-                                musicPrecisionRef.current.currentTime = validTime;
-                              }
-                            } else {
-                              // Ensure end is at least minimum duration after start
-                              const minEnd = musicStartTime + minDuration;
-                              const validTime = Math.max(time, minEnd);
-                              setMusicEndTime(validTime);
-                              setMusicPrecisionTime(validTime);
-                              if (musicPrecisionRef.current) {
-                                musicPrecisionRef.current.currentTime = validTime;
-                              }
-                            }
-                          }}
-                          className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 sm:[&::-webkit-slider-thumb]:w-2 sm:[&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-ew-resize [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:hover:bg-purple-400 [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 sm:[&::-moz-range-thumb]:w-2 sm:[&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-ew-resize [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
-                          style={{
-                            background: `linear-gradient(to right,
-                              #475569 0%,
-                              #475569 ${startPercent}%,
-                              #22c55e ${startPercent}%,
-                              #ef4444 ${endPercent}%,
-                              #475569 ${endPercent}%,
-                              #475569 100%)`
-                          }}
-                        />
-                        <div className="flex justify-between text-xs text-gray-400 mt-1">
-                          <span>{formatTime(range.min)}</span>
-                          <span className="text-gray-500">{formatTime(music.duration / 2)}</span>
-                          <span>{formatTime(range.max)}</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Frame-by-Frame Controls */}
-                <div className="flex justify-center gap-2 mb-4">
-                  <button
-                    onClick={() => {
-                      const minDuration = 1.0; // Minimum 1 second duration
-                      let newTime;
-
-                      if (editingHandle === 'start') {
-                        // Ensure start doesn't exceed end minus minimum duration
-                        const maxStart = (musicEndTime || music.duration) - minDuration;
-                        newTime = Math.max(0, Math.min(musicPrecisionTime - 1, maxStart));
-                        setMusicStartTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      } else {
-                        // Ensure end is at least minimum duration after start
-                        const minEnd = musicStartTime + minDuration;
-                        newTime = Math.max(minEnd, musicPrecisionTime - 1);
-                        setMusicEndTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      }
-
-                      if (musicPrecisionRef.current) {
-                        musicPrecisionRef.current.currentTime = newTime;
-                      }
-                      previewMusicPosition();
-                    }}
-                    className="px-4 py-2 forge-button rounded-lg text-sm"
-                  >
-                    -1s
-                  </button>
-                  <button
-                    onClick={() => {
-                      const minDuration = 1.0; // Minimum 1 second duration
-                      let newTime;
-
-                      if (editingHandle === 'start') {
-                        // Ensure start doesn't exceed end minus minimum duration
-                        const maxStart = (musicEndTime || music.duration) - minDuration;
-                        newTime = Math.max(0, Math.min(musicPrecisionTime - 0.1, maxStart));
-                        setMusicStartTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      } else {
-                        // Ensure end is at least minimum duration after start
-                        const minEnd = musicStartTime + minDuration;
-                        newTime = Math.max(minEnd, musicPrecisionTime - 0.1);
-                        setMusicEndTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      }
-
-                      if (musicPrecisionRef.current) {
-                        musicPrecisionRef.current.currentTime = newTime;
-                      }
-                      previewMusicPosition();
-                    }}
-                    className="px-4 py-2 forge-button rounded-lg text-sm"
-                  >
-                    -0.1s
-                  </button>
-                  <button
-                    onClick={() => {
-                      const minDuration = 1.0; // Minimum 1 second duration
-                      let newTime;
-
-                      if (editingHandle === 'start') {
-                        // Ensure start doesn't exceed end minus minimum duration
-                        const maxStart = (musicEndTime || music.duration) - minDuration;
-                        newTime = Math.max(0, Math.min(musicPrecisionTime + 0.1, maxStart));
-                        setMusicStartTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      } else {
-                        // Ensure end is at least minimum duration after start
-                        const minEnd = musicStartTime + minDuration;
-                        newTime = Math.min(music.duration, Math.max(minEnd, musicPrecisionTime + 0.1));
-                        setMusicEndTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      }
-
-                      if (musicPrecisionRef.current) {
-                        musicPrecisionRef.current.currentTime = newTime;
-                      }
-                      previewMusicPosition();
-                    }}
-                    className="px-4 py-2 forge-button rounded-lg text-sm"
-                  >
-                    +0.1s
-                  </button>
-                  <button
-                    onClick={() => {
-                      const minDuration = 1.0; // Minimum 1 second duration
-                      let newTime;
-
-                      if (editingHandle === 'start') {
-                        // Ensure start doesn't exceed end minus minimum duration
-                        const maxStart = (musicEndTime || music.duration) - minDuration;
-                        newTime = Math.max(0, Math.min(musicPrecisionTime + 1, maxStart));
-                        setMusicStartTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      } else {
-                        // Ensure end is at least minimum duration after start
-                        const minEnd = musicStartTime + minDuration;
-                        newTime = Math.min(music.duration, Math.max(minEnd, musicPrecisionTime + 1));
-                        setMusicEndTime(newTime);
-                        setMusicPrecisionTime(newTime);
-                      }
-
-                      if (musicPrecisionRef.current) {
-                        musicPrecisionRef.current.currentTime = newTime;
-                      }
-                      previewMusicPosition();
-                    }}
-                    className="px-4 py-2 forge-button rounded-lg text-sm"
-                  >
-                    +1s
-                  </button>
-                </div>
-
-                {/* Keyboard Shortcuts Hint */}
-                <div className="text-xs text-center text-gray-500">
-                  <div className="mb-1">Keyboard shortcuts:</div>
-                  <div>← → (±1s) • Shift+← → (±5s) • Space (play) • Tab (toggle start/end)</div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => {
-                    setShowMusicPrecisionModal(false);
-                    setMusicPrecisionPlaying(false);
-                    if (musicPrecisionRef.current) {
-                      musicPrecisionRef.current.pause();
-                    }
-                  }}
-                  className="px-6 py-3 forge-button rounded-lg font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setMusicStartTime(musicPrecisionTime);
-                    setShowMusicPrecisionModal(false);
-                    setMusicPrecisionPlaying(false);
-                    if (musicPrecisionRef.current) {
-                      musicPrecisionRef.current.pause();
-                    }
-                  }}
-                  className="px-6 py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold transition"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* TAB 3: SHIP */}
         {currentTab === 'ship' && video && (
           <div className="forge-panel rounded-2xl p-8">
