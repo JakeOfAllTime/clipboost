@@ -144,6 +144,9 @@ body {
 /* Prevent overscroll/bounce on iOS */
 html {
   overscroll-behavior: none;
+  /* Prevent scrollbar from appearing/disappearing and shifting layout */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
 /* Improve touch precision */
