@@ -1887,6 +1887,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, []);
 
+  // Update preview video time when hovering different anchors
+  useEffect(() => {
+    const anchor = hoveredAnchor || previewAnchor;
+    if (anchor && previewVideoRef.current && !previewAnchor) {
+      // Only update on hover if there's no selected preview anchor
+      previewVideoRef.current.currentTime = anchor.start;
+    }
+  }, [hoveredAnchor, previewAnchor]);
+
   const handleAnchorMouseDown = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
@@ -3049,7 +3058,7 @@ const exportVideo = async () => {
                             className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
                               selectedMusicHandle === 'start'
                                 ? 'bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]'
-                                : 'bg-yellow-400/60'
+                                : 'bg-green-500/60'
                             }`}
                             style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
                             onClick={(e) => {
@@ -3110,7 +3119,7 @@ const exportVideo = async () => {
                             title="Drag to adjust start"
                           >
                             {/* Pill-shaped grab handle */}
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-yellow-400 group-hover:bg-yellow-300 group-active:bg-yellow-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-green-400 group-hover:bg-green-300 group-active:bg-green-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
                           </div>
 
                           {/* End handle - Sleek pill design */}
@@ -3194,9 +3203,9 @@ const exportVideo = async () => {
                         <div className="flex justify-between items-center mb-0.5">
                           <label className="text-xs text-gray-400">Balance</label>
                           <span className="text-xs flex items-center gap-1.5">
-                            <span className="text-red-500 font-semibold">Music {audioBalance}%</span>
+                            <span className="text-blue-400 font-semibold">Video {100 - audioBalance}%</span>
                             <span className="text-gray-600">•</span>
-                            <span className="text-red-400 font-semibold">Video {100 - audioBalance}%</span>
+                            <span className="text-green-400 font-semibold">Music {audioBalance}%</span>
                           </span>
                         </div>
                         <input
@@ -3207,22 +3216,28 @@ const exportVideo = async () => {
                           onChange={(e) => setAudioBalance(parseInt(e.target.value))}
                           onTouchStart={(e) => setAudioBalance(parseInt(e.target.value))}
                           onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(239,68,68,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
                           style={{
-                            background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${audioBalance}%, #dc2626 ${audioBalance}%, #dc2626 100%)`
+                            background: `linear-gradient(to right, rgb(96, 165, 250) 0%, rgb(96, 165, 250) ${100 - audioBalance}%, rgb(74, 222, 128) ${100 - audioBalance}%, rgb(74, 222, 128) 100%)`
                           }}
                         />
                       </div>
 
                       {/* Time Display */}
                       <div className="flex justify-between items-center mt-2 text-sm mb-3">
-                        <div className={selectedMusicHandle === 'start' ? 'font-bold text-green-400' : 'text-gray-300'}>
+                        <div
+                          onClick={() => setSelectedMusicHandle('start')}
+                          className={`cursor-pointer transition-colors ${selectedMusicHandle === 'start' ? 'font-bold text-green-400' : 'text-gray-300 hover:text-green-300'}`}
+                        >
                           🟢 Start: {formatTime(musicStartTime)}
                         </div>
                         <div className="text-gray-400">
                           Duration: {formatTime((musicEndTime || musicDuration) - musicStartTime)}
                         </div>
-                        <div className={selectedMusicHandle === 'end' ? 'font-bold text-red-400' : 'text-gray-300'}>
+                        <div
+                          onClick={() => setSelectedMusicHandle('end')}
+                          className={`cursor-pointer transition-colors ${selectedMusicHandle === 'end' ? 'font-bold text-red-400' : 'text-gray-300 hover:text-red-300'}`}
+                        >
                           🔴 End: {formatTime(musicEndTime || musicDuration)}
                         </div>
                       </div>
