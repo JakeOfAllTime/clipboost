@@ -41,6 +41,7 @@ const ReelForge = () => {
   const [anchors, setAnchors] = useState([]);
   const [selectedAnchor, setSelectedAnchor] = useState(null);
   const [previewAnchor, setPreviewAnchor] = useState(null);
+  const [previewHandle, setPreviewHandle] = useState('start'); // 'start' or 'end' - which handle to show
 
   // Undo/Redo state
   const [history, setHistory] = useState([]);
@@ -1880,21 +1881,23 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setSelectedAnchor(anchor.id);
     setHoveredAnchor(null);
     setPreviewAnchor(anchor);
+    setPreviewHandle('start'); // Default to showing start frame
 
-    // Use ref instead of setTimeout for immediate video seek
+    // Set video to start frame when clicking
     if (previewVideoRef.current) {
       previewVideoRef.current.currentTime = anchor.start;
     }
   }, []);
 
-  // Update preview video time when hovering different anchors
+  // Update preview video time when hovering/selecting different anchors or changing handle
   useEffect(() => {
-    const anchor = hoveredAnchor || previewAnchor;
-    if (anchor && previewVideoRef.current && !previewAnchor) {
-      // Only update on hover if there's no selected preview anchor
-      previewVideoRef.current.currentTime = anchor.start;
+    const anchor = previewAnchor || hoveredAnchor;
+    if (anchor && previewVideoRef.current) {
+      // Show the frame based on which handle is being previewed
+      const time = previewHandle === 'end' ? anchor.end : anchor.start;
+      previewVideoRef.current.currentTime = time;
     }
-  }, [hoveredAnchor, previewAnchor]);
+  }, [hoveredAnchor, previewAnchor, previewHandle]);
 
   // Click outside to deselect anchor
   useEffect(() => {
@@ -1998,14 +2001,14 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         ).sort((a, b) => a.start - b.start);
         setAnchors(updated);
 
-        // Update preview video if this anchor is being previewed
-        if (previewAnchor?.id === selectedAnchor && previewVideoRef.current) {
+        // Update preview handle state when dragging
+        if (previewAnchor?.id === selectedAnchor) {
           if (dragState.type === 'anchor-left') {
             // Dragging start handle → show start frame
-            previewVideoRef.current.currentTime = newStart;
+            setPreviewHandle('start');
           } else if (dragState.type === 'anchor-right') {
             // Dragging end handle → show end frame
-            previewVideoRef.current.currentTime = newEnd;
+            setPreviewHandle('end');
           }
         }
       }
@@ -2357,12 +2360,22 @@ const goToNextAnchor = () => {
             Math.min(snapshot.end - 1, snapshot.start + deltaTime)
           );
           setPrecisionAnchor(prev => ({ ...snapshot, start: newStart }));
+          // Update precisionTime and video to show the start frame being dragged
+          setPrecisionTime(newStart);
+          if (precisionVideoRef.current) {
+            precisionVideoRef.current.currentTime = newStart;
+          }
         } else if (precisionDragState.type === 'end') {
           const newEnd = Math.max(
             snapshot.start + 1,
             Math.min(range.end, snapshot.end + deltaTime)
           );
           setPrecisionAnchor(prev => ({ ...snapshot, end: newEnd }));
+          // Update precisionTime and video to show the end frame being dragged
+          setPrecisionTime(newEnd);
+          if (precisionVideoRef.current) {
+            precisionVideoRef.current.currentTime = newEnd;
+          }
         }
       });
     };
