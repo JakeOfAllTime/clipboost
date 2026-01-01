@@ -1,5 +1,5 @@
 // API Route: Server-side narrative analysis with Claude Vision API
-// This avoids CORS issues by calling Anthropic API from the server
+// Supports autonomous frame requests via tool use
 
 export default async function handler(req, res) {
   // Only allow POST requests
@@ -8,8 +8,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { frames, targetDuration, isMultiModal, transcript, audioTopics } = req.body;
+    const { frames, targetDuration, isMultiModal, transcript, audioTopics, messages } = req.body;
 
+    // If messages array provided, handle multi-turn conversation
+    if (messages && Array.isArray(messages)) {
+      return handleMultiTurnConversation(req, res, messages);
+    }
+
+    // Otherwise, handle initial request (backward compatibility)
     if (!frames || !Array.isArray(frames)) {
       return res.status(400).json({ error: 'Invalid frames data' });
     }
@@ -112,6 +118,10 @@ If present in the frames, they should ALMOST ALWAYS be included as the FINAL cli
 
 Missing endings makes clips feel incomplete and unsatisfying.
 
+AUTONOMOUS FRAME REQUESTS:
+If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
+you can use the request_additional_frames tool to ask for more frames from specific time ranges.
+
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
   "storyType": "tutorial|transformation|vlog|product_demo|interview|performance|other",
@@ -212,6 +222,10 @@ If present in the frames, they should ALMOST ALWAYS be included as the FINAL cli
 
 Missing endings makes clips feel incomplete and unsatisfying.
 
+AUTONOMOUS FRAME REQUESTS:
+If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
+you can use the request_additional_frames tool to ask for more frames from specific time ranges.
+
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
   "storyType": "string",
@@ -255,7 +269,36 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       });
     });
 
-    console.log('🤖 API: Calling Anthropic API...');
+    console.log('🤖 API: Calling Anthropic API with tool use...');
+
+    // Define the request_additional_frames tool
+    const tools = [{
+      name: "request_additional_frames",
+      description: "Request additional frames from a specific time range in the video when you need to see more detail about a particular moment (e.g., final result, transformation reveal, key technique).",
+      input_schema: {
+        type: "object",
+        properties: {
+          start_time: {
+            type: "number",
+            description: "Start time in seconds for the frame extraction range"
+          },
+          end_time: {
+            type: "number",
+            description: "End time in seconds for the frame extraction range"
+          },
+          reason: {
+            type: "string",
+            description: "Explain what you're looking for in this time range and why you need these frames"
+          },
+          frame_count: {
+            type: "number",
+            description: "Number of frames to extract from this range (default: 6, max: 10)",
+            default: 6
+          }
+        },
+        required: ["start_time", "end_time", "reason"]
+      }
+    }];
 
     // Call Anthropic API (server-side, no CORS issues)
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -272,7 +315,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
         messages: [{
           role: "user",
           content: content
-        }]
+        }],
+        tools: tools
       })
     });
 
@@ -286,28 +330,86 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     }
 
     const data = await response.json();
-    const textContent = data.content.find(c => c.type === 'text')?.text || '';
 
-    console.log('📝 API: Received response, parsing JSON...');
-
-    // Parse the JSON response
-    try {
-      const narrative = JSON.parse(textContent);
-      console.log('✅ API: Successfully analyzed narrative:', {
-        storyType: narrative.storyType,
-        cutsCount: narrative.suggestedCuts?.length
-      });
-      return res.status(200).json(narrative);
-    } catch (parseError) {
-      console.error('❌ API: Failed to parse narrative JSON:', textContent);
-      return res.status(500).json({
-        error: 'Invalid response from AI',
-        rawResponse: textContent
-      });
-    }
+    // Return the raw response so client can handle tool use
+    console.log('✅ API: Response received');
+    return res.status(200).json({ content: data.content, stop_reason: data.stop_reason });
 
   } catch (error) {
     console.error('❌ API: Narrative analysis error:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+}
+
+// Handle multi-turn conversations with tool results
+async function handleMultiTurnConversation(req, res, messages) {
+  try {
+    console.log(`🔄 API: Multi-turn conversation (${messages.length} messages)`);
+
+    // Define tools
+    const tools = [{
+      name: "request_additional_frames",
+      description: "Request additional frames from a specific time range in the video when you need to see more detail about a particular moment.",
+      input_schema: {
+        type: "object",
+        properties: {
+          start_time: {
+            type: "number",
+            description: "Start time in seconds"
+          },
+          end_time: {
+            type: "number",
+            description: "End time in seconds"
+          },
+          reason: {
+            type: "string",
+            description: "What you're looking for in this range"
+          },
+          frame_count: {
+            type: "number",
+            description: "Number of frames (default: 6, max: 10)",
+            default: 6
+          }
+        },
+        required: ["start_time", "end_time", "reason"]
+      }
+    }];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        temperature: 0.5,
+        messages: messages,
+        tools: tools
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API: Anthropic API error:', errorText);
+      return res.status(response.status).json({
+        error: 'API request failed',
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    console.log('✅ API: Multi-turn response received');
+
+    return res.status(200).json({ content: data.content, stop_reason: data.stop_reason });
+
+  } catch (error) {
+    console.error('❌ API: Multi-turn error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message

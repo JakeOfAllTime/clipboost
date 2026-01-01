@@ -954,6 +954,54 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
   });
 };
 
+// Extract frames from a specific time range (for autonomous frame requests)
+const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount = 6) => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    video.src = URL.createObjectURL(videoFile);
+    video.muted = true;
+
+    video.onloadedmetadata = async () => {
+      canvas.width = 320;  // Smaller size for additional frames
+      canvas.height = 180;
+
+      const duration = endTime - startTime;
+      const interval = duration / (frameCount - 1);
+      const frames = [];
+
+      for (let i = 0; i < frameCount; i++) {
+        const timestamp = startTime + (i * interval);
+
+        await new Promise((seekResolve) => {
+          video.onseeked = () => {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = dataUrl.split(',')[1];
+
+            frames.push({
+              timestamp: timestamp,
+              base64: base64Data,
+              reason: 'requested_by_claude'
+            });
+
+            seekResolve();
+          };
+
+          video.currentTime = timestamp;
+        });
+      }
+
+      URL.revokeObjectURL(video.src);
+      resolve(frames);
+    };
+
+    video.onerror = () => reject(new Error('Video loading failed for frame extraction'));
+  });
+};
+
 // Type-Specific Instructions for Smart Gen
 const getTypeSpecificInstructions = (storyType) => {
   const instructions = {
@@ -1038,44 +1086,151 @@ const getTypeSpecificInstructions = (storyType) => {
   return instructions[storyType] || instructions.tutorial; // Default fallback
 };
 
-// Claude API Narrative Analysis (via API route to avoid CORS)
-const analyzeNarrative = async (frames, targetDuration = 60) => {
+// Claude API Narrative Analysis with autonomous frame requests
+const analyzeNarrative = async (frames, targetDuration = 60, videoFile = null, videoDuration = 0) => {
   try {
-    // Call OUR API route (no CORS issues, API key handled server-side)
-    const response = await fetch("/api/analyze-narrative", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        frames: frames,
-        targetDuration: targetDuration
-      })
-    });
+    // Start with initial frames
+    let conversationMessages = null; // Will be built by API on first call
+    let attempts = 0;
+    const MAX_ATTEMPTS = 3; // Prevent infinite loops
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('API error:', error);
-      throw new Error(error.error || 'Failed to analyze narrative');
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++;
+
+      console.log(`🔄 Analysis attempt ${attempts}/${MAX_ATTEMPTS}`);
+
+      // Build request body
+      const requestBody = conversationMessages
+        ? { messages: conversationMessages } // Multi-turn
+        : { frames, targetDuration }; // Initial request
+
+      const response = await fetch('/api/analyze-narrative', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('API error:', error);
+        throw new Error(error.error || 'Failed to analyze narrative');
+      }
+
+      const data = await response.json();
+      const content = data.content;
+      const stopReason = data.stop_reason;
+
+      // Check if Claude used the request_additional_frames tool
+      const toolUse = content.find(block => block.type === 'tool_use');
+
+      if (toolUse && toolUse.name === 'request_additional_frames') {
+        const { start_time, end_time, reason, frame_count = 6 } = toolUse.input;
+
+        console.log(`🔍 Claude requesting additional frames:`, {
+          range: `${formatTime(start_time)} - ${formatTime(end_time)}`,
+          reason,
+          frameCount: frame_count
+        });
+
+        // Extract the requested frames
+        if (!videoFile) {
+          console.error('❌ No video file available for additional frame extraction');
+          throw new Error('Cannot extract additional frames without video file');
+        }
+
+        const additionalFrames = await extractFramesFromRange(
+          videoFile,
+          start_time,
+          end_time,
+          Math.min(frame_count, 10) // Cap at 10 frames
+        );
+
+        console.log(`✅ Extracted ${additionalFrames.length} additional frames`);
+
+        // Build conversation messages for next turn
+        if (!conversationMessages) {
+          // First tool use - need to build initial message
+          conversationMessages = [{
+            role: "user",
+            content: [
+              { type: "text", text: `Analyze these ${frames.length} frames from a video for ${targetDuration}s target.` },
+              ...frames.map(f => ({
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
+              }))
+            ]
+          }];
+        }
+
+        // Add assistant's response (including tool use)
+        conversationMessages.push({
+          role: "assistant",
+          content: content
+        });
+
+        // Add tool result
+        conversationMessages.push({
+          role: "user",
+          content: [{
+            type: "tool_result",
+            tool_use_id: toolUse.id,
+            content: [
+              { type: "text", text: `Extracted ${additionalFrames.length} frames from ${formatTime(start_time)} to ${formatTime(end_time)}:` },
+              ...additionalFrames.map((f, i) => ([
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
+                },
+                {
+                  type: "text",
+                  text: `Additional frame ${i + 1}/${additionalFrames.length} at ${f.timestamp.toFixed(1)}s`
+                }
+              ])).flat()
+            ]
+          }]
+        });
+
+        // Continue the loop to get Claude's next response
+        continue;
+      }
+
+      // If no tool use, we have the final response
+      const textBlock = content.find(block => block.type === 'text');
+      if (!textBlock) {
+        throw new Error('No text response from Claude');
+      }
+
+      // Parse the JSON response
+      let narrative;
+      try {
+        const cleaned = textBlock.text.replace(/```json\n?|\n?```/g, '').trim();
+        narrative = JSON.parse(cleaned);
+      } catch (parseError) {
+        console.error('JSON parse error:', textBlock.text);
+        throw new Error('Invalid JSON response');
+      }
+
+      // Log the final analysis
+      console.log('🎬 Story Type:', narrative.storyType);
+      console.log('📝 Narrative:', narrative.narrative);
+      if (narrative.keyMomentsFound && narrative.keyMomentsFound.length > 0) {
+        console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
+      }
+      if (narrative.missingMoments && narrative.missingMoments.length > 0) {
+        console.log('⚠️ Missing Moments:', narrative.missingMoments);
+      }
+      console.log('🎯 Confidence:', narrative.confidence);
+      if (attempts > 1) {
+        console.log(`✨ Completed after ${attempts} analysis rounds`);
+      }
+
+      return narrative; // Success!
     }
 
-    const narrative = await response.json();
-
-    // Log the story type analysis
-    console.log('🎬 Story Type:', narrative.storyType);
-    console.log('📝 Narrative:', narrative.narrative);
-    if (narrative.keyMomentsFound && narrative.keyMomentsFound.length > 0) {
-      console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
-    }
-    if (narrative.missingMoments && narrative.missingMoments.length > 0) {
-      console.log('⚠️ Missing Moments:', narrative.missingMoments);
-    }
-    console.log('🎯 Confidence:', narrative.confidence);
-
-    return narrative;
+    throw new Error('Max attempts reached without final response');
 
   } catch (error) {
-    console.error('Narrative analysis failed:', error);
+    console.error('❌ Narrative analysis failed:', error);
     return null;
   }
 };
@@ -4010,9 +4165,9 @@ const exportVideo = async () => {
             const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
             console.log(`✅ Extracted ${frames.length} frames`);
 
-            // Step 3: Analyze with Claude (visual only)
-            console.log('🤖 Analyzing narrative (visual only)...');
-            const narrative = await analyzeNarrative(frames, targetDuration);
+            // Step 3: Analyze with Claude (visual only) - with autonomous frame requests
+            console.log('🤖 Analyzing narrative (visual only) with autonomous frame requests...');
+            const narrative = await analyzeNarrative(frames, targetDuration, video, duration);
 
             if (!narrative) {
               alert('Narrative analysis failed. Please try again.');
