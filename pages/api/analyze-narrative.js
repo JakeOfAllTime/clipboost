@@ -100,8 +100,59 @@ FOR PERFORMANCE:
 STEP 4: FIND VISUAL + AUDIO SYNERGY
 Search for moments where what you SEE and what you HEAR align powerfully.
 
-STEP 5: BUILD THE NARRATIVE
-Create 5-8 anchors using type-specific strategy, respecting speech pauses.
+STEP 5: DETERMINE OPTIMAL CLIP LENGTH FOR EACH MOMENT
+
+For EVERY moment you identify, think through:
+
+QUESTION 1: "What is this moment doing?"
+- Establishing context (intro, setup, location)?
+- Demonstrating action (technique, process, how-to)?
+- Revealing result (payoff, transformation, final product)?
+- Showing reaction (emotion, satisfaction, surprise)?
+- Providing information (text, list, explanation)?
+
+QUESTION 2: "How long does THIS SPECIFIC content need to communicate effectively?"
+
+SELF-PROMPTING GUIDELINES:
+
+For Text/Graphics:
+→ Ask: "Can a viewer read/absorb this in time?"
+→ Typical: 2-4 seconds (ingredient lists, titles, captions)
+→ Longer if dense (5-6s for paragraph of text)
+
+For Action/Technique:
+→ Ask: "Does this show a complete movement or process?"
+→ Typical: 5-8 seconds (enough to see start → middle → finish)
+→ Shorter if repetitive (3-4s for simple actions)
+
+For Reveals (Results/Transformations):
+→ Ask: "Is this a payoff moment that deserves impact?"
+→ Typical: 6-10 seconds (let the reveal land, show before/after)
+→ Longer if complex (8-12s for detailed transformation)
+
+For Reactions/Emotions:
+→ Ask: "Quick beat or extended moment?"
+→ Typical: 2-4 seconds (instant emotional response)
+→ Longer if story-critical (5-6s for meaningful exchange)
+
+For Establishing Shots:
+→ Ask: "Context or filler?"
+→ Typical: 2-3 seconds (set scene, then move on)
+
+PACING PHILOSOPHY:
+- Vary clip lengths for rhythm (3s → 7s → 4s → 9s creates energy)
+- Fast cuts for information/setup (keep momentum)
+- Slower holds for impact (reveals, climaxes, reactions)
+- Match the content's natural energy (frantic = quick cuts, serene = longer holds)
+
+CLIP COUNT TARGETS (flexible based on content):
+- 40-second target: Aim for 6-10 clips (average 4-7s each, but varied)
+- 60-second target: Aim for 10-15 clips (average 4-6s each, but varied)
+- Don't force it - if content naturally needs fewer longer clips, that's OK
+- Prioritize rhythm over hitting exact counts
+
+STEP 6: BUILD THE NARRATIVE
+Create 5-8 anchors using type-specific strategy and self-determined clip lengths.
 
 CRITICAL: ENDING MOMENTS
 
@@ -141,6 +192,7 @@ ONLY output this exact JSON structure:
       "endTime": number (align with speech pauses when possible),
       "visualReason": "what's happening visually",
       "audioReason": "what's being said/emphasized",
+      "clipLengthReasoning": "why this duration is optimal for THIS content (e.g., 'Text needs 3s to be readable', 'Technique needs 6s to show full motion', 'Reveal deserves 8s for impact')",
       "narrativeRole": "hook|build|climax|payoff",
       "importance": number between 0-1
     }
@@ -212,8 +264,59 @@ FOR PERFORMANCE:
 STEP 4: FIND THOSE MOMENTS
 Search the provided frames for the key moments relevant to this video type.
 
-STEP 5: BUILD THE NARRATIVE
-Create 5-8 anchors that tell the story using the type-specific strategy.
+STEP 5: DETERMINE OPTIMAL CLIP LENGTH FOR EACH MOMENT
+
+For EVERY moment you identify, think through:
+
+QUESTION 1: "What is this moment doing?"
+- Establishing context (intro, setup, location)?
+- Demonstrating action (technique, process, how-to)?
+- Revealing result (payoff, transformation, final product)?
+- Showing reaction (emotion, satisfaction, surprise)?
+- Providing information (text, list, explanation)?
+
+QUESTION 2: "How long does THIS SPECIFIC content need to communicate effectively?"
+
+SELF-PROMPTING GUIDELINES:
+
+For Text/Graphics:
+→ Ask: "Can a viewer read/absorb this in time?"
+→ Typical: 2-4 seconds (ingredient lists, titles, captions)
+→ Longer if dense (5-6s for paragraph of text)
+
+For Action/Technique:
+→ Ask: "Does this show a complete movement or process?"
+→ Typical: 5-8 seconds (enough to see start → middle → finish)
+→ Shorter if repetitive (3-4s for simple actions)
+
+For Reveals (Results/Transformations):
+→ Ask: "Is this a payoff moment that deserves impact?"
+→ Typical: 6-10 seconds (let the reveal land, show before/after)
+→ Longer if complex (8-12s for detailed transformation)
+
+For Reactions/Emotions:
+→ Ask: "Quick beat or extended moment?"
+→ Typical: 2-4 seconds (instant emotional response)
+→ Longer if story-critical (5-6s for meaningful exchange)
+
+For Establishing Shots:
+→ Ask: "Context or filler?"
+→ Typical: 2-3 seconds (set scene, then move on)
+
+PACING PHILOSOPHY:
+- Vary clip lengths for rhythm (3s → 7s → 4s → 9s creates energy)
+- Fast cuts for information/setup (keep momentum)
+- Slower holds for impact (reveals, climaxes, reactions)
+- Match the content's natural energy (frantic = quick cuts, serene = longer holds)
+
+CLIP COUNT TARGETS (flexible based on content):
+- 40-second target: Aim for 6-10 clips (average 4-7s each, but varied)
+- 60-second target: Aim for 10-15 clips (average 4-6s each, but varied)
+- Don't force it - if content naturally needs fewer longer clips, that's OK
+- Prioritize rhythm over hitting exact counts
+
+STEP 6: BUILD THE NARRATIVE
+Create 5-8 anchors that tell the story using the type-specific strategy and self-determined clip lengths.
 
 CRITICAL: ENDING MOMENTS
 
@@ -244,7 +347,7 @@ Do NOT include:
 
 ONLY output this exact JSON structure:
 {
-  "storyType": "string",
+  "storyType": "tutorial|transformation|vlog|product_demo|interview|performance|other",
   "narrative": "brief description",
   "keyMomentsFound": ["which key moments you identified"],
   "suggestedCuts": [
@@ -252,6 +355,7 @@ ONLY output this exact JSON structure:
       "startTime": number,
       "endTime": number,
       "reason": "why this moment matters for this TYPE",
+      "clipLengthReasoning": "why this duration is optimal for THIS content (e.g., 'Text needs 3s to be readable', 'Technique needs 6s to show full motion', 'Reveal deserves 8s for impact')",
       "narrativeRole": "hook|build|climax|payoff",
       "importance": 0-1
     }
