@@ -3696,7 +3696,7 @@ const exportVideo = async () => {
 </div>
 
 {/* Right Group: Auto-Gen */}
-<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'invisible' : ''}`}>
+<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'invisible' : ''}`} style={{ zIndex: 1 }}>
 
   {/* Mode Selection */}
   <div className="flex items-center gap-3 text-xs">
@@ -4199,7 +4199,7 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.start;
                                 }
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-8 sm:w-2 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 active:opacity-100 active:scale-110 -ml-4 sm:-ml-1 transition-all rounded-md touch-none"
+                              className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 transition-all rounded-full touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust start time"
                             />
@@ -4225,7 +4225,7 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.end;
                                 }
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-8 sm:w-2 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 active:opacity-100 active:scale-110 -mr-4 sm:-mr-1 transition-all rounded-md touch-none"
+                              className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 transition-all rounded-full touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust end time"
                             />
@@ -4851,7 +4851,7 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.start;
                         }
                       }}
-                      className={`absolute left-0 top-0 bottom-0 w-8 sm:w-2 cursor-ew-resize transition -ml-4 sm:-ml-1 touch-none rounded-md ${
+                      className={`absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize transition touch-none rounded-full ${
                         selectedHandle === 'start'
                           ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.8)]'
                           : 'bg-green-500/80 hover:bg-green-400 hover:shadow-[0_0_8px_rgba(34,197,94,0.6)]'
@@ -4871,7 +4871,7 @@ onMouseLeave={() => {
                           precisionVideoRef.current.currentTime = precisionAnchor.end;
                         }
                       }}
-                      className={`absolute right-0 top-0 bottom-0 w-8 sm:w-2 cursor-ew-resize transition -mr-4 sm:-mr-1 touch-none rounded-md ${
+                      className={`absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize transition touch-none rounded-full ${
                         selectedHandle === 'end'
                           ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]'
                           : 'bg-red-500/80 hover:bg-red-400 hover:shadow-[0_0_8px_rgba(239,68,68,0.6)]'
