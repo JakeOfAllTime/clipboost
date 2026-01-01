@@ -2478,20 +2478,19 @@ const goToNextAnchor = () => {
   const handlePrecisionVideoTimeUpdate = () => {
     if (precisionVideoRef.current && precisionAnchor) {
       const currentTime = precisionVideoRef.current.currentTime;
-      if (currentTime >= precisionAnchor.end) {
+      // Only loop when playing, not when manually seeking
+      if (currentTime >= precisionAnchor.end && precisionPlaying) {
         precisionVideoRef.current.currentTime = precisionAnchor.start;
         setPrecisionTime(precisionAnchor.start);
 
         // Loop music as well
-        if (musicRef.current && music && precisionPlaying) {
+        if (musicRef.current && music) {
           const timelineOffset = precisionAnchor._timelineOffset || 0;
           const musicTime = musicStartTime + timelineOffset;
           musicRef.current.currentTime = musicTime;
         }
 
-        if (precisionPlaying) {
-          precisionVideoRef.current.play();
-        }
+        precisionVideoRef.current.play();
       } else {
         setPrecisionTime(currentTime);
 
@@ -4119,14 +4118,11 @@ const exportVideo = async () => {
   style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
   title="Double-click to add anchor"
 >
-  {/* Current time indicator - Red pill style */}
+  {/* Current time indicator - Thin white line */}
                 <div
-                  className="absolute top-0 bottom-0 w-1 bg-red-400/60 cursor-ew-resize z-20 rounded-full pointer-events-none"
+                  className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
                   style={{ left: `${(currentTime / duration) * 100}%` }}
-                >
-                  {/* Pill-shaped grab handle */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 rounded-full shadow-lg border-2 border-white/30" />
-                </div>
+                />
 
                 {/* Anchors */}
                 {anchors.map((anchor, index) => {
@@ -4202,7 +4198,10 @@ onMouseLeave={() => {
                               className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 transition-all rounded-full touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust start time"
-                            />
+                            >
+                              {/* Pill-shaped grab handle */}
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                            </div>
                             {/* Right handle - Red (End) */}
                             <div
                               onMouseDown={(e) => {
@@ -4228,7 +4227,10 @@ onMouseLeave={() => {
                               className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 transition-all rounded-full touch-none"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust end time"
-                            />
+                            >
+                              {/* Pill-shaped grab handle */}
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                            </div>
                             {/* Precision button */}
                             
                           </>
@@ -4820,16 +4822,13 @@ onMouseLeave={() => {
     }}
     className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
   >
-                  {/* Current time indicator - Red pill style */}
+                  {/* Current time indicator - Thin white line */}
                   <div
-                    className="absolute top-0 bottom-0 w-1 bg-red-400/60 cursor-ew-resize z-20 rounded-full pointer-events-none"
+                    className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
                     style={{
                       left: `${((precisionTime - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
                     }}
-                  >
-                    {/* Pill-shaped grab handle */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 rounded-full shadow-lg border-2 border-white/30" />
-                  </div>
+                  />
 
                   {/* Anchor visualization */}
                   <div
@@ -4857,7 +4856,10 @@ onMouseLeave={() => {
                           : 'bg-green-500/80 hover:bg-green-400 hover:shadow-[0_0_8px_rgba(34,197,94,0.6)]'
                       }`}
                       style={{ zIndex: 100 }}
-                    />
+                    >
+                      {/* Pill-shaped grab handle */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                    </div>
 
                     {/* End handle - Red */}
                     <div
@@ -4877,7 +4879,10 @@ onMouseLeave={() => {
                           : 'bg-red-500/80 hover:bg-red-400 hover:shadow-[0_0_8px_rgba(239,68,68,0.6)]'
                       }`}
                       style={{ zIndex: 100 }}
-                    />
+                    >
+                      {/* Pill-shaped grab handle */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                    </div>
 
                     {/* Duration label */}
                     <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white pointer-events-none">
