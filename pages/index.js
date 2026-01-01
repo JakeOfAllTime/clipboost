@@ -3608,7 +3608,7 @@ const exportVideo = async () => {
     </div>
 
     {/* Playback Controls */}
-    <div className="flex items-center justify-center gap-2 w-full px-2">
+    <div className="flex items-center justify-center gap-1 sm:gap-2 w-full">
       <button
         onClick={() => {
           const prevIndex = Math.max(0, previewAnchorIndex - 1);
@@ -3616,7 +3616,7 @@ const exportVideo = async () => {
             seekPreviewTime(previewTimeline[prevIndex].previewStart);
           }
         }}
-        className="px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm flex-shrink-0 min-w-0"
+        className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
         title="Previous Anchor (Left Arrow)"
       >
         <span>◄</span>
@@ -3625,7 +3625,7 @@ const exportVideo = async () => {
 
       <button
         onClick={togglePreviewPlayback}
-        className="px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center gap-2 font-semibold shadow-lg flex-shrink-0 min-w-0"
+        className="flex-1 sm:flex-initial px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center justify-center gap-2 font-semibold shadow-lg"
         title="Play/Pause (Spacebar)"
       >
         {isPreviewPlaying ? <Pause size={16} className="sm:w-5 sm:h-5" /> : <Play size={16} className="sm:w-5 sm:h-5" />}
@@ -3639,7 +3639,7 @@ const exportVideo = async () => {
             seekPreviewTime(previewTimeline[nextIndex].previewStart);
           }
         }}
-        className="px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm flex-shrink-0 min-w-0"
+        className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
         title="Next Anchor (Right Arrow)"
       >
         <span className="hidden sm:inline">Next</span>
@@ -3653,7 +3653,7 @@ const exportVideo = async () => {
             openPrecisionModal(currentAnchor);
           }
         }}
-        className="px-2 py-2 sm:px-4 sm:py-2 forge-button rounded-lg flex items-center gap-1 sm:gap-2 text-sm font-semibold flex-shrink-0 min-w-0"
+        className="flex-1 sm:flex-initial px-2 py-2 sm:px-4 sm:py-2 forge-button rounded-lg flex items-center justify-center gap-1 sm:gap-2 text-sm font-semibold"
         title="Edit Current Anchor"
       >
         <ZoomIn size={14} className="sm:w-4 sm:h-4" />
@@ -4206,7 +4206,7 @@ onMouseLeave={() => {
 
                         {isSelected && (
                           <>
-                            {/* Left handle - Green (Start) */}
+                            {/* Left handle - Green (Start) - Centered on left edge */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -4228,14 +4228,14 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.start;
                                 }
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 transition-all rounded-full touch-none"
+                              className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 transition-all rounded-full touch-none -translate-x-1/2"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust start time"
                             >
                               {/* Pill-shaped grab handle */}
                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
                             </div>
-                            {/* Right handle - Red (End) */}
+                            {/* Right handle - Red (End) - Centered on right edge */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -4257,7 +4257,7 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.end;
                                 }
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 transition-all rounded-full touch-none"
+                              className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 transition-all rounded-full touch-none translate-x-1/2"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust end time"
                             >
