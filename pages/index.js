@@ -4199,8 +4199,10 @@ onMouseLeave={() => {
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust start time"
                             >
-                              {/* Pill-shaped grab handle */}
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                              {/* Pill-shaped grab handle - only show if anchor is wide enough */}
+                              {width > 2 && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                              )}
                             </div>
                             {/* Right handle - Red (End) */}
                             <div
@@ -4228,8 +4230,10 @@ onMouseLeave={() => {
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust end time"
                             >
-                              {/* Pill-shaped grab handle */}
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                              {/* Pill-shaped grab handle - only show if anchor is wide enough */}
+                              {width > 2 && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                              )}
                             </div>
                             {/* Precision button */}
                             
@@ -4820,7 +4824,7 @@ onMouseLeave={() => {
         handlePrecisionTimelineMouseDown({ ...e, clientX: touch.clientX });
       }
     }}
-    className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
+    className="relative h-32 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
   >
                   {/* Current time indicator - Thin white line */}
                   <div
