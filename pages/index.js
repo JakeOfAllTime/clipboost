@@ -2355,10 +2355,20 @@ const goToNextAnchor = () => {
         const snapshot = precisionDragState.startAnchor;
 
         if (precisionDragState.type === 'start') {
-          const newStart = Math.max(
+          let newStart = Math.max(
             range.start,
             Math.min(snapshot.end - 1, snapshot.start + deltaTime)
           );
+
+          // Check for overlaps with other anchors
+          const otherAnchors = anchors.filter(a => a.id !== snapshot.id);
+          for (const other of otherAnchors) {
+            // If new start would overlap with another anchor, constrain it
+            if (newStart < other.end && snapshot.end > other.start) {
+              newStart = Math.max(newStart, other.end);
+            }
+          }
+
           setPrecisionAnchor(prev => ({ ...snapshot, start: newStart }));
           // Update precisionTime and video to show the start frame being dragged
           setPrecisionTime(newStart);
@@ -2366,10 +2376,20 @@ const goToNextAnchor = () => {
             precisionVideoRef.current.currentTime = newStart;
           }
         } else if (precisionDragState.type === 'end') {
-          const newEnd = Math.max(
+          let newEnd = Math.max(
             snapshot.start + 1,
             Math.min(range.end, snapshot.end + deltaTime)
           );
+
+          // Check for overlaps with other anchors
+          const otherAnchors = anchors.filter(a => a.id !== snapshot.id);
+          for (const other of otherAnchors) {
+            // If new end would overlap with another anchor, constrain it
+            if (snapshot.start < other.end && newEnd > other.start) {
+              newEnd = Math.min(newEnd, other.start);
+            }
+          }
+
           setPrecisionAnchor(prev => ({ ...snapshot, end: newEnd }));
           // Update precisionTime and video to show the end frame being dragged
           setPrecisionTime(newEnd);
@@ -4250,7 +4270,7 @@ onMouseLeave={() => {
     title=""
     className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
       previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-amber-600/60'
-    } p-3 w-64 ${
+    } p-3 w-72 sm:w-64 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
