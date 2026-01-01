@@ -4270,7 +4270,7 @@ onMouseLeave={() => {
     title=""
     className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
       previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-amber-600/60'
-    } p-3 w-72 sm:w-64 ${
+    } p-2 w-80 sm:w-64 sm:p-3 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
         : (anchor.start / duration) > 0.7
@@ -4852,7 +4852,7 @@ onMouseLeave={() => {
 
                   {/* Anchor visualization */}
                   <div
-                    className="absolute top-2 bottom-2 bg-amber-500/20 border-2 border-amber-500/60 rounded z-10"
+                    className="absolute top-0 bottom-0 bg-amber-500/20 border-2 border-amber-500/60 rounded z-10"
                     style={{
                       left: `${((precisionAnchor.start - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`,
                       width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
