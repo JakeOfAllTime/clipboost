@@ -948,6 +948,84 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
   });
 };
 
+// Type-Specific Instructions for Smart Gen
+const getTypeSpecificInstructions = (storyType) => {
+  const instructions = {
+    tutorial: {
+      keyMoments: [
+        "Problem setup or ingredient/tool reveal",
+        "Key technique demonstration (the 'secret' or critical step)",
+        "Final result showcase"
+      ],
+      clipStrategy: "4-8 second clips showing complete thoughts",
+      avoid: "Long ingredient lists, repetitive process shots, excessive setup",
+      narrative: "Build from problem → solution → result"
+    },
+
+    transformation: {
+      keyMoments: [
+        "Clear 'before' state showing starting condition",
+        "1-2 dramatic mid-process moments",
+        "Reveal of final transformation",
+        "Side-by-side or direct comparison if shown"
+      ],
+      clipStrategy: "5-15 second clips to show contrast and build tension",
+      avoid: "Repetitive middle process, static shots with no change",
+      narrative: "Emphasize contrast - before vs after is the story"
+    },
+
+    vlog: {
+      keyMoments: [
+        "Location/scene changes",
+        "High-energy reactions or emotional peaks",
+        "Punchlines or comedic moments",
+        "Direct-to-camera personal moments"
+      ],
+      clipStrategy: "2-8 second clips, fast-paced cuts for energy",
+      avoid: "Long monologues, static talking, slow transitions",
+      narrative: "Keep energy high - variety and personality over exposition"
+    },
+
+    product_demo: {
+      keyMoments: [
+        "Product reveal (unboxing or first appearance)",
+        "Key feature demonstrations",
+        "Product in use (showing functionality)",
+        "Final verdict or recommendation"
+      ],
+      clipStrategy: "1-6 second clips, punchy reveals and features",
+      avoid: "Lengthy packaging shots, unboxing process, spec lists",
+      narrative: "Reveal → impress → convince"
+    },
+
+    interview: {
+      keyMoments: [
+        "Insightful quotes or key statements",
+        "Emotional reactions",
+        "Direct answers to important questions",
+        "Storytelling moments (anecdotes, examples)"
+      ],
+      clipStrategy: "4-10 second clips with complete thoughts",
+      avoid: "Mid-sentence cuts, question setups without answers",
+      narrative: "Extract wisdom - let the best ideas speak"
+    },
+
+    performance: {
+      keyMoments: [
+        "Peak action moments (jumps, tricks, skills)",
+        "Crowd reactions or energy peaks",
+        "Success/outcome moments",
+        "Unique or impressive techniques"
+      ],
+      clipStrategy: "2-6 second clips capturing peak moments",
+      avoid: "Setup time, waiting, static performance",
+      narrative: "Show the highlights - excitement and skill"
+    }
+  };
+
+  return instructions[storyType] || instructions.tutorial; // Default fallback
+};
+
 // Claude API Narrative Analysis (via API route to avoid CORS)
 const analyzeNarrative = async (frames, targetDuration = 60) => {
   try {
@@ -970,6 +1048,18 @@ const analyzeNarrative = async (frames, targetDuration = 60) => {
     }
 
     const narrative = await response.json();
+
+    // Log the story type analysis
+    console.log('🎬 Story Type:', narrative.storyType);
+    console.log('📝 Narrative:', narrative.narrative);
+    if (narrative.keyMomentsFound && narrative.keyMomentsFound.length > 0) {
+      console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
+    }
+    if (narrative.missingMoments && narrative.missingMoments.length > 0) {
+      console.log('⚠️ Missing Moments:', narrative.missingMoments);
+    }
+    console.log('🎯 Confidence:', narrative.confidence);
+
     return narrative;
 
   } catch (error) {
@@ -1005,11 +1095,18 @@ const analyzeMultiModal = async (frames, transcript, audioTopics, targetDuration
 
     const narrative = await response.json();
 
-    console.log('✅ Multi-modal analysis complete:', {
-      storyType: narrative.storyType,
-      cuts: narrative.suggestedCuts?.length,
-      confidence: narrative.confidence
-    });
+    // Enhanced logging for multi-modal analysis
+    console.log('✅ Multi-modal analysis complete!');
+    console.log('🎬 Story Type:', narrative.storyType);
+    console.log('📝 Narrative:', narrative.narrative);
+    if (narrative.keyMomentsFound && narrative.keyMomentsFound.length > 0) {
+      console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
+    }
+    if (narrative.missingMoments && narrative.missingMoments.length > 0) {
+      console.log('⚠️ Missing Moments:', narrative.missingMoments);
+    }
+    console.log('🎯 Confidence:', narrative.confidence);
+    console.log('✂️ Suggested Cuts:', narrative.suggestedCuts?.length);
 
     return narrative;
 
