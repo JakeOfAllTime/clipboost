@@ -1980,12 +1980,20 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
       if (dragState.type === 'anchor-left') {
         newStart = Math.max(0, Math.min(snapshot.end - 1, snapshot.start + deltaTime));
+        newEnd = snapshot.end; // Keep end fixed
       } else if (dragState.type === 'anchor-right') {
+        newStart = snapshot.start; // Keep start fixed
         newEnd = Math.max(snapshot.start + 1, Math.min(duration, snapshot.end + deltaTime));
       } else if (dragState.type === 'anchor-move') {
         const anchorDuration = snapshot.end - snapshot.start;
         newStart = Math.max(0, Math.min(duration - anchorDuration, snapshot.start + deltaTime));
         newEnd = newStart + anchorDuration;
+      }
+
+      // Safety check: ensure start is always before end
+      if (newStart >= newEnd) {
+        // If they would cross, don't allow the update
+        return;
       }
 
       const otherAnchors = anchors.filter(a => a.id !== selectedAnchor);
@@ -3597,7 +3605,7 @@ const exportVideo = async () => {
     </div>
 
     {/* Playback Controls */}
-    <div className="flex items-center justify-center gap-3">
+    <div className="flex items-center justify-center gap-2 w-full px-2">
       <button
         onClick={() => {
           const prevIndex = Math.max(0, previewAnchorIndex - 1);
@@ -3605,19 +3613,20 @@ const exportVideo = async () => {
             seekPreviewTime(previewTimeline[prevIndex].previewStart);
           }
         }}
-        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm"
+        className="px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm flex-shrink-0 min-w-0"
         title="Previous Anchor (Left Arrow)"
       >
-        <span>◄</span> Prev
+        <span>◄</span>
+        <span className="hidden sm:inline">Prev</span>
       </button>
 
       <button
         onClick={togglePreviewPlayback}
-        className="px-6 py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center gap-2 font-semibold shadow-lg"
+        className="px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center gap-2 font-semibold shadow-lg flex-shrink-0 min-w-0"
         title="Play/Pause (Spacebar)"
       >
-        {isPreviewPlaying ? <Pause size={20} /> : <Play size={20} />}
-        {isPreviewPlaying ? 'Pause' : 'Play'}
+        {isPreviewPlaying ? <Pause size={16} className="sm:w-5 sm:h-5" /> : <Play size={16} className="sm:w-5 sm:h-5" />}
+        <span className="hidden sm:inline">{isPreviewPlaying ? 'Pause' : 'Play'}</span>
       </button>
 
       <button
@@ -3627,10 +3636,11 @@ const exportVideo = async () => {
             seekPreviewTime(previewTimeline[nextIndex].previewStart);
           }
         }}
-        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm"
+        className="px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-1 text-sm flex-shrink-0 min-w-0"
         title="Next Anchor (Right Arrow)"
       >
-        Next <span>►</span>
+        <span className="hidden sm:inline">Next</span>
+        <span>►</span>
       </button>
 
       <button
@@ -3640,11 +3650,11 @@ const exportVideo = async () => {
             openPrecisionModal(currentAnchor);
           }
         }}
-        className="px-4 py-2 forge-button rounded-lg flex items-center gap-2 text-sm font-semibold"
+        className="px-2 py-2 sm:px-4 sm:py-2 forge-button rounded-lg flex items-center gap-1 sm:gap-2 text-sm font-semibold flex-shrink-0 min-w-0"
         title="Edit Current Anchor"
       >
-        <ZoomIn size={16} />
-        Edit
+        <ZoomIn size={14} className="sm:w-4 sm:h-4" />
+        <span className="hidden sm:inline">Edit</span>
       </button>
     </div>
   </div>
