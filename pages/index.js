@@ -2999,6 +2999,9 @@ const exportVideo = async () => {
                       }
                     }}
                     className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+                    style={{
+                      background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${(currentTime / duration) * 100}%, rgb(71, 85, 105) ${(currentTime / duration) * 100}%, rgb(71, 85, 105) 100%)`
+                    }}
                   />
                   <div className="flex justify-between text-xs text-gray-400 mt-1">
                     <span>{formatTime(currentTime)}</span>
