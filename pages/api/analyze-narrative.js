@@ -97,6 +97,21 @@ Search for moments where what you SEE and what you HEAR align powerfully.
 STEP 5: BUILD THE NARRATIVE
 Create 5-8 anchors using type-specific strategy, respecting speech pauses.
 
+CRITICAL: ENDING MOMENTS
+
+ALWAYS check the final frames (especially the LAST frame provided) for completion gestures:
+- Signing artwork, tasting food, stepping back to admire
+- Client/subject satisfied reaction or admiring result
+- Holding up finished product, thumbs up
+- Celebration, bow, arms raised in victory
+- Wave goodbye, direct conclusion to camera
+- "And there you have it!" or "That's it!" moments
+
+These completion gestures provide closure and viewer satisfaction.
+If present in the frames, they should ALMOST ALWAYS be included as the FINAL clip.
+
+Missing endings makes clips feel incomplete and unsatisfying.
+
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
   "storyType": "tutorial|transformation|vlog|product_demo|interview|performance|other",
@@ -181,6 +196,21 @@ Search the provided frames for the key moments relevant to this video type.
 
 STEP 5: BUILD THE NARRATIVE
 Create 5-8 anchors that tell the story using the type-specific strategy.
+
+CRITICAL: ENDING MOMENTS
+
+ALWAYS check the final frames (especially the LAST frame provided) for completion gestures:
+- Signing artwork, tasting food, stepping back to admire
+- Client/subject satisfied reaction or admiring result
+- Holding up finished product, thumbs up
+- Celebration, bow, arms raised in victory
+- Wave goodbye, direct conclusion to camera
+- "And there you have it!" or "That's it!" moments
+
+These completion gestures provide closure and viewer satisfaction.
+If present in the frames, they should ALMOST ALWAYS be included as the FINAL clip.
+
+Missing endings makes clips feel incomplete and unsatisfying.
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {

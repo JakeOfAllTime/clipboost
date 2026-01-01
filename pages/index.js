@@ -853,7 +853,13 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
         // Strategic frames (guaranteed coverage)
         timestamps.push({ time: 0, reason: 'start' });
         timestamps.push({ time: duration / 2, reason: 'middle' });
-        timestamps.push({ time: duration * 0.95, reason: 'end' });
+        timestamps.push({ time: duration * 0.99, reason: 'true_end' }); // Sample much closer to actual end
+
+        // Guarantee frame from completion window (final 5-10 seconds)
+        if (duration > 15) {
+          const completionWindow = Math.max(duration - 8, duration * 0.92);
+          timestamps.push({ time: completionWindow, reason: 'completion_window' });
+        }
 
         // Scene change frames (up to 4)
         const sceneChanges = motionAnalysis
@@ -955,7 +961,8 @@ const getTypeSpecificInstructions = (storyType) => {
       keyMoments: [
         "Problem setup or ingredient/tool reveal",
         "Key technique demonstration (the 'secret' or critical step)",
-        "Final result showcase"
+        "Final result showcase",
+        "COMPLETION GESTURE: Signing artwork, tasting dish, stepping back to admire, or verbal conclusion"
       ],
       clipStrategy: "4-8 second clips showing complete thoughts",
       avoid: "Long ingredient lists, repetitive process shots, excessive setup",
@@ -967,7 +974,8 @@ const getTypeSpecificInstructions = (storyType) => {
         "Clear 'before' state showing starting condition",
         "1-2 dramatic mid-process moments",
         "Reveal of final transformation",
-        "Side-by-side or direct comparison if shown"
+        "Side-by-side or direct comparison if shown",
+        "COMPLETION GESTURE: Client reaction in mirror, satisfaction gesture, admiring result"
       ],
       clipStrategy: "5-15 second clips to show contrast and build tension",
       avoid: "Repetitive middle process, static shots with no change",
@@ -979,7 +987,8 @@ const getTypeSpecificInstructions = (storyType) => {
         "Location/scene changes",
         "High-energy reactions or emotional peaks",
         "Punchlines or comedic moments",
-        "Direct-to-camera personal moments"
+        "Direct-to-camera personal moments",
+        "COMPLETION GESTURE: Wave goodbye, direct-to-camera conclusion, 'see you next time'"
       ],
       clipStrategy: "2-8 second clips, fast-paced cuts for energy",
       avoid: "Long monologues, static talking, slow transitions",
@@ -991,7 +1000,8 @@ const getTypeSpecificInstructions = (storyType) => {
         "Product reveal (unboxing or first appearance)",
         "Key feature demonstrations",
         "Product in use (showing functionality)",
-        "Final verdict or recommendation"
+        "Final verdict or recommendation",
+        "COMPLETION GESTURE: Holding up product, thumbs up, recommendation statement"
       ],
       clipStrategy: "1-6 second clips, punchy reveals and features",
       avoid: "Lengthy packaging shots, unboxing process, spec lists",
@@ -1003,7 +1013,8 @@ const getTypeSpecificInstructions = (storyType) => {
         "Insightful quotes or key statements",
         "Emotional reactions",
         "Direct answers to important questions",
-        "Storytelling moments (anecdotes, examples)"
+        "Storytelling moments (anecdotes, examples)",
+        "COMPLETION GESTURE: Final thought, thank you, handshake or departure"
       ],
       clipStrategy: "4-10 second clips with complete thoughts",
       avoid: "Mid-sentence cuts, question setups without answers",
@@ -1015,7 +1026,8 @@ const getTypeSpecificInstructions = (storyType) => {
         "Peak action moments (jumps, tricks, skills)",
         "Crowd reactions or energy peaks",
         "Success/outcome moments",
-        "Unique or impressive techniques"
+        "Unique or impressive techniques",
+        "COMPLETION GESTURE: Landing, celebration, arms raised, bow, crowd applause"
       ],
       clipStrategy: "2-6 second clips capturing peak moments",
       avoid: "Setup time, waiting, static performance",
