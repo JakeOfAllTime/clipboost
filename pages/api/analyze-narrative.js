@@ -122,7 +122,15 @@ AUTONOMOUS FRAME REQUESTS:
 If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
 you can use the request_additional_frames tool to ask for more frames from specific time ranges.
 
-Respond with ONLY valid JSON (no markdown, no explanation):
+CRITICAL: JSON-ONLY RESPONSE FORMAT
+
+Your final response (after using tools or on first analysis) MUST be ONLY the JSON object below.
+Do NOT include:
+- Markdown code fences (no \`\`\`json)
+- Explanatory text before or after the JSON
+- Conversational responses
+
+ONLY output this exact JSON structure:
 {
   "storyType": "tutorial|transformation|vlog|product_demo|interview|performance|other",
   "narrative": "brief description combining visual and audio story",
@@ -226,7 +234,15 @@ AUTONOMOUS FRAME REQUESTS:
 If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
 you can use the request_additional_frames tool to ask for more frames from specific time ranges.
 
-Respond with ONLY valid JSON (no markdown, no explanation):
+CRITICAL: JSON-ONLY RESPONSE FORMAT
+
+Your final response (after using tools or on first analysis) MUST be ONLY the JSON object below.
+Do NOT include:
+- Markdown code fences (no \`\`\`json)
+- Explanatory text before or after the JSON
+- Conversational responses
+
+ONLY output this exact JSON structure:
 {
   "storyType": "string",
   "narrative": "brief description",

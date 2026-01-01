@@ -1168,14 +1168,17 @@ const analyzeNarrative = async (frames, targetDuration = 60, videoFile = null, v
           content: content
         });
 
-        // Add tool result
+        // Add tool result with explicit JSON reminder
         conversationMessages.push({
           role: "user",
           content: [{
             type: "tool_result",
             tool_use_id: toolUse.id,
             content: [
-              { type: "text", text: `Extracted ${additionalFrames.length} frames from ${formatTime(start_time)} to ${formatTime(end_time)}:` },
+              {
+                type: "text",
+                text: `Extracted ${additionalFrames.length} frames from ${formatTime(start_time)} to ${formatTime(end_time)}. Now complete your analysis using ONLY the JSON format specified in the original instructions (no markdown, no explanation, just the JSON object with storyType, narrative, keyMomentsFound, suggestedCuts, confidence, and missingMoments fields).`
+              },
               ...additionalFrames.map((f, i) => ([
                 {
                   type: "image",
