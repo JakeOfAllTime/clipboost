@@ -1086,168 +1086,217 @@ const getTypeSpecificInstructions = (storyType) => {
   return instructions[storyType] || instructions.tutorial; // Default fallback
 };
 
-// Claude API Narrative Analysis with autonomous frame requests
-const analyzeNarrative = async (frames, targetDuration = 60, videoFile = null, videoDuration = 0) => {
+// PHASE 1: Gather comprehensive frames from strategic zones
+const gatherComprehensiveFrames = async (videoFile, videoDuration) => {
+  console.log('📊 PHASE 1: Gathering comprehensive video coverage...');
+
+  // Adaptive zone sizing based on video length
+  const getZones = (duration) => {
+    if (duration < 300) {
+      // Short video (< 5 min): Dense sampling
+      return [
+        { name: 'opening', start: 0, end: duration * 0.15, frames: 10 },
+        { name: 'middle', start: duration * 0.40, end: duration * 0.60, frames: 12 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 15 }
+      ];
+    } else if (duration < 1200) {
+      // Medium video (5-20 min): Balanced coverage
+      return [
+        { name: 'opening', start: 0, end: duration * 0.10, frames: 8 },
+        { name: 'early_middle', start: duration * 0.25, end: duration * 0.35, frames: 10 },
+        { name: 'middle', start: duration * 0.45, end: duration * 0.55, frames: 10 },
+        { name: 'late_middle', start: duration * 0.70, end: duration * 0.80, frames: 10 },
+        { name: 'finale', start: duration * 0.90, end: duration * 0.995, frames: 12 }
+      ];
+    } else {
+      // Long video (20+ min): Strategic sampling
+      return [
+        { name: 'opening', start: 0, end: 120, frames: 8 },
+        { name: 'early', start: duration * 0.20, end: duration * 0.25, frames: 8 },
+        { name: 'middle', start: duration * 0.45, end: duration * 0.55, frames: 10 },
+        { name: 'late', start: duration * 0.75, end: duration * 0.80, frames: 8 },
+        { name: 'finale', start: Math.max(duration - 180, duration * 0.90), end: duration * 0.995, frames: 16 }
+      ];
+    }
+  };
+
+  const zones = getZones(videoDuration);
+  const allFrames = [];
+
+  for (let i = 0; i < zones.length; i++) {
+    const zone = zones[i];
+    console.log(`📸 Zone ${i + 1}/${zones.length}: ${zone.name} (${formatTime(zone.start)}-${formatTime(zone.end)}) - extracting ${zone.frames} frames`);
+
+    try {
+      const zoneFrames = await extractFramesFromRange(
+        videoFile,
+        zone.start,
+        zone.end,
+        zone.frames
+      );
+
+      allFrames.push(...zoneFrames.map(f => ({
+        ...f,
+        zone: zone.name,
+        zoneIndex: i
+      })));
+
+      console.log(`  ✅ Extracted ${zoneFrames.length} frames from ${zone.name}`);
+    } catch (error) {
+      console.error(`  ❌ Failed to extract frames from ${zone.name}:`, error);
+      // Continue with other zones even if one fails
+    }
+  }
+
+  console.log(`✅ Phase 1 complete: ${allFrames.length} total frames gathered`);
+  return { frames: allFrames, zones };
+};
+
+// PHASE 2: Single comprehensive analysis with all frames
+const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) => {
+  console.log(`🧠 PHASE 2: Analyzing ${allFrames.length} frames with complete context...`);
+
   try {
-    // Start with initial frames
-    let conversationMessages = null; // Will be built by API on first call
-    let attempts = 0;
-    const MAX_ATTEMPTS = 5; // Allow more exploration for long videos
+    // Build zone summary for Claude
+    const zoneSummary = zones.map((z, i) =>
+      `Zone ${i + 1} (${z.name}): ${formatTime(z.start)}-${formatTime(z.end)} (${z.frames} frames)`
+    ).join('\n');
 
-    while (attempts < MAX_ATTEMPTS) {
-      attempts++;
+    const promptText = `
+Analyze these ${allFrames.length} frames from a video to create compelling short-form clips.
 
-      console.log(`🔄 Analysis attempt ${attempts}/${MAX_ATTEMPTS}`);
+COMPREHENSIVE COVERAGE:
+You have frames distributed across the entire video:
+${zoneSummary}
 
-      // Warn when approaching limit
-      if (attempts === MAX_ATTEMPTS - 1) {
-        console.warn('⚠️ Approaching max attempts - Claude must commit on next response');
-      }
+This gives you complete visibility from start to finish.
 
-      // Build request body
-      const requestBody = conversationMessages
-        ? { messages: conversationMessages } // Multi-turn
-        : { frames, targetDuration }; // Initial request
+TARGET DURATION: ${targetDuration} seconds
 
-      const response = await fetch('/api/analyze-narrative', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
+YOUR ANALYSIS PROCESS:
 
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('API error:', error);
-        throw new Error(error.error || 'Failed to analyze narrative');
-      }
+STEP 1: IDENTIFY VIDEO TYPE
+Determine what type of video this is:
+- tutorial (how-to, cooking, DIY, educational)
+- transformation (before/after, makeover, progress)
+- vlog (personal narrative, day-in-life, commentary)
+- product_demo (unboxing, review, showcase)
+- interview (conversation, Q&A, podcast)
+- performance (sports, music, dance, skills)
 
-      const data = await response.json();
-      const content = data.content;
-      const stopReason = data.stop_reason;
+STEP 2: SURVEY ALL FRAMES
+Look through ALL frames to understand the complete story:
+- What happens at the beginning?
+- What develops in the middle?
+- How does it conclude?
+- What are the key moments across the entire arc?
 
-      // Check if Claude used the request_additional_frames tool
-      const toolUse = content.find(block => block.type === 'tool_use');
+STEP 3: IDENTIFY KEY MOMENTS
+Based on the video type, find the specific moments that matter.
 
-      if (toolUse && toolUse.name === 'request_additional_frames') {
-        const { start_time, end_time, reason, frame_count = 6 } = toolUse.input;
+For tutorials: Setup, technique demonstrations, final result, completion gesture
+For transformations: Clear before state, process, after reveal, reactions
+For vlogs: Energy peaks, location changes, punchlines, personal moments
+For product demos: Reveal, features, in-use, verdict
+For interviews: Insightful quotes, reactions, key answers, stories
+For performance: Peak action, reactions, success moments, celebrations
 
-        console.log(`🔍 Claude requesting additional frames:`, {
-          range: `${formatTime(start_time)} - ${formatTime(end_time)}`,
-          reason,
-          frameCount: frame_count
-        });
+STEP 4: DETERMINE CLIP LENGTH FOR EACH MOMENT
+For EACH moment you identify, ask yourself: "How long does THIS specific moment need?"
 
-        // Extract the requested frames
-        if (!videoFile) {
-          console.error('❌ No video file available for additional frame extraction');
-          throw new Error('Cannot extract additional frames without video file');
-        }
+Self-prompting guidelines:
+- Text/graphics (ingredient lists, titles): 2-4 seconds (readable time)
+- Action/technique demonstration: 5-8 seconds (complete movement)
+- Reveals (results, transformations): 6-10 seconds (impact + appreciation)
+- Reactions (emotions, satisfaction): 2-4 seconds (quick beat)
+- Establishing shots (context, setup): 2-3 seconds (set scene, move on)
 
-        const additionalFrames = await extractFramesFromRange(
-          videoFile,
-          start_time,
-          end_time,
-          Math.min(frame_count, 10) // Cap at 10 frames
-        );
+Include your reasoning for each clip length in clipLengthReasoning field.
 
-        console.log(`✅ Extracted ${additionalFrames.length} additional frames`);
+STEP 5: CREATE VARIED PACING
+Mix clip lengths for rhythm: 3s → 7s → 4s → 9s → 3s creates energy
+Fast cuts for information, slower holds for impact
 
-        // Build conversation messages for next turn
-        if (!conversationMessages) {
-          // First tool use - need to build initial message
-          conversationMessages = [{
-            role: "user",
-            content: [
-              { type: "text", text: `Analyze these ${frames.length} frames from a video for ${targetDuration}s target.` },
-              ...frames.map(f => ({
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
-              }))
-            ]
-          }];
-        }
+CLIP COUNT TARGETS (flexible):
+- 40-second target: Aim for 6-10 clips (varied lengths)
+- 60-second target: Aim for 10-15 clips (varied lengths)
 
-        // Add assistant's response (including tool use)
-        conversationMessages.push({
-          role: "assistant",
-          content: content
-        });
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "storyType": "string",
+  "narrative": "brief description of the story",
+  "keyMomentsFound": ["list of key moments you identified in the frames"],
+  "suggestedCuts": [
+    {
+      "startTime": number,
+      "endTime": number,
+      "reason": "what this moment shows",
+      "clipLengthReasoning": "why this duration is optimal for this content",
+      "narrativeRole": "hook|build|climax|payoff",
+      "importance": number between 0-1
+    }
+  ],
+  "confidence": number between 0-1,
+  "missingMoments": ["moments you wanted to see but didn't find in frames"]
+}
+`;
 
-        // Add tool result with explicit JSON reminder
-        conversationMessages.push({
+    const response = await fetch('/api/analyze-narrative', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{
           role: "user",
-          content: [{
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: [
-              {
-                type: "text",
-                text: `Extracted ${additionalFrames.length} frames from ${formatTime(start_time)} to ${formatTime(end_time)}. Now complete your analysis using ONLY the JSON format specified in the original instructions (no markdown, no explanation, just the JSON object with storyType, narrative, keyMomentsFound, suggestedCuts, confidence, and missingMoments fields).`
-              },
-              ...additionalFrames.map((f, i) => ([
-                {
-                  type: "image",
-                  source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
-                },
-                {
-                  type: "text",
-                  text: `Additional frame ${i + 1}/${additionalFrames.length} at ${f.timestamp.toFixed(1)}s`
-                }
-              ])).flat()
-            ]
-          }]
-        });
+          content: [
+            { type: "text", text: promptText },
+            ...allFrames.map(f => ({
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
+            }))
+          ]
+        }],
+        videoType: 'visual-only'
+      })
+    });
 
-        // Continue the loop to get Claude's next response
-        continue;
-      }
-
-      // If no tool use, we have the final response
-      const textBlock = content.find(block => block.type === 'text');
-      if (!textBlock) {
-        throw new Error('No text response from Claude');
-      }
-
-      // Parse the JSON response
-      let narrative;
-      try {
-        const cleaned = textBlock.text.replace(/```json\n?|\n?```/g, '').trim();
-        narrative = JSON.parse(cleaned);
-      } catch (parseError) {
-        console.error('JSON parse error:', textBlock.text);
-        throw new Error('Invalid JSON response');
-      }
-
-      // Log the final analysis
-      console.log('🎬 Story Type:', narrative.storyType);
-      console.log('📝 Narrative:', narrative.narrative);
-      if (narrative.keyMomentsFound && narrative.keyMomentsFound.length > 0) {
-        console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
-      }
-      if (narrative.missingMoments && narrative.missingMoments.length > 0) {
-        console.log('⚠️ Missing Moments:', narrative.missingMoments);
-      }
-      console.log('🎯 Confidence:', narrative.confidence);
-      if (attempts > 1) {
-        console.log(`✨ Completed after ${attempts} analysis rounds`);
-      }
-
-      return narrative; // Success!
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
     }
 
-    // If we exit the loop without returning, max attempts was reached
-    console.error(`❌ Max attempts (${MAX_ATTEMPTS}) reached without final JSON response`);
-    console.error('This usually means Claude kept requesting frames but never committed to analysis');
-    console.error('Try a shorter video or check the commitment decision logic');
+    const data = await response.json();
+    const content = data.content;
 
-    throw new Error(
-      `Analysis incomplete after ${MAX_ATTEMPTS} attempts. ` +
-      `Claude may be exploring too thoroughly - try a shorter video or check console for details.`
-    );
+    // Find text block with JSON
+    const textBlock = content.find(block => block.type === 'text');
+    if (!textBlock) {
+      throw new Error('No text response from Claude');
+    }
+
+    // Parse JSON response
+    let narrative;
+    try {
+      const cleaned = textBlock.text.replace(/```json\n?|\n?```/g, '').trim();
+      narrative = JSON.parse(cleaned);
+    } catch (parseError) {
+      console.error('JSON parse error:', textBlock.text);
+      throw new Error('Invalid JSON response from Claude');
+    }
+
+    // Log results
+    console.log('🎬 Story Type:', narrative.storyType);
+    console.log('📝 Narrative:', narrative.narrative);
+    console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
+    if (narrative.missingMoments?.length > 0) {
+      console.log('⚠️ Missing Moments:', narrative.missingMoments);
+    }
+    console.log('🎯 Confidence:', narrative.confidence);
+    console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
+
+    return narrative;
 
   } catch (error) {
-    console.error('❌ Narrative analysis failed:', error);
-    return null;
+    console.error('❌ Comprehensive analysis failed:', error);
+    throw error;
   }
 };
 
@@ -4162,80 +4211,44 @@ const exportVideo = async () => {
             saveToHistory(finalAnchors);
           }
 
-          // === MODE 2: SMART GEN (Current V2 - Visual AI) ===
+          // === MODE 2: SMART GEN (V3 - Two-Phase Comprehensive) ===
           else if (autoGenMode === 'smart') {
-            console.log('🧠 Smart Gen: Visual narrative analysis (~$0.60)');
+            console.log('🧠 Smart Gen: Two-Phase Comprehensive Analysis (~$0.60)');
 
-            // Step 1: Motion detection for smart sampling
-            let videoAnalysisResult = videoAnalysis;
-            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
-              console.log('🎬 Running motion detection for smart sampling...');
-              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-              setVideoAnalysis(videoAnalysisResult);
-            } else {
-              console.log('✅ Using cached motion analysis');
+            // PHASE 1: Gather comprehensive frames (no API calls, just extraction)
+            const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
+
+            if (allFrames.length === 0) {
+              alert('Failed to extract any frames from video. Please try again.');
+              return;
             }
 
-            // Step 2: Extract frames with smart sampling
-            console.log('📸 Extracting frames with smart sampling...');
-            const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
-            console.log(`✅ Extracted ${frames.length} frames`);
-
-            // Step 3: Analyze with Claude (visual only) - with autonomous frame requests
-            console.log('🤖 Analyzing narrative (visual only) with autonomous frame requests...');
-            const narrative = await analyzeNarrative(frames, targetDuration, video, duration);
+            // PHASE 2: Single comprehensive analysis (one API call)
+            const narrative = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
 
             if (!narrative) {
               alert('Narrative analysis failed. Please try again.');
               return;
             }
 
-            console.log('📖 Story Type:', narrative.storyType);
-            console.log('📝 Narrative:', narrative.narrative);
-            console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
-
-            // Step 4: Refine with motion detection
-            console.log('🔍 Refining with motion detection...');
-            let refinedCuts = refineWithMotionDetection(
-              narrative.suggestedCuts,
-              videoAnalysisResult
-            );
-
-            // Step 5: Apply gentle beat-sync if enabled
-            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-              console.log('🎵 Applying gentle beat-sync...');
-              refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
-            }
-
-            // Step 6: Create anchors
-            const newAnchors = refinedCuts.map((cut, index) => ({
+            // Create anchors from suggestions
+            const newAnchors = narrative.suggestedCuts.map((cut, index) => ({
               id: Date.now() + index,
-              start: Math.max(0, cut.start),
-              end: Math.min(duration, cut.end),
+              start: cut.startTime,
+              end: cut.endTime,
               _narrativeReason: cut.reason,
               _importance: cut.importance
-            }));
-
-            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
-              if (index === 0) {
-                kept.push(anchor);
-                return kept;
-              }
-              const lastKept = kept[kept.length - 1];
-              if (anchor.start >= lastKept.end) {
-                kept.push(anchor);
-              }
-              return kept;
-            }, []);
+            })).sort((a, b) => a.start - b.start);
 
             console.log('✅ SMART GEN COMPLETE:', {
               storyType: narrative.storyType,
-              anchorsCreated: finalAnchors.length,
-              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+              anchorsCreated: newAnchors.length,
+              totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1) + 's',
+              confidence: narrative.confidence
             });
 
-            setAnchors(finalAnchors);
-            saveToHistory(finalAnchors);
+            setAnchors(newAnchors);
+            saveToHistory(newAnchors);
           }
 
           // === MODE 3: PRO GEN (NEW - Vision + Audio) ===
