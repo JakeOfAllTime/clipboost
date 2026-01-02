@@ -1092,12 +1092,17 @@ const analyzeNarrative = async (frames, targetDuration = 60, videoFile = null, v
     // Start with initial frames
     let conversationMessages = null; // Will be built by API on first call
     let attempts = 0;
-    const MAX_ATTEMPTS = 3; // Prevent infinite loops
+    const MAX_ATTEMPTS = 5; // Allow more exploration for long videos
 
     while (attempts < MAX_ATTEMPTS) {
       attempts++;
 
       console.log(`🔄 Analysis attempt ${attempts}/${MAX_ATTEMPTS}`);
+
+      // Warn when approaching limit
+      if (attempts === MAX_ATTEMPTS - 1) {
+        console.warn('⚠️ Approaching max attempts - Claude must commit on next response');
+      }
 
       // Build request body
       const requestBody = conversationMessages
@@ -1230,7 +1235,15 @@ const analyzeNarrative = async (frames, targetDuration = 60, videoFile = null, v
       return narrative; // Success!
     }
 
-    throw new Error('Max attempts reached without final response');
+    // If we exit the loop without returning, max attempts was reached
+    console.error(`❌ Max attempts (${MAX_ATTEMPTS}) reached without final JSON response`);
+    console.error('This usually means Claude kept requesting frames but never committed to analysis');
+    console.error('Try a shorter video or check the commitment decision logic');
+
+    throw new Error(
+      `Analysis incomplete after ${MAX_ATTEMPTS} attempts. ` +
+      `Claude may be exploring too thoroughly - try a shorter video or check console for details.`
+    );
 
   } catch (error) {
     console.error('❌ Narrative analysis failed:', error);

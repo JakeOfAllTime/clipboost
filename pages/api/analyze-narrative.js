@@ -173,6 +173,71 @@ AUTONOMOUS FRAME REQUESTS:
 If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
 you can use the request_additional_frames tool to ask for more frames from specific time ranges.
 
+CRITICAL: COMMITMENT DECISION LOGIC
+
+You can request additional frames using the request_additional_frames tool, BUT you must know when to COMMIT to your analysis.
+
+DECISION RULES:
+
+1. FIRST REQUEST ANALYSIS:
+   After receiving your first set of additional frames, ask yourself:
+   "Is my confidence now >= 0.75?"
+   → YES: COMMIT - Return final JSON now
+   → NO: Make ONE more targeted request for critical missing moment
+
+2. SECOND REQUEST ANALYSIS:
+   After receiving your second set of additional frames, you MUST commit
+   → Return final JSON regardless of confidence level
+   → Confidence 0.7-0.8 is acceptable and useful
+   → Users can manually add clips for any remaining gaps
+
+3. LONG VIDEO HANDLING (>20 minutes):
+   You cannot see everything in a 30-minute video from 15-20 frames
+   → Focus on the STRONGEST moments you HAVE identified
+   → Don't request frames for every possible moment
+   → Commit with 0.7-0.8 confidence - this is good enough
+
+4. CONFIDENCE THRESHOLDS:
+   - 0.85+: Excellent, definitely commit
+   - 0.75-0.84: Good, commit now
+   - 0.65-0.74: Acceptable, commit after 1 more request maximum
+   - Below 0.65: Request 1 more critical range, then commit
+
+EXAMPLES:
+
+Scenario 1:
+Initial frames → Confidence 0.6 (missing finale)
+→ Request finale frames (attempt 1)
+→ Receive finale → Confidence 0.85
+→ COMMIT NOW ✅
+
+Scenario 2:
+Initial frames → Confidence 0.65 (missing middle technique and finale)
+→ Request finale frames (attempt 1) - prioritize payoff
+→ Receive finale → Confidence 0.75
+→ COMMIT NOW ✅ (middle can be added manually if needed)
+
+Scenario 3:
+Initial frames → Confidence 0.5 (missing setup, technique, finale)
+→ Request finale frames (attempt 1) - payoff is most critical
+→ Receive finale → Confidence 0.65, still want technique
+→ Request technique frames (attempt 2)
+→ Receive technique → Confidence 0.78
+→ MUST COMMIT NOW ✅ (at attempt 2)
+
+Scenario 4:
+30-minute cooking show → Initial frames show intro, middle, but no finale
+→ Confidence 0.65
+→ Request finale (25:00-28:40)
+→ Receive finale → Confidence 0.80
+→ COMMIT NOW ✅ (don't try to see every ingredient and technique)
+
+KEY PRINCIPLE:
+Perfect is the enemy of good.
+Users prefer 6-8 solid clips at 75% confidence in 60 seconds
+over waiting 3 minutes for 95% confidence.
+After 2 requests, you MUST return your best analysis.
+
 CRITICAL: JSON-ONLY RESPONSE FORMAT
 
 Your final response (after using tools or on first analysis) MUST be ONLY the JSON object below.
@@ -336,6 +401,71 @@ Missing endings makes clips feel incomplete and unsatisfying.
 AUTONOMOUS FRAME REQUESTS:
 If you're missing key moments (like final result, transformation reveal, etc.) and confidence is below 0.85,
 you can use the request_additional_frames tool to ask for more frames from specific time ranges.
+
+CRITICAL: COMMITMENT DECISION LOGIC
+
+You can request additional frames using the request_additional_frames tool, BUT you must know when to COMMIT to your analysis.
+
+DECISION RULES:
+
+1. FIRST REQUEST ANALYSIS:
+   After receiving your first set of additional frames, ask yourself:
+   "Is my confidence now >= 0.75?"
+   → YES: COMMIT - Return final JSON now
+   → NO: Make ONE more targeted request for critical missing moment
+
+2. SECOND REQUEST ANALYSIS:
+   After receiving your second set of additional frames, you MUST commit
+   → Return final JSON regardless of confidence level
+   → Confidence 0.7-0.8 is acceptable and useful
+   → Users can manually add clips for any remaining gaps
+
+3. LONG VIDEO HANDLING (>20 minutes):
+   You cannot see everything in a 30-minute video from 15-20 frames
+   → Focus on the STRONGEST moments you HAVE identified
+   → Don't request frames for every possible moment
+   → Commit with 0.7-0.8 confidence - this is good enough
+
+4. CONFIDENCE THRESHOLDS:
+   - 0.85+: Excellent, definitely commit
+   - 0.75-0.84: Good, commit now
+   - 0.65-0.74: Acceptable, commit after 1 more request maximum
+   - Below 0.65: Request 1 more critical range, then commit
+
+EXAMPLES:
+
+Scenario 1:
+Initial frames → Confidence 0.6 (missing finale)
+→ Request finale frames (attempt 1)
+→ Receive finale → Confidence 0.85
+→ COMMIT NOW ✅
+
+Scenario 2:
+Initial frames → Confidence 0.65 (missing middle technique and finale)
+→ Request finale frames (attempt 1) - prioritize payoff
+→ Receive finale → Confidence 0.75
+→ COMMIT NOW ✅ (middle can be added manually if needed)
+
+Scenario 3:
+Initial frames → Confidence 0.5 (missing setup, technique, finale)
+→ Request finale frames (attempt 1) - payoff is most critical
+→ Receive finale → Confidence 0.65, still want technique
+→ Request technique frames (attempt 2)
+→ Receive technique → Confidence 0.78
+→ MUST COMMIT NOW ✅ (at attempt 2)
+
+Scenario 4:
+30-minute cooking show → Initial frames show intro, middle, but no finale
+→ Confidence 0.65
+→ Request finale (25:00-28:40)
+→ Receive finale → Confidence 0.80
+→ COMMIT NOW ✅ (don't try to see every ingredient and technique)
+
+KEY PRINCIPLE:
+Perfect is the enemy of good.
+Users prefer 6-8 solid clips at 75% confidence in 60 seconds
+over waiting 3 minutes for 95% confidence.
+After 2 requests, you MUST return your best analysis.
 
 CRITICAL: JSON-ONLY RESPONSE FORMAT
 
