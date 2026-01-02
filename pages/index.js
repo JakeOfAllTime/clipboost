@@ -1157,6 +1157,11 @@ const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) =
   console.log(`🧠 PHASE 2: Analyzing ${allFrames.length} frames with complete context...`);
 
   try {
+    // Build frame manifest with exact timestamps
+    const frameManifest = allFrames.map((frame, idx) =>
+      `Frame ${idx + 1}: ${formatTime(frame.time)} (${frame.zone} zone)`
+    ).join('\n');
+
     // Build zone summary for Claude
     const zoneSummary = zones.map((z, i) =>
       `Zone ${i + 1} (${z.name}): ${formatTime(z.start)}-${formatTime(z.end)} (${z.frames} frames)`
@@ -1164,6 +1169,30 @@ const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) =
 
     const promptText = `
 Analyze these ${allFrames.length} frames from a video to create compelling short-form clips.
+
+CRITICAL: FRAME TIMING REFERENCE
+
+You will see ${allFrames.length} images. Here are their EXACT timestamps:
+
+${frameManifest}
+
+IMPORTANT RULES:
+1. When you identify a moment you want to use, note WHICH FRAME NUMBER shows it
+2. Use that frame's EXACT timestamp from the manifest above
+3. DO NOT make up timestamps or guess based on video position
+4. Your startTime must match a frame time (or be very close to one)
+
+Example workflow:
+- You see Frame 42 shows "plated strudel result"
+- Manifest says: Frame 42: 26:30 (finale zone)
+- Your suggestedCut startTime: 1590 (which is 26:30 in seconds)
+- Your endTime: 1598 (8 seconds later)
+- Your frameReference: 42
+
+DO NOT:
+- Assign finale moments to opening timestamps
+- Create startTimes that don't align with any frame
+- Ignore the zone information
 
 COMPREHENSIVE COVERAGE:
 You have frames distributed across the entire video:
@@ -1280,7 +1309,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "keyMomentsFound": ["list of key moments you identified in the frames"],
   "suggestedCuts": [
     {
-      "startTime": number,
+      "frameReference": number,  // Which frame number shows this moment (1-${allFrames.length})
+      "startTime": number,       // Use exact time from frame manifest above
       "endTime": number,
       "reason": "what this moment shows",
       "clipLengthReasoning": "why this duration is optimal for this content",
@@ -1343,6 +1373,26 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     }
     console.log('🎯 Confidence:', narrative.confidence);
     console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
+
+    // Validate frame reference alignment
+    console.log('\n🔍 Validating timestamp accuracy:');
+    narrative.suggestedCuts.forEach((cut, idx) => {
+      if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= allFrames.length) {
+        const referencedFrame = allFrames[cut.frameReference - 1];
+        const frameDiff = Math.abs(cut.startTime - referencedFrame.time);
+
+        if (frameDiff > 10) {
+          console.warn(`⚠️ Clip ${idx + 1} timestamp mismatch:`,
+            `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.time)}`,
+            `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
+          );
+        } else {
+          console.log(`✅ Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.time)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
+        }
+      } else {
+        console.warn(`⚠️ Clip ${idx + 1}: Missing or invalid frameReference (${cut.frameReference})`);
+      }
+    });
 
     return narrative;
 
