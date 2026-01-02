@@ -1217,8 +1217,52 @@ STEP 5: CREATE VARIED PACING
 Mix clip lengths for rhythm: 3s → 7s → 4s → 9s → 3s creates energy
 Fast cuts for information, slower holds for impact
 
+CRITICAL: TEMPORAL DISTRIBUTION REQUIREMENT
+
+You have frames from ${zones.length} distinct zones spanning the entire video.
+Your clips MUST represent content from ACROSS the full timeline:
+
+REQUIRED DISTRIBUTION:
+- At least 1-2 clips from OPENING zone (first 10%)
+- At least 2-3 clips from MIDDLE zones (40-80%)
+- At least 1-2 clips from FINALE zone (last 10%)
+
+DO NOT create all clips from just one section of the video.
+The user wants to see the complete journey: beginning → development → conclusion.
+
+CLIP LENGTH ENFORCEMENT:
+- Individual clips: 2-10 seconds (NO exceptions)
+- If a moment naturally spans 15+ seconds, SPLIT it into 2-3 shorter clips
+- Target 8-12 total clips for 40-60s final duration
+- Avoid creating only 3-4 long clips
+
+EXAMPLE - BAD (avoid):
+{
+  "suggestedCuts": [
+    {"startTime": 0, "endTime": 30, ...},      // All from opening
+    {"startTime": 45, "endTime": 75, ...},     // Still from opening
+    {"startTime": 90, "endTime": 115, ...}     // Still early
+  ]
+}
+// ❌ Only uses first 2 minutes of 28-minute video!
+
+EXAMPLE - GOOD (follow):
+{
+  "suggestedCuts": [
+    {"startTime": 10, "endTime": 13, ...},     // Opening: ingredient reveal
+    {"startTime": 180, "endTime": 186, ...},   // Early-middle: technique
+    {"startTime": 420, "endTime": 427, ...},   // Middle: cooking action
+    {"startTime": 850, "endTime": 856, ...},   // Late-middle: assembly
+    {"startTime": 1650, "endTime": 1658, ...}, // Finale: plated result
+    {"startTime": 1680, "endTime": 1684, ...}  // Finale: tasting
+  ]
+}
+// ✅ Spans entire 28 minutes, varied pacing, complete story
+
+Think: "Take the viewer on the full journey from start to finish"
+
 CLIP COUNT TARGETS (flexible):
-- 40-second target: Aim for 6-10 clips (varied lengths)
+- 40-second target: Aim for 8-12 clips (varied lengths)
 - 60-second target: Aim for 10-15 clips (varied lengths)
 
 Respond with ONLY valid JSON (no markdown, no explanation):
