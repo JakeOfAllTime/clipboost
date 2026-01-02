@@ -4,7 +4,7 @@
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '5mb'
+      sizeLimit: '10mb'
     }
   }
 };
@@ -47,9 +47,12 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ API: Anthropic API error:', errorText);
+      console.error('❌ API: Status:', response.status);
+      console.error('❌ API: Request had', messages[0]?.content?.length || 0, 'content items');
       return res.status(response.status).json({
         error: 'API request failed',
-        details: errorText
+        details: errorText,
+        status: response.status
       });
     }
 

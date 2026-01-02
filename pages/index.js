@@ -1458,7 +1458,7 @@ const seekMissingMoments = async (videoFile, videoDuration, missingMoments, exis
   const allNewFrames = [];
   const searchLog = [];
   const maxSearchesPerMoment = 1; // Conservative: 1 search per missing moment
-  const framesPerSearch = 8; // Small targeted searches
+  const framesPerSearch = 5; // Smaller searches to keep total under 120 frames (100 + 4*5 = 120)
 
   // Zone inference: Map missing moment keywords to likely zones
   const inferZone = (momentDescription) => {
