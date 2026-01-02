@@ -1346,24 +1346,23 @@ CLIP COUNT TARGETS (flexible):
 - 40-second target: Aim for 8-12 clips (varied lengths)
 - 60-second target: Aim for 10-15 clips (varied lengths)
 
+IMPORTANT: Do NOT decide clip lengths yet. Just identify WHAT moments exist.
+
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
   "storyType": "string",
   "narrative": "brief description of the story",
-  "keyMomentsFound": ["list of key moments you identified in the frames"],
-  "suggestedCuts": [
+  "keyMoments": [
     {
       "frameReference": number,  // Which frame number shows this moment (1-${allFrames.length})
-      "startTime": number,       // Use exact time from frame manifest above
-      "endTime": number,
-      "reason": "what this moment shows",
-      "clipLengthReasoning": "why this duration is optimal for this content",
-      "narrativeRole": "hook|build|climax|payoff",
-      "importance": number between 0-1
+      "timestamp": number,       // Use exact time from frame manifest above
+      "description": "what this moment shows",
+      "importance": number between 0-1,
+      "category": "ingredient|technique|process|result|reaction"
     }
   ],
-  "confidence": number between 0-1,
-  "missingMoments": ["moments you wanted to see but didn't find in frames"]
+  "missingMoments": ["moments you wanted to see but didn't find in frames"],
+  "confidence": number between 0-1
 }
 `;
 
@@ -1408,35 +1407,23 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       throw new Error('Invalid JSON response from Claude');
     }
 
-    // Log results
+    // Log results (moment inventory, not clips yet)
     console.log('🎬 Story Type:', narrative.storyType);
     console.log('📝 Narrative:', narrative.narrative);
-    console.log('✅ Key Moments Found:', narrative.keyMomentsFound);
+    console.log('✅ Key Moments Identified:', narrative.keyMoments?.length || 0);
     if (narrative.missingMoments?.length > 0) {
       console.log('⚠️ Missing Moments:', narrative.missingMoments);
     }
     console.log('🎯 Confidence:', narrative.confidence);
-    console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
 
-    // Validate frame reference alignment
-    console.log('\n🔍 Validating timestamp accuracy:');
-    narrative.suggestedCuts.forEach((cut, idx) => {
-      if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= allFrames.length) {
-        const referencedFrame = allFrames[cut.frameReference - 1];
-        const frameDiff = Math.abs(cut.startTime - referencedFrame.timestamp);
-
-        if (frameDiff > 10) {
-          console.warn(`⚠️ Clip ${idx + 1} timestamp mismatch:`,
-            `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.timestamp)}`,
-            `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
-          );
-        } else {
-          console.log(`✅ Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.timestamp)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
-        }
-      } else {
-        console.warn(`⚠️ Clip ${idx + 1}: Missing or invalid frameReference (${cut.frameReference})`);
-      }
-    });
+    // Log moment breakdown by category
+    if (narrative.keyMoments) {
+      const categories = {};
+      narrative.keyMoments.forEach(m => {
+        categories[m.category] = (categories[m.category] || 0) + 1;
+      });
+      console.log('📊 Moment Categories:', categories);
+    }
 
     return narrative;
 
@@ -1688,20 +1675,21 @@ CLIP COUNT TARGETS (flexible):
 - 40-second target: Aim for 8-12 clips (varied lengths)
 - 60-second target: Aim for 10-15 clips (varied lengths)
 
-Your task: Find clips from these ${framesToAnalyze.length} new frames that address the missing moments.
+Your task: Identify which moments you see in these ${framesToAnalyze.length} new frames.
+Do NOT decide clip lengths yet - just identify WHAT moments exist.
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
-  "foundMoments": ["which of the 3 missing moments did you find in these new frames"],
-  "newCuts": [
+  "newMoments": [
     {
       "frameReference": number (1-${framesToAnalyze.length}),
-      "startTime": number (use EXACT time from manifest above),
-      "endTime": number,
-      "reason": "what this moment shows",
-      "importance": number between 0-1
+      "timestamp": number (use EXACT time from manifest above),
+      "description": "what this moment shows",
+      "importance": number between 0-1,
+      "category": "ingredient|technique|process|result|reaction"
     }
   ],
+  "foundFromMissing": ["which of the 3 missing moments did you find"],
   "stillMissing": ["which missing moments are still not found"]
 }
 `;
@@ -1746,38 +1734,115 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     }
 
     // Log supplemental results
-    if (supplementalResult.foundMoments?.length > 0) {
-      console.log('🎉 FOUND Missing Moments:', supplementalResult.foundMoments);
+    if (supplementalResult.foundFromMissing?.length > 0) {
+      console.log('🎉 FOUND Missing Moments:', supplementalResult.foundFromMissing);
     }
     if (supplementalResult.stillMissing?.length > 0) {
       console.log('⚠️ Still Missing:', supplementalResult.stillMissing);
     }
-    console.log('✂️ New Cuts from Supplemental Analysis:', supplementalResult.newCuts?.length || 0);
-
-    // Validate new cut frame references
-    if (supplementalResult.newCuts && supplementalResult.newCuts.length > 0) {
-      console.log('\n🔍 Validating supplemental cuts:');
-      supplementalResult.newCuts.forEach((cut, idx) => {
-        if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= framesToAnalyze.length) {
-          const referencedFrame = framesToAnalyze[cut.frameReference - 1];
-          const frameDiff = Math.abs(cut.startTime - referencedFrame.timestamp);
-
-          if (frameDiff > 10) {
-            console.warn(`⚠️ New Clip ${idx + 1} timestamp mismatch:`,
-              `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.timestamp)}`,
-              `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
-            );
-          } else {
-            console.log(`✅ New Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.timestamp)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
-          }
-        }
-      });
-    }
+    console.log('✅ New Moments Identified:', supplementalResult.newMoments?.length || 0);
 
     return supplementalResult;
 
   } catch (error) {
     console.error('❌ Re-analysis failed:', error);
+    throw error;
+  }
+};
+
+// PHASE 5: Final clip selection with ALL moments known
+const selectFinalClips = async (allMoments, targetDuration, storyType) => {
+  console.log(`📝 PHASE 5: Selecting final clips from ${allMoments.length} total moments...`);
+
+  try {
+    // Build moment inventory
+    const momentsList = allMoments.map((m, idx) =>
+      `Moment ${idx + 1}: ${m.description} @ ${formatTime(m.timestamp)} [${m.category}, importance: ${m.importance}]`
+    ).join('\n');
+
+    const promptText = `
+You have identified ${allMoments.length} moments in a ${storyType} video.
+Now select the BEST moments and assign clip lengths to create a ${targetDuration}-second compilation.
+
+AVAILABLE MOMENTS:
+${momentsList}
+
+TARGET: ${targetDuration} seconds total duration
+
+Your job: Select 8-12 moments and assign appropriate clip lengths (2-10s each).
+
+PROFESSIONAL EDITING PRINCIPLES:
+- Prioritize high-importance moments (0.8-1.0)
+- Balance the narrative arc (opening → process → climax → finale)
+- Vary clip lengths for pacing (mix 2-3s quick cuts with 6-10s showcase moments)
+- Don't neglect finale/result moments - they're critical for payoff
+- Budget your time wisely - finale moments often deserve 7-10s
+
+CATEGORY GUIDANCE:
+- ingredient: 2-3s (quick visual)
+- technique: 4-6s (show the action)
+- process: 3-5s (demonstrate progress)
+- result: 7-10s (showcase the payoff!)
+- reaction: 3-5s (human connection)
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "selectedClips": [
+    {
+      "momentIndex": number (1-${allMoments.length}),
+      "startTime": number (use moment's timestamp),
+      "endTime": number (startTime + desired clip length),
+      "reason": "why this moment was selected",
+      "clipLength": number (in seconds),
+      "narrativeRole": "hook|build|climax|payoff"
+    }
+  ],
+  "totalDuration": number,
+  "editingRationale": "brief explanation of your clip selection and pacing strategy"
+}
+`;
+
+    const response = await fetch('/api/analyze-narrative', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{
+          role: "user",
+          content: [{ type: "text", text: promptText }]
+        }],
+        videoType: 'final-clip-selection'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.content;
+
+    const textBlock = content.find(block => block.type === 'text');
+    if (!textBlock) {
+      throw new Error('No text response from Claude');
+    }
+
+    let clipSelection;
+    try {
+      const cleaned = textBlock.text.replace(/```json\n?|\n?```/g, '').trim();
+      clipSelection = JSON.parse(cleaned);
+    } catch (parseError) {
+      console.error('JSON parse error:', textBlock.text);
+      throw new Error('Invalid JSON response from Claude');
+    }
+
+    console.log('✂️ Selected Clips:', clipSelection.selectedClips.length);
+    console.log('⏱️ Total Duration:', clipSelection.totalDuration + 's (target: ' + targetDuration + 's)');
+    console.log('📋 Strategy:', clipSelection.editingRationale);
+
+    return clipSelection;
+
+  } catch (error) {
+    console.error('❌ Final clip selection failed:', error);
     throw error;
   }
 };
@@ -4693,11 +4758,11 @@ const exportVideo = async () => {
             saveToHistory(finalAnchors);
           }
 
-          // === MODE 2: SMART GEN (V4 - Four-Phase with Agentic Seeking) ===
+          // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
           else if (autoGenMode === 'smart') {
-            console.log('🧠 Smart Gen: Four-Phase Analysis with Agentic Seeking (~$0.60-$1.20)');
+            console.log('🧠 Smart Gen: Five-Phase Editorial Workflow (~$0.60-$1.50)');
 
-            // PHASE 1: Gather comprehensive frames (no API calls, just extraction)
+            // PHASE 1: Gather comprehensive frames
             const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
 
             if (allFrames.length === 0) {
@@ -4705,26 +4770,28 @@ const exportVideo = async () => {
               return;
             }
 
-            // PHASE 2: Single comprehensive analysis (one API call)
-            const initialNarrative = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
+            // PHASE 2: Identify moments (no clip lengths yet)
+            const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
 
-            if (!initialNarrative) {
+            if (!initialAnalysis) {
               alert('Narrative analysis failed. Please try again.');
               return;
             }
 
-            // PHASE 3: Agentic seeking for missing moments (if any)
-            let finalNarrative = initialNarrative;
-            if (initialNarrative.missingMoments && initialNarrative.missingMoments.length > 0) {
+            // Build initial moment inventory
+            let allMoments = initialAnalysis.keyMoments || [];
+
+            // PHASE 3: Agentic seeking for missing moments
+            if (initialAnalysis.missingMoments && initialAnalysis.missingMoments.length > 0) {
               const { newFrames, searches } = await seekMissingMoments(
                 video,
                 duration,
-                initialNarrative.missingMoments,
+                initialAnalysis.missingMoments,
                 allFrames,
                 zones
               );
 
-              // PHASE 4: Analyze new frames only (supplemental analysis)
+              // PHASE 4: Analyze new frames (supplemental moments)
               if (newFrames.length > 0) {
                 console.log(`🔄 Analyzing ${newFrames.length} new frames for supplemental moments...`);
                 const supplemental = await analyzeNewFrames(
@@ -4732,42 +4799,39 @@ const exportVideo = async () => {
                   newFrames,
                   targetDuration,
                   zones,
-                  initialNarrative.missingMoments,
-                  initialNarrative.suggestedCuts
+                  initialAnalysis.missingMoments,
+                  [] // No cuts yet, just moments
                 );
 
-                // Merge original cuts with new supplemental cuts
-                const combinedCuts = [
-                  ...initialNarrative.suggestedCuts,
-                  ...(supplemental.newCuts || [])
+                // Merge moments
+                allMoments = [
+                  ...allMoments,
+                  ...(supplemental.newMoments || [])
                 ];
 
-                finalNarrative = {
-                  ...initialNarrative,
-                  suggestedCuts: combinedCuts,
-                  missingMoments: supplemental.stillMissing || [],
-                  foundMoments: [
-                    ...(initialNarrative.keyMomentsFound || []),
-                    ...(supplemental.foundMoments || [])
-                  ]
-                };
-
-                console.log(`✅ Merged: ${initialNarrative.suggestedCuts.length} original + ${supplemental.newCuts?.length || 0} new = ${combinedCuts.length} total clips`);
+                console.log(`✅ Moment Inventory: ${initialAnalysis.keyMoments.length} original + ${supplemental.newMoments?.length || 0} new = ${allMoments.length} total moments`);
               } else {
-                console.log('⚠️ No new frames found - using initial analysis');
+                console.log('⚠️ No new frames found - proceeding with existing moments');
               }
             } else {
-              console.log('✅ No missing moments detected - skipping agentic seeking');
+              console.log('✅ No missing moments - proceeding with existing moments');
             }
 
-            // Create anchors from final suggestions
-            const allAnchors = finalNarrative.suggestedCuts.map((cut, index) => ({
-              id: Date.now() + index,
-              start: cut.startTime,
-              end: cut.endTime,
-              _narrativeReason: cut.reason,
-              _importance: cut.importance
-            })).sort((a, b) => a.start - b.start);
+            // PHASE 5: Select final clips with ALL moments known
+            console.log(`📝 Now selecting clips from ${allMoments.length} total moments...`);
+            const clipSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType);
+
+            // Map moment indices back to actual moments and create anchors
+            const allAnchors = clipSelection.selectedClips.map((clip, index) => {
+              const moment = allMoments[clip.momentIndex - 1];
+              return {
+                id: Date.now() + index,
+                start: clip.startTime,
+                end: clip.endTime,
+                _narrativeReason: moment.description,
+                _importance: moment.importance
+              };
+            }).sort((a, b) => a.start - b.start);
 
             // Enforce target duration - trim clips to fit within target (+10s tolerance)
             const targetLimit = targetDuration + 10;
@@ -4799,14 +4863,14 @@ const exportVideo = async () => {
             const trimmedCount = allAnchors.length - newAnchors.length;
 
             console.log('✅ SMART GEN COMPLETE:', {
-              storyType: finalNarrative.storyType,
+              storyType: initialAnalysis.storyType,
+              momentsInventoried: allMoments.length,
+              clipsSelected: allAnchors.length,
               anchorsCreated: newAnchors.length,
-              anchorsRaw: allAnchors.length,
               trimmed: trimmedCount > 0 ? `${trimmedCount} clips to fit target` : 'none',
               totalDuration: finalDuration.toFixed(1) + 's',
               target: targetDuration + 's',
-              confidence: finalNarrative.confidence,
-              agenticSeeking: initialNarrative.missingMoments?.length > 0 ? 'used' : 'skipped'
+              workflow: '5-phase (gather→analyze→seek→supplement→select)'
             });
 
             setAnchors(newAnchors);
