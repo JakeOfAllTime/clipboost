@@ -1093,36 +1093,36 @@ const gatherComprehensiveFrames = async (videoFile, videoDuration) => {
   // Adaptive zone sizing based on video length - NO GAPS for comprehensive coverage
   const getZones = (duration) => {
     if (duration < 300) {
-      // Short video (< 5 min): Dense sampling, ~50 frames
+      // Short video (< 5 min): Dense sampling, ~60 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.20, frames: 12 },
-        { name: 'early', start: duration * 0.20, end: duration * 0.40, frames: 10 },
-        { name: 'middle', start: duration * 0.40, end: duration * 0.65, frames: 12 },
-        { name: 'late', start: duration * 0.65, end: duration * 0.85, frames: 10 },
-        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 16 }
+        { name: 'opening', start: 0, end: duration * 0.20, frames: 14 },
+        { name: 'early', start: duration * 0.20, end: duration * 0.40, frames: 12 },
+        { name: 'middle', start: duration * 0.40, end: duration * 0.65, frames: 14 },
+        { name: 'late', start: duration * 0.65, end: duration * 0.85, frames: 12 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 18 }
       ];
     } else if (duration < 1200) {
-      // Medium video (5-20 min): Balanced coverage, ~60 frames
+      // Medium video (5-20 min): Balanced coverage, ~80 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.15, frames: 10 },
-        { name: 'early', start: duration * 0.15, end: duration * 0.30, frames: 10 },
-        { name: 'early_middle', start: duration * 0.30, end: duration * 0.45, frames: 10 },
-        { name: 'middle', start: duration * 0.45, end: duration * 0.60, frames: 10 },
-        { name: 'late_middle', start: duration * 0.60, end: duration * 0.75, frames: 10 },
-        { name: 'late', start: duration * 0.75, end: duration * 0.88, frames: 8 },
-        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 12 }
+        { name: 'opening', start: 0, end: duration * 0.15, frames: 12 },
+        { name: 'early', start: duration * 0.15, end: duration * 0.30, frames: 12 },
+        { name: 'early_middle', start: duration * 0.30, end: duration * 0.45, frames: 12 },
+        { name: 'middle', start: duration * 0.45, end: duration * 0.60, frames: 12 },
+        { name: 'late_middle', start: duration * 0.60, end: duration * 0.75, frames: 12 },
+        { name: 'late', start: duration * 0.75, end: duration * 0.88, frames: 10 },
+        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 14 }
       ];
     } else {
-      // Long video (20+ min): Continuous coverage, ~70 frames
+      // Long video (20+ min): Continuous coverage, ~100 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.10, frames: 10 },
-        { name: 'early', start: duration * 0.10, end: duration * 0.22, frames: 8 },
-        { name: 'early_middle', start: duration * 0.22, end: duration * 0.35, frames: 8 },
-        { name: 'middle', start: duration * 0.35, end: duration * 0.50, frames: 10 },
-        { name: 'middle_late', start: duration * 0.50, end: duration * 0.65, frames: 10 },
-        { name: 'late_middle', start: duration * 0.65, end: duration * 0.78, frames: 8 },
-        { name: 'late', start: duration * 0.78, end: duration * 0.88, frames: 8 },
-        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 12 }
+        { name: 'opening', start: 0, end: duration * 0.10, frames: 12 },
+        { name: 'early', start: duration * 0.10, end: duration * 0.22, frames: 12 },
+        { name: 'early_middle', start: duration * 0.22, end: duration * 0.35, frames: 12 },
+        { name: 'middle', start: duration * 0.35, end: duration * 0.50, frames: 14 },
+        { name: 'middle_late', start: duration * 0.50, end: duration * 0.65, frames: 14 },
+        { name: 'late_middle', start: duration * 0.65, end: duration * 0.78, frames: 12 },
+        { name: 'late', start: duration * 0.78, end: duration * 0.88, frames: 10 },
+        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 14 }
       ];
     }
   };
@@ -4378,7 +4378,7 @@ const exportVideo = async () => {
             }
 
             // Create anchors from suggestions
-            const newAnchors = narrative.suggestedCuts.map((cut, index) => ({
+            const allAnchors = narrative.suggestedCuts.map((cut, index) => ({
               id: Date.now() + index,
               start: cut.startTime,
               end: cut.endTime,
@@ -4386,10 +4386,42 @@ const exportVideo = async () => {
               _importance: cut.importance
             })).sort((a, b) => a.start - b.start);
 
+            // Enforce target duration - trim clips to fit within target (+10s tolerance)
+            const targetLimit = targetDuration + 10;
+            let runningTotal = 0;
+            const newAnchors = [];
+
+            for (const anchor of allAnchors) {
+              const clipDuration = anchor.end - anchor.start;
+              if (runningTotal + clipDuration <= targetLimit) {
+                newAnchors.push(anchor);
+                runningTotal += clipDuration;
+              } else if (runningTotal < targetDuration) {
+                // Partial clip to exactly hit target
+                const remaining = targetDuration - runningTotal;
+                if (remaining >= 2) { // Only add if at least 2 seconds
+                  newAnchors.push({
+                    ...anchor,
+                    end: anchor.start + remaining
+                  });
+                  runningTotal += remaining;
+                }
+                break;
+              } else {
+                break; // Already at or past target
+              }
+            }
+
+            const finalDuration = newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0);
+            const trimmedCount = allAnchors.length - newAnchors.length;
+
             console.log('✅ SMART GEN COMPLETE:', {
               storyType: narrative.storyType,
               anchorsCreated: newAnchors.length,
-              totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1) + 's',
+              anchorsRaw: allAnchors.length,
+              trimmed: trimmedCount > 0 ? `${trimmedCount} clips to fit target` : 'none',
+              totalDuration: finalDuration.toFixed(1) + 's',
+              target: targetDuration + 's',
               confidence: narrative.confidence
             });
 
