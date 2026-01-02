@@ -1159,7 +1159,7 @@ const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) =
   try {
     // Build frame manifest with exact timestamps
     const frameManifest = allFrames.map((frame, idx) =>
-      `Frame ${idx + 1}: ${formatTime(frame.time)} (${frame.zone} zone)`
+      `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.zone} zone)`
     ).join('\n');
 
     // Build zone summary for Claude
@@ -1379,15 +1379,15 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     narrative.suggestedCuts.forEach((cut, idx) => {
       if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= allFrames.length) {
         const referencedFrame = allFrames[cut.frameReference - 1];
-        const frameDiff = Math.abs(cut.startTime - referencedFrame.time);
+        const frameDiff = Math.abs(cut.startTime - referencedFrame.timestamp);
 
         if (frameDiff > 10) {
           console.warn(`⚠️ Clip ${idx + 1} timestamp mismatch:`,
-            `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.time)}`,
+            `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.timestamp)}`,
             `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
           );
         } else {
-          console.log(`✅ Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.time)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
+          console.log(`✅ Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.timestamp)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
         }
       } else {
         console.warn(`⚠️ Clip ${idx + 1}: Missing or invalid frameReference (${cut.frameReference})`);
