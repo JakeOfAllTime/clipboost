@@ -1542,16 +1542,17 @@ const seekMissingMoments = async (videoFile, videoDuration, missingMoments, exis
   return { newFrames: allNewFrames, searches: searchLog };
 };
 
-// PHASE 4: Re-analysis with additional frames from agentic seeking
-const reanalyzeWithAdditionalFrames = async (originalFrames, newFrames, targetDuration, zones, missingMoments) => {
-  console.log(`🔄 PHASE 4: Re-analyzing with ${originalFrames.length} original + ${newFrames.length} new frames...`);
+// PHASE 4: Focused analysis of new frames only (avoids re-sending all 100+ frames)
+const analyzeNewFrames = async (originalFrames, newFrames, targetDuration, zones, missingMoments, originalCuts) => {
+  console.log(`🔄 PHASE 4: Analyzing ${newFrames.length} new frames for missing moments...`);
 
-  const allFrames = [...originalFrames, ...newFrames];
+  // Only analyze NEW frames to avoid API limits
+  const framesToAnalyze = newFrames;
 
   try {
-    // Build combined frame manifest
-    const frameManifest = allFrames.map((frame, idx) =>
-      `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.zone} zone${frame.searchContext ? ` - searched for: ${frame.searchContext}` : ''})`
+    // Build frame manifest for NEW frames only
+    const frameManifest = framesToAnalyze.map((frame, idx) =>
+      `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.zone} - searched for: ${frame.searchContext})`
     ).join('\n');
 
     const zoneSummary = zones.map((z, i) =>
@@ -1559,16 +1560,21 @@ const reanalyzeWithAdditionalFrames = async (originalFrames, newFrames, targetDu
     ).join('\n');
 
     const promptText = `
-Analyze these ${allFrames.length} frames from a video to create compelling short-form clips.
+You are analyzing ADDITIONAL frames from a cooking video to find missing moments.
 
-CONTEXT: You previously analyzed this video and identified these missing moments:
+CONTEXT - What you previously found:
+Your initial analysis of 100 frames found these key moments:
+${originalCuts.map(c => `- ${c.reason} (${formatTime(c.startTime)})`).join('\n')}
+
+But you identified these MISSING moments:
 ${missingMoments.map((m, i) => `${i + 1}. ${m}`).join('\n')}
 
-I performed targeted searches and found ${newFrames.length} additional frames to help you find these moments.
+I performed targeted searches in specific zones and extracted ${framesToAnalyze.length} additional frames.
+Your job: Analyze ONLY these ${framesToAnalyze.length} new frames to find the missing moments.
 
 CRITICAL: FRAME TIMING REFERENCE
 
-You will see ${allFrames.length} images. Here are their EXACT timestamps:
+You will see ${framesToAnalyze.length} images. Here are their EXACT timestamps:
 
 ${frameManifest}
 
@@ -1682,27 +1688,21 @@ CLIP COUNT TARGETS (flexible):
 - 40-second target: Aim for 8-12 clips (varied lengths)
 - 60-second target: Aim for 10-15 clips (varied lengths)
 
-IMPORTANT: Since we searched for missing moments, check if you found them in the new frames!
+Your task: Find clips from these ${framesToAnalyze.length} new frames that address the missing moments.
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
-  "storyType": "string",
-  "narrative": "brief description of the story",
-  "keyMomentsFound": ["list of ALL key moments you identified (including newly found ones)"],
-  "suggestedCuts": [
+  "foundMoments": ["which of the 3 missing moments did you find in these new frames"],
+  "newCuts": [
     {
-      "frameReference": number,
-      "startTime": number,
+      "frameReference": number (1-${framesToAnalyze.length}),
+      "startTime": number (use EXACT time from manifest above),
       "endTime": number,
       "reason": "what this moment shows",
-      "clipLengthReasoning": "why this duration is optimal for this content",
-      "narrativeRole": "hook|build|climax|payoff",
       "importance": number between 0-1
     }
   ],
-  "confidence": number between 0-1,
-  "missingMoments": ["moments you STILL want to see but didn't find (should be shorter list now!)"],
-  "foundPreviously Missing": ["which of the previous missing moments did you find in the new frames"]
+  "stillMissing": ["which missing moments are still not found"]
 }
 `;
 
@@ -1714,13 +1714,13 @@ Respond with ONLY valid JSON (no markdown, no explanation):
           role: "user",
           content: [
             { type: "text", text: promptText },
-            ...allFrames.map(f => ({
+            ...framesToAnalyze.map(f => ({
               type: "image",
               source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
             }))
           ]
         }],
-        videoType: 'visual-only-reanalysis'
+        videoType: 'supplemental-analysis'
       })
     });
 
@@ -1736,49 +1736,45 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       throw new Error('No text response from Claude');
     }
 
-    let narrative;
+    let supplementalResult;
     try {
       const cleaned = textBlock.text.replace(/```json\n?|\n?```/g, '').trim();
-      narrative = JSON.parse(cleaned);
+      supplementalResult = JSON.parse(cleaned);
     } catch (parseError) {
       console.error('JSON parse error:', textBlock.text);
       throw new Error('Invalid JSON response from Claude');
     }
 
-    // Log results
-    console.log('🎬 Story Type:', narrative.storyType);
-    console.log('📝 Narrative:', narrative.narrative);
-    console.log('✅ Key Moments Found:', narrative.keyMomentsFound?.length || 0, 'moments');
-    if (narrative.foundPreviouslyMissing?.length > 0) {
-      console.log('🎉 FOUND Previously Missing:', narrative.foundPreviouslyMissing);
+    // Log supplemental results
+    if (supplementalResult.foundMoments?.length > 0) {
+      console.log('🎉 FOUND Missing Moments:', supplementalResult.foundMoments);
     }
-    if (narrative.missingMoments?.length > 0) {
-      console.log('⚠️ Still Missing:', narrative.missingMoments);
+    if (supplementalResult.stillMissing?.length > 0) {
+      console.log('⚠️ Still Missing:', supplementalResult.stillMissing);
     }
-    console.log('🎯 Confidence:', narrative.confidence);
-    console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
+    console.log('✂️ New Cuts from Supplemental Analysis:', supplementalResult.newCuts?.length || 0);
 
-    // Validate frame references
-    console.log('\n🔍 Validating timestamp accuracy:');
-    narrative.suggestedCuts.forEach((cut, idx) => {
-      if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= allFrames.length) {
-        const referencedFrame = allFrames[cut.frameReference - 1];
-        const frameDiff = Math.abs(cut.startTime - referencedFrame.timestamp);
+    // Validate new cut frame references
+    if (supplementalResult.newCuts && supplementalResult.newCuts.length > 0) {
+      console.log('\n🔍 Validating supplemental cuts:');
+      supplementalResult.newCuts.forEach((cut, idx) => {
+        if (cut.frameReference && cut.frameReference >= 1 && cut.frameReference <= framesToAnalyze.length) {
+          const referencedFrame = framesToAnalyze[cut.frameReference - 1];
+          const frameDiff = Math.abs(cut.startTime - referencedFrame.timestamp);
 
-        if (frameDiff > 10) {
-          console.warn(`⚠️ Clip ${idx + 1} timestamp mismatch:`,
-            `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.timestamp)}`,
-            `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
-          );
-        } else {
-          console.log(`✅ Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.timestamp)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
+          if (frameDiff > 10) {
+            console.warn(`⚠️ New Clip ${idx + 1} timestamp mismatch:`,
+              `References Frame ${cut.frameReference} at ${formatTime(referencedFrame.timestamp)}`,
+              `but uses startTime ${formatTime(cut.startTime)} (${frameDiff.toFixed(1)}s off)`
+            );
+          } else {
+            console.log(`✅ New Clip ${idx + 1}: Frame ${cut.frameReference} @ ${formatTime(referencedFrame.timestamp)} → ${formatTime(cut.startTime)}-${formatTime(cut.endTime)} (${(cut.endTime - cut.startTime).toFixed(1)}s)`);
+          }
         }
-      } else {
-        console.warn(`⚠️ Clip ${idx + 1}: Missing or invalid frameReference (${cut.frameReference})`);
-      }
-    });
+      });
+    }
 
-    return narrative;
+    return supplementalResult;
 
   } catch (error) {
     console.error('❌ Re-analysis failed:', error);
@@ -4728,16 +4724,35 @@ const exportVideo = async () => {
                 zones
               );
 
-              // PHASE 4: Re-analyze if we found new frames
+              // PHASE 4: Analyze new frames only (supplemental analysis)
               if (newFrames.length > 0) {
-                console.log(`🔄 Found ${newFrames.length} new frames - re-analyzing...`);
-                finalNarrative = await reanalyzeWithAdditionalFrames(
+                console.log(`🔄 Analyzing ${newFrames.length} new frames for supplemental moments...`);
+                const supplemental = await analyzeNewFrames(
                   allFrames,
                   newFrames,
                   targetDuration,
                   zones,
-                  initialNarrative.missingMoments
+                  initialNarrative.missingMoments,
+                  initialNarrative.suggestedCuts
                 );
+
+                // Merge original cuts with new supplemental cuts
+                const combinedCuts = [
+                  ...initialNarrative.suggestedCuts,
+                  ...(supplemental.newCuts || [])
+                ];
+
+                finalNarrative = {
+                  ...initialNarrative,
+                  suggestedCuts: combinedCuts,
+                  missingMoments: supplemental.stillMissing || [],
+                  foundMoments: [
+                    ...(initialNarrative.keyMomentsFound || []),
+                    ...(supplemental.foundMoments || [])
+                  ]
+                };
+
+                console.log(`✅ Merged: ${initialNarrative.suggestedCuts.length} original + ${supplemental.newCuts?.length || 0} new = ${combinedCuts.length} total clips`);
               } else {
                 console.log('⚠️ No new frames found - using initial analysis');
               }
