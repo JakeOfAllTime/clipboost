@@ -3542,13 +3542,13 @@ const goToNextAnchor = () => {
                   fontFamily: 'serif',
                   letterSpacing: '0.1em',
                   ...(isActive && {
-                    boxShadow: '0 -4px 12px rgba(255, 107, 53, 0.4), inset 0 2px 8px rgba(255, 107, 53, 0.2)'
+                    boxShadow: '0 -4px 12px rgba(59, 130, 246, 0.3), inset 0 2px 8px rgba(139, 92, 246, 0.15)'
                   })
                 }}
               >
                 {tab.label}
                 {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
                 )}
               </button>
             );
@@ -4010,7 +4010,7 @@ const exportVideo = async () => {
                             style={{
                               left: `${(musicStartTime / musicDuration) * 100}%`,
                               width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`,
-                              background: 'linear-gradient(to right, #ff6b35, #d4572f)'
+                              background: 'linear-gradient(to right, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.6))'
                             }}
                           />
 
@@ -5986,8 +5986,8 @@ onMouseLeave={() => {
         {currentTab === 'ship' && video && (
           <div className="panel rounded-2xl p-8">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-hot)', textShadow: '0 0 10px rgba(255,107,53,0.5)' }}>⚡ Ship Your Reel</h2>
-              <p style={{ color: 'var(--text-dim)' }}>Select platforms and forge your final reel</p>
+              <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-primary)', textShadow: '0 0 10px rgba(59,130,246,0.4)' }}>⚡ Export Your Video</h2>
+              <p style={{ color: 'var(--text-secondary)' }}>Select platforms and export your final video</p>
             </div>
 
             <div className="space-y-4 mb-6">
