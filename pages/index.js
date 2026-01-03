@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -103,6 +103,10 @@ const ReelForge = () => {
   const [autoGenMode, setAutoGenMode] = useState('smart'); // 'quick' | 'smart' | 'pro'
   const [enableBeatSync, setEnableBeatSync] = useState(false);
   const [userApiKey, setUserApiKey] = useState('');
+
+  // Sidebar navigation state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [currentSection, setCurrentSection] = useState('edit'); // 'edit' | 'export'
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -3767,32 +3771,114 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
-<div className="min-h-screen p-4 sm:p-8 overflow-x-hidden" style={{ color: 'var(--text-primary)' }}>
-  <div className="max-w-7xl mx-auto w-full">
-        {/* Header */}
-        <div className="text-center mb-8 panel p-6">
-          <h1 className="text-4xl font-bold mb-2" style={{
-            color: 'var(--text-primary)',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
-          }}>
-            ClipBoost
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            AI-Powered Video Editor
-          </p>
-          {!ffmpegLoaded && (
-            <p className="text-sm mt-2" style={{ color: 'var(--accent-primary)' }}>
-              ⚡ Loading video processor...
-            </p>
-          )}
-        </div>
+<div className="flex min-h-screen" style={{ color: 'var(--text-primary)', background: 'var(--bg-primary)' }}>
+  {/* Sidebar Navigation */}
+  <div
+    className={`${sidebarCollapsed ? 'w-16' : 'w-64'} hidden sm:flex flex-col panel border-r transition-all duration-300`}
+    style={{
+      borderRadius: 0,
+      borderTop: 'none',
+      borderLeft: 'none',
+      borderBottom: 'none',
+      minHeight: '100vh'
+    }}
+  >
+    {/* Logo & Toggle */}
+    <div className="p-4 flex items-center justify-between border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+      {!sidebarCollapsed && (
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          ClipBoost
+        </h1>
+      )}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className="p-2 hover:bg-gray-700/50 rounded transition"
+        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+      </button>
+    </div>
 
-        {/* Tab Navigation */}
-        <TabNav
-          currentTab={currentTab}
-          onChange={setCurrentTab}
-          hasVideo={!!video}
-        />
+    {/* Navigation Items */}
+    <nav className="flex-1 p-2">
+      <button
+        onClick={() => setCurrentSection('edit')}
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg mb-1 transition ${
+          currentSection === 'edit'
+            ? 'bg-blue-500/20 text-blue-400'
+            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+        }`}
+      >
+        <Edit size={20} className="flex-shrink-0" />
+        {!sidebarCollapsed && <span className="font-medium">Edit</span>}
+      </button>
+
+      <button
+        onClick={() => setCurrentSection('export')}
+        disabled={!video}
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition ${
+          currentSection === 'export'
+            ? 'bg-blue-500/20 text-blue-400'
+            : !video
+            ? 'text-gray-600 cursor-not-allowed'
+            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+        }`}
+      >
+        <Download size={20} className="flex-shrink-0" />
+        {!sidebarCollapsed && <span className="font-medium">Export</span>}
+      </button>
+    </nav>
+
+    {/* Footer Info */}
+    {!sidebarCollapsed && !ffmpegLoaded && (
+      <div className="p-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          ⚡ Loading processor...
+        </p>
+      </div>
+    )}
+  </div>
+
+  {/* Mobile Bottom Navigation */}
+  <div className="sm:hidden fixed bottom-0 left-0 right-0 panel border-t z-50" style={{ borderRadius: 0 }}>
+    <div className="flex">
+      <button
+        onClick={() => setCurrentSection('edit')}
+        className={`flex-1 flex flex-col items-center py-3 ${
+          currentSection === 'edit' ? 'text-blue-400' : 'text-gray-400'
+        }`}
+      >
+        <Edit size={24} />
+        <span className="text-xs mt-1">Edit</span>
+      </button>
+      <button
+        onClick={() => setCurrentSection('export')}
+        disabled={!video}
+        className={`flex-1 flex flex-col items-center py-3 ${
+          currentSection === 'export' ? 'text-blue-400' : !video ? 'text-gray-600' : 'text-gray-400'
+        }`}
+      >
+        <Download size={24} />
+        <span className="text-xs mt-1">Export</span>
+      </button>
+    </div>
+  </div>
+
+  {/* Main Content Area */}
+  <div className="flex-1 overflow-y-auto pb-20 sm:pb-0">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          {currentSection === 'edit' ? 'Edit Video' : 'Export Video'}
+        </h2>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          {currentSection === 'edit'
+            ? 'Upload, trim, and add music to your video'
+            : 'Choose platforms and export your final video'
+          }
+        </p>
+      </div>
 {/* Restore Toast Notification */}
         {showRestoreToast && (
           <div className="fixed top-4 right-4 bg-slate-800 border-2 border-amber-600/60 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
@@ -3827,8 +3913,8 @@ const exportVideo = async () => {
           </div>
         )}
 
-        {/* TAB 1: MATERIALS */}
-        {currentTab === 'materials' && (
+        {/* EDIT SECTION (combines Materials + Forge) */}
+        {currentSection === 'edit' && (
           <div className="panel rounded-2xl p-12">
             {!video ? (
               <div className="text-center">
@@ -3949,8 +4035,8 @@ const exportVideo = async () => {
           </div>
         )}
 
-        {/* TAB 2: FORGE */}
-        {currentTab === 'forge' && video && (
+        {/* Music & Timeline (part of Edit section) */}
+        {currentSection === 'edit' && video && (
           <div className="space-y-4">
             {/* Compact Music Panel */}
             <div className="panel rounded-xl p-4">
@@ -5982,8 +6068,8 @@ onMouseLeave={() => {
         )}
 
         {/* Music Precision Modal */}
-        {/* TAB 3: SHIP */}
-        {currentTab === 'ship' && video && (
+        {/* EXPORT SECTION */}
+        {currentSection === 'export' && video && (
           <div className="panel rounded-2xl p-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-primary)', textShadow: '0 0 10px rgba(59,130,246,0.4)' }}>⚡ Export Your Video</h2>
