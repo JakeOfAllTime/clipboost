@@ -1358,7 +1358,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       "timestamp": number,       // Use exact time from frame manifest above
       "description": "what this moment shows",
       "importance": number between 0-1,
-      "category": "ingredient|technique|process|result|reaction"
+      "category": "string (describe moment type - e.g., reveal, reaction, technique, climax, setup, payoff, etc.)"
     }
   ],
   "missingMoments": ["moments you wanted to see but didn't find in frames"],
@@ -1686,7 +1686,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       "timestamp": number (use EXACT time from manifest above),
       "description": "what this moment shows",
       "importance": number between 0-1,
-      "category": "ingredient|technique|process|result|reaction"
+      "category": "string (describe moment type - e.g., reveal, reaction, technique, climax, setup, payoff, etc.)"
     }
   ],
   "foundFromMissing": ["which of the 3 missing moments did you find"],
@@ -1778,27 +1778,22 @@ ${Object.entries(zoneDistribution).map(([zone, count]) => `- ${zone}: ${count} m
 
 TARGET: ${targetDuration} seconds total duration
 
-Your job: Select 8-12 moments and assign appropriate clip lengths (2-10s each).
+Your job: Select the best moments and assign appropriate clip lengths (2-10s each).
+Aim for 8-12 clips total, but prioritize quality over hitting exact counts.
 
-CRITICAL: BALANCE ACROSS ZONES
-- Do NOT select all clips from opening/early zones
-- MUST include finale zone moments (result/reaction moments are critical!)
-- Aim for representation from at least 5-6 different zones
-- Think chronologically: opening → early → middle → late → finale
+EDITORIAL PRINCIPLES:
+- Prioritize high-importance moments (0.7-1.0) regardless of where they appear
+- Avoid clustering all clips in opening/early zones - seek diverse timeline representation
+- Balance the narrative arc naturally based on what the video actually offers
+- Vary clip lengths for pacing (mix quick 2-3s cuts with longer 6-10s showcase moments)
+- Let importance scores guide your choices, not arbitrary zone requirements
+- If the best moments cluster in certain zones, that's fine - follow the content
 
-PROFESSIONAL EDITING PRINCIPLES:
-- Prioritize high-importance moments (0.7-1.0)
-- Balance the narrative arc (opening → process → climax → finale)
-- Vary clip lengths for pacing (mix 2-3s quick cuts with 6-10s showcase moments)
-- Don't neglect finale/result moments - they're critical for payoff
-- Budget your time wisely - finale moments often deserve 7-10s
-
-CATEGORY GUIDANCE:
-- ingredient: 2-3s (quick visual)
-- technique: 4-6s (show the action)
-- process: 3-5s (demonstrate progress)
-- result: 7-10s (showcase the payoff!)
-- reaction: 3-5s (human connection)
+PACING GUIDANCE (flexible):
+- High-energy moments: 2-4s (quick impact)
+- Technique/process moments: 4-6s (time to demonstrate)
+- Payoff/result moments: 6-10s (let viewers appreciate)
+- Adjust based on content - these are guidelines, not rules
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
