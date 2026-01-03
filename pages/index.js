@@ -704,7 +704,8 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
             });
           }
 
-          URL.revokeObjectURL(video.src);
+          // Defer blob cleanup to avoid race condition with video element
+          setTimeout(() => URL.revokeObjectURL(video.src), 100);
           resolve(results);
           return;
         }
@@ -815,7 +816,8 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
           currentSample++;
           if (currentSample < totalSamples) processFrame();
           else {
-            URL.revokeObjectURL(video.src);
+            // Defer blob cleanup to avoid race condition with video element
+            setTimeout(() => URL.revokeObjectURL(video.src), 100);
             resolve(results);
           }
         }
@@ -916,7 +918,8 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
           });
         }
 
-        URL.revokeObjectURL(video.src);
+        // Defer blob cleanup to avoid race condition with video element
+        setTimeout(() => URL.revokeObjectURL(video.src), 100);
         resolve(frames);
 
       } else {
@@ -945,7 +948,8 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
           });
         }
 
-        URL.revokeObjectURL(video.src);
+        // Defer blob cleanup to avoid race condition with video element
+        setTimeout(() => URL.revokeObjectURL(video.src), 100);
         resolve(frames);
       }
     };
@@ -994,7 +998,8 @@ const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount 
         });
       }
 
-      URL.revokeObjectURL(video.src);
+      // Defer blob cleanup to avoid race condition with video element
+      setTimeout(() => URL.revokeObjectURL(video.src), 100);
       resolve(frames);
     };
 
@@ -4875,8 +4880,46 @@ const exportVideo = async () => {
             const clipSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType);
 
             // Map moment indices back to actual moments and create anchors
-            console.log('🔧 Mapping selected clips to anchors:');
-            const allAnchors = clipSelection.selectedClips.map((clip, index) => {
+            console.log('🔧 Validating and mapping selected clips to anchors:');
+
+            // Step 1: Sort clips by start time
+            const sortedClips = [...clipSelection.selectedClips].sort((a, b) => a.startTime - b.startTime);
+
+            // Step 2: Validate and fix overlaps + duration overruns
+            const validatedClips = [];
+            for (let i = 0; i < sortedClips.length; i++) {
+              const clip = sortedClips[i];
+              let { startTime, endTime, momentIndex } = clip;
+
+              // Fix 1: Trim if exceeds video duration
+              if (endTime > duration) {
+                console.warn(`⚠️ Clip ${i+1} trimmed: ${formatTime(endTime)} → ${formatTime(duration)} (exceeded video duration)`);
+                endTime = duration;
+              }
+
+              // Fix 2: Check overlap with previous clip
+              if (i > 0) {
+                const prevClip = validatedClips[validatedClips.length - 1];
+                if (startTime < prevClip.endTime) {
+                  const overlap = prevClip.endTime - startTime;
+                  console.warn(`⚠️ Clip ${i+1} overlaps with previous by ${overlap.toFixed(1)}s - skipping`);
+                  continue; // Skip this clip entirely
+                }
+              }
+
+              // Ensure minimum clip length
+              if (endTime - startTime < 1.5) {
+                console.warn(`⚠️ Clip ${i+1} too short (${(endTime - startTime).toFixed(1)}s) - skipping`);
+                continue;
+              }
+
+              validatedClips.push({ ...clip, startTime, endTime });
+            }
+
+            console.log(`✅ Validated: ${clipSelection.selectedClips.length} → ${validatedClips.length} clips (removed ${clipSelection.selectedClips.length - validatedClips.length} overlaps)`);
+
+            // Step 3: Map to anchors
+            const allAnchors = validatedClips.map((clip, index) => {
               const moment = allMoments[clip.momentIndex - 1];
               console.log(`  Clip ${index + 1}: Moment #${clip.momentIndex} [${moment.zone}] @ ${formatTime(moment.timestamp)} → Anchor ${formatTime(clip.startTime)}-${formatTime(clip.endTime)}`);
               return {
@@ -4886,7 +4929,7 @@ const exportVideo = async () => {
                 _narrativeReason: moment.description,
                 _importance: moment.importance
               };
-            }).sort((a, b) => a.start - b.start);
+            });
 
             console.log(`\n📍 Final anchor timestamps (sorted):`);
             allAnchors.forEach((anchor, idx) => {
