@@ -3535,7 +3535,7 @@ const goToNextAnchor = () => {
                 className={`
                   px-4 sm:px-6 py-3 sm:py-3 min-h-[48px] font-bold text-sm sm:text-base tracking-wider rounded-t-lg
                   transition-all duration-200 relative
-                  ${isActive ? 'forge-tab-active scale-105' : 'forge-tab'}
+                  ${isActive ? 'tab-active' : 'tab'}
                   ${!isAccessible ? 'opacity-40 cursor-not-allowed' : 'active:scale-95'}
                 `}
                 style={{
@@ -3768,25 +3768,21 @@ const exportVideo = async () => {
 
   return (
 <div className="min-h-screen p-4 sm:p-8 overflow-x-hidden" style={{ color: 'var(--text-primary)' }}>
-  {/* Stone Texture Overlay */}
-  <div className="stone-texture-overlay" />
-
-  <div className="max-w-7xl mx-auto w-full relative z-10">
-        {/* Header - Carved Stone */}
-        <div className="text-center mb-8 forge-panel rounded-lg p-6">
-          <h1 className="text-5xl font-bold mb-2 tracking-wider" style={{
-            color: 'var(--accent-hot)',
-            textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 20px rgba(255,107,53,0.4)',
-            fontFamily: 'serif'
+  <div className="max-w-7xl mx-auto w-full">
+        {/* Header */}
+        <div className="text-center mb-8 panel p-6">
+          <h1 className="text-4xl font-bold mb-2" style={{
+            color: 'var(--text-primary)',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
           }}>
-            ⚒️ REELFORGE
+            ClipBoost
           </h1>
-          <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', letterSpacing: '0.1em' }}>
-            FORGE YOUR REELS
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            AI-Powered Video Editor
           </p>
           {!ffmpegLoaded && (
-            <p className="text-sm mt-2" style={{ color: 'var(--accent-warm)' }}>
-              ⚡ Loading forge tools...
+            <p className="text-sm mt-2" style={{ color: 'var(--accent-primary)' }}>
+              ⚡ Loading video processor...
             </p>
           )}
         </div>
@@ -3833,13 +3829,13 @@ const exportVideo = async () => {
 
         {/* TAB 1: MATERIALS */}
         {currentTab === 'materials' && (
-          <div className="forge-panel rounded-2xl p-12">
+          <div className="panel rounded-2xl p-12">
             {!video ? (
               <div className="text-center">
                 <Upload className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--accent-warm)' }} />
                 <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Upload Your Video</h2>
                 <p className="mb-6" style={{ color: 'var(--text-dim)' }}>Maximum file size: 500 MB</p>
-                <label className="inline-block px-8 py-4 forge-button-hot rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
+                <label className="inline-block px-8 py-4 btn-accent rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
                   Choose Video
                   <input
                     type="file"
@@ -3915,7 +3911,7 @@ const exportVideo = async () => {
                 <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <button
                     onClick={togglePlay}
-                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
                   >
                     {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                     <span>{isPlaying ? 'Pause' : 'Play'}</span>
@@ -3923,7 +3919,7 @@ const exportVideo = async () => {
 
                   <button
                     onClick={() => setShowTrimModal(true)}
-                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
                   >
                     <Scissors size={18} />
                     <span>Trim</span>
@@ -3941,7 +3937,7 @@ const exportVideo = async () => {
                       setMusicUrl(null);
                       setCurrentTab('materials');
                     }}
-                    className="py-3 sm:py-3.5 forge-button rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
+                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
                     style={{ borderColor: 'var(--accent-hot)' }}
                   >
                     <X size={18} />
@@ -3957,12 +3953,12 @@ const exportVideo = async () => {
         {currentTab === 'forge' && video && (
           <div className="space-y-4">
             {/* Compact Music Panel */}
-            <div className="forge-panel rounded-xl p-4">
+            <div className="panel rounded-xl p-4">
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 {/* Music Section - Compact */}
                 <div className="flex-1 w-full">
                   {!music ? (
-                    <label className="block px-3 py-2 forge-button rounded-lg cursor-pointer text-center text-sm">
+                    <label className="block px-3 py-2 btn-secondary rounded-lg cursor-pointer text-center text-sm">
                       🎵 Add Music (Optional)
                       <input
                         type="file"
@@ -4250,7 +4246,7 @@ const exportVideo = async () => {
                       {/* Music Preview Button */}
                       <button
                         onClick={toggleMusicPreview}
-                        className="w-full px-3 py-1.5 forge-button-hot rounded-lg flex items-center justify-center gap-1.5 text-xs"
+                        className="w-full px-3 py-1.5 btn-accent rounded-lg flex items-center justify-center gap-1.5 text-xs"
                       >
                         {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
                         {isMusicPlaying ? 'Pause Music' : 'Preview Audio'}
@@ -4262,7 +4258,7 @@ const exportVideo = async () => {
             </div>
 
             {/* Video Preview */}
-            <div className="forge-panel rounded-xl p-4">
+            <div className="panel rounded-xl p-4">
             {/* Preview Button */}
   <div className="flex justify-center mb-3">
     <button
@@ -4270,10 +4266,10 @@ const exportVideo = async () => {
       disabled={isProcessing || anchors.length === 0}
       className={`px-8 py-3 rounded-xl font-semibold text-base transition-all ${
         anchors.length === 0
-          ? 'forge-button cursor-not-allowed opacity-50'
+          ? 'btn-secondary cursor-not-allowed opacity-50'
           : isPreviewMode
-            ? 'forge-button-hot hover:scale-105'
-            : 'forge-button-hot hover:scale-105'
+            ? 'btn-accent hover:scale-105'
+            : 'btn-accent hover:scale-105'
       } shadow-lg disabled:hover:scale-100`}
     >
       <span className="flex items-center justify-center gap-2">
@@ -4555,7 +4551,7 @@ const exportVideo = async () => {
             openPrecisionModal(currentAnchor);
           }
         }}
-        className="flex-1 sm:flex-initial px-2 py-2 sm:px-4 sm:py-2 forge-button rounded-lg flex items-center justify-center gap-1 sm:gap-2 text-sm font-semibold"
+        className="flex-1 sm:flex-initial px-2 py-2 sm:px-4 sm:py-2 btn-secondary rounded-lg flex items-center justify-center gap-1 sm:gap-2 text-sm font-semibold"
         title="Edit Current Anchor"
       >
         <ZoomIn size={14} className="sm:w-4 sm:h-4" />
@@ -4578,7 +4574,7 @@ const exportVideo = async () => {
             </div>
 
 {/* Timeline */}
-<div className="forge-panel rounded-2xl p-6">
+<div className="panel rounded-2xl p-6">
 
 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 touch-manipulation">
   {/* Left Group: Undo/Redo/Trim/Clear */}
@@ -4586,7 +4582,7 @@ const exportVideo = async () => {
   <button
     onClick={undo}
     disabled={historyIndex <= 0}
-    className="px-2 py-1.5 forge-button rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
+    className="px-2 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
     title="Undo (Ctrl+Z)"
   >
     <RotateCcw size={16} />
@@ -4595,7 +4591,7 @@ const exportVideo = async () => {
   <button
     onClick={redo}
     disabled={historyIndex >= history.length - 1}
-    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
     title="Redo (Ctrl+Y)"
   >
     <RotateCw size={16} />
@@ -4603,7 +4599,7 @@ const exportVideo = async () => {
   </button>
   <button
     onClick={() => setShowTrimModal(true)}
-    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 text-sm"
+    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm"
   >
     <Scissors size={16} />
     <span className="hidden sm:inline">Trim</span>
@@ -4621,7 +4617,7 @@ const exportVideo = async () => {
       }
     }}
     disabled={anchors.length === 0}
-    className="px-3 py-2 forge-button rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
     style={{ borderColor: 'var(--accent-hot)' }}
   >
     <Trash2 size={16} />
@@ -5096,7 +5092,7 @@ const exportVideo = async () => {
         }
       }}
       disabled={!duration || isAnalyzing}
-      className="px-4 py-2 forge-button-hot rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition w-full sm:w-auto justify-center"
+      className="px-4 py-2 btn-accent rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition w-full sm:w-auto justify-center"
     >
       <Sparkles size={18} />
       <span className="hidden sm:inline">{isAnalyzing ? 'Analyzing Story...' : 'Auto-Generate'}</span>
@@ -5379,7 +5375,7 @@ onMouseLeave={() => {
         e.stopPropagation();
         openPrecisionModalMobile(anchor);
       }}
-      className="flex-1 px-3 py-2 forge-button-hot rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
+      className="flex-1 px-3 py-2 btn-accent rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
       style={{ zIndex: 201 }}
     >
       <ZoomIn size={14} />
@@ -5392,7 +5388,7 @@ onMouseLeave={() => {
         setPreviewAnchor(null);
         setHoveredAnchor(null);
       }}
-      className="px-3 py-2 forge-button rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold hover:bg-red-600/20"
+      className="px-3 py-2 btn-secondary rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold hover:bg-red-600/20"
       style={{ borderColor: 'var(--accent-hot)' }}
       title="Delete anchor"
     >
@@ -5476,14 +5472,14 @@ onMouseLeave={() => {
         {/* Trim Modal */}
         {showTrimModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="forge-panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
              <div className="space-y-2 mb-3">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
       disabled={!precisionAnchor || precisionAnchor._index === 0}
-      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
       ← Prev
@@ -5496,7 +5492,7 @@ onMouseLeave={() => {
     <button
       onClick={goToNextAnchor}
       disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
-      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
       Next →
@@ -5607,14 +5603,14 @@ onMouseLeave={() => {
                   <button
                     onClick={() => setShowTrimModal(false)}
                     disabled={isProcessing}
-                    className="px-6 py-3 forge-button rounded-lg font-semibold disabled:opacity-50"
+                    className="px-6 py-3 btn-secondary rounded-lg font-semibold disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={applyTrim}
                     disabled={isProcessing || (trimEnd - trimStart) < 2}
-                    className="px-6 py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
+                    className="px-6 py-3 btn-accent hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
                   >
                     {isProcessing ? 'Processing...' : 'Apply Trim'}
                   </button>
@@ -5637,14 +5633,14 @@ onMouseLeave={() => {
       }
     }}
   >
-    <div className="forge-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
+    <div className="panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
             <div className="space-y-4 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
       disabled={!precisionAnchor || precisionAnchor._index === 0}
-      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
       ← Prev
@@ -5657,7 +5653,7 @@ onMouseLeave={() => {
     <button
       onClick={goToNextAnchor}
       disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
-      className="px-4 py-2 forge-button rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
       Next →
@@ -5775,14 +5771,14 @@ onMouseLeave={() => {
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
     }}
-    className="px-4 py-3 forge-button rounded-lg font-semibold shadow-md"
+    className="px-4 py-3 btn-secondary rounded-lg font-semibold shadow-md"
   >
     ← Frame
   </button>
 
   <button
     onClick={togglePrecisionPlay}
-    className="p-4 forge-button-hot rounded-full shadow-lg transition"
+    className="p-4 btn-accent rounded-full shadow-lg transition"
   >
     {precisionPlaying ? <Pause size={24} /> : <Play size={24} />}
   </button>
@@ -5844,7 +5840,7 @@ onMouseLeave={() => {
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
     }}
-    className="px-4 py-3 forge-button rounded-lg font-semibold shadow-md"
+    className="px-4 py-3 btn-secondary rounded-lg font-semibold shadow-md"
   >
     Frame →
   </button>
@@ -5970,13 +5966,13 @@ onMouseLeave={() => {
 <div className="flex gap-3 justify-end mt-auto pt-4 flex-shrink-0" style={{ borderTop: '2px solid var(--border)' }}>
   <button
     onClick={() => setShowPrecisionModal(false)}
-    className="px-4 sm:px-6 py-2 sm:py-3 forge-button rounded-lg font-semibold text-sm sm:text-base"
+    className="px-4 sm:px-6 py-2 sm:py-3 btn-secondary rounded-lg font-semibold text-sm sm:text-base"
   >
     Cancel
   </button>
   <button
     onClick={applyPrecisionChanges}
-    className="px-4 sm:px-6 py-2 sm:py-3 forge-button-hot hover:scale-105 rounded-lg font-semibold text-sm sm:text-base transition"
+    className="px-4 sm:px-6 py-2 sm:py-3 btn-accent hover:scale-105 rounded-lg font-semibold text-sm sm:text-base transition"
   >
     Apply Changes
   </button>
@@ -5988,7 +5984,7 @@ onMouseLeave={() => {
         {/* Music Precision Modal */}
         {/* TAB 3: SHIP */}
         {currentTab === 'ship' && video && (
-          <div className="forge-panel rounded-2xl p-8">
+          <div className="panel rounded-2xl p-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-hot)', textShadow: '0 0 10px rgba(255,107,53,0.5)' }}>⚡ Ship Your Reel</h2>
               <p style={{ color: 'var(--text-dim)' }}>Select platforms and forge your final reel</p>
@@ -5999,7 +5995,7 @@ onMouseLeave={() => {
               {Object.entries(platforms).map(([key, platform]) => (
                 <label
                   key={key}
-                  className="flex items-center gap-4 p-4 forge-button rounded-lg cursor-pointer"
+                  className="flex items-center gap-4 p-4 btn-secondary rounded-lg cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -6027,7 +6023,7 @@ onMouseLeave={() => {
               <button
                 onClick={exportVideo}
                 disabled={!ffmpegLoaded || isProcessing || selectedPlatforms.length === 0}
-                className="px-8 py-4 forge-button-hot rounded-xl font-bold text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="px-8 py-4 btn-accent rounded-xl font-bold text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {isProcessing ? (
                   <div className="flex flex-col items-center gap-2">

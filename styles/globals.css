@@ -3,35 +3,34 @@
 @tailwind utilities;
 
 :root {
-  /* Diablo 2 Forge Palette - Stone/Metal */
-  --bg-dark: #1a1614;
-  --bg-panel: #2d2520;
-  --bg-panel-light: #3a342d;
-  --border: #463e36;
-  --border-light: #5a5248;
+  /* Modern Dark Theme - Clean & Professional */
+  --bg-primary: #0f1419;
+  --bg-secondary: #1a1f2e;
+  --bg-tertiary: #252d3d;
+  --bg-elevated: #2d3748;
 
-  /* Forge Fire Accents */
-  --accent-hot: #ff6b35;
-  --accent-warm: #d4a574;
-  --accent-cool: #8b8680;
+  /* Borders & Dividers */
+  --border-subtle: #374151;
+  --border-medium: #4b5563;
+  --border-strong: #6b7280;
 
-  /* Text - Parchment */
-  --text-primary: #d4c5a9;
-  --text-dim: #8b7d6b;
-  --text-dark: #5a5248;
+  /* Accent Colors */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-secondary: #8b5cf6;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-error: #ef4444;
+
+  /* Text Colors */
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-tertiary: #9ca3af;
+  --text-disabled: #6b7280;
 }
 
 html, body {
-  /* Deep stone background with subtle texture */
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0.03) 0px,
-      transparent 1px,
-      transparent 2px,
-      rgba(0,0,0,0.03) 3px
-    ),
-    linear-gradient(135deg, var(--bg-dark) 0%, #0f0d0c 50%, var(--bg-dark) 100%);
+  background: var(--bg-primary);
   min-height: 100vh;
   color: var(--text-primary);
 }
@@ -41,94 +40,105 @@ body {
   padding: 0;
 }
 
-/* Carved Stone Panel Effect */
-.forge-panel {
-  background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-dark) 100%);
-  border: 2px solid var(--border);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.05),
-    inset 0 -1px 0 rgba(0,0,0,0.5),
-    0 4px 8px rgba(0,0,0,0.6);
-  position: relative;
+/* Panel - Clean Card Style */
+.panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
-/* Embossed Button - Carved Stone */
-.forge-button {
-  background: linear-gradient(180deg, var(--bg-panel-light) 0%, var(--bg-panel) 100%);
-  border: 2px solid var(--border);
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.1),
-    0 2px 4px rgba(0,0,0,0.4);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+/* Primary Button */
+.btn-primary {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
   color: var(--text-primary);
-  transition: all 0.2s ease;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.forge-button:hover:not(:disabled) {
-  background: linear-gradient(180deg, var(--accent-hot) 0%, #d4572f 100%);
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.2),
-    0 0 12px rgba(255,107,53,0.5);
-  border-color: var(--accent-hot);
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
 }
 
-.forge-button:active:not(:disabled) {
-  box-shadow:
-    inset 0 2px 4px rgba(0,0,0,0.5),
-    0 1px 2px rgba(0,0,0,0.4);
+.btn-primary:active:not(:disabled) {
   transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.forge-button:disabled {
-  opacity: 0.4;
+.btn-primary:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* Hot Metal Accent Button - Charcoal with Ember Border */
-.forge-button-hot {
-  background: linear-gradient(135deg, #374151 0%, #1f2937 50%, #111827 100%);
-  border: 2px solid rgba(251, 191, 36, 0.4);
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.1),
-    0 0 8px rgba(251, 146, 60, 0.3),
-    0 2px 4px rgba(0,0,0,0.6);
+/* Secondary Button */
+.btn-secondary {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
   color: var(--text-primary);
+  font-weight: 500;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.forge-button-hot:hover:not(:disabled) {
-  background: linear-gradient(135deg, #4b5563 0%, #374151 50%, #1f2937 100%);
-  border-color: rgba(251, 191, 36, 0.6);
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.15),
-    0 0 16px rgba(251, 146, 60, 0.5),
-    0 4px 8px rgba(0,0,0,0.6);
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
 }
 
-/* Stone Tab - Carved Tablet */
-.forge-tab {
-  background: linear-gradient(180deg, var(--bg-panel-light) 0%, var(--bg-panel) 100%);
-  border: 2px solid var(--border);
-  border-bottom: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.05),
-    0 -2px 4px rgba(0,0,0,0.3);
-  color: var(--text-dim);
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Accent Button (for primary actions like Export) */
+.btn-accent {
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+  border: 1px solid var(--accent-secondary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-weight: 600;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.btn-accent:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-accent:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Tab Navigation */
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-tertiary);
+  font-weight: 500;
   transition: all 0.2s ease;
+  padding: 12px 20px;
 }
 
-.forge-tab-active {
-  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-dark) 100%);
-  color: var(--accent-hot);
-  text-shadow: 0 0 10px rgba(255,107,53,0.5);
-  box-shadow:
-    inset 0 2px 4px rgba(0,0,0,0.5),
-    0 -1px 0 rgba(255,107,53,0.3);
-  border-bottom: 2px solid var(--bg-dark);
+.tab-active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
 }
 
-.forge-tab:hover:not(.forge-tab-active):not(:disabled) {
-  color: var(--text-primary);
-  background: linear-gradient(180deg, #453d35 0%, var(--bg-panel-light) 100%);
+.tab:hover:not(.tab-active):not(:disabled) {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-medium);
 }
 
 /* Mobile touch optimizations */
@@ -160,22 +170,6 @@ html {
   overscroll-behavior: contain;
 }
 
-/* Stone Texture Overlay - Subtle forge atmosphere */
-.stone-texture-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background-image:
-    url('https://images.unsplash.com/photo-1547619292-240402b5ae5d?w=400&auto=format&fit=crop'),
-    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.3) 0%, transparent 50%),
-    radial-gradient(circle at 70% 60%, rgba(0,0,0,0.2) 0%, transparent 40%);
-  background-blend-mode: overlay, multiply, multiply;
-  opacity: 0.15;
-  background-size: 400px 400px, 100% 100%, 100% 100%;
-  background-repeat: repeat, no-repeat, no-repeat;
-}
-
 /* Prevent mobile tap delay and zoom issues */
 .touch-manipulation {
   touch-action: manipulation;
@@ -199,4 +193,23 @@ html {
     position: relative;
     z-index: 50;
   }
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }
