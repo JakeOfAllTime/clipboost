@@ -4849,6 +4849,13 @@ const exportVideo = async () => {
                 ];
 
                 console.log(`✅ Moment Inventory: ${initialAnalysis.keyMoments.length} original + ${supplemental.newMoments?.length || 0} new = ${allMoments.length} total moments`);
+
+                // Log zone breakdown of all moments
+                const allMomentsZoneBreakdown = {};
+                allMoments.forEach(m => {
+                  allMomentsZoneBreakdown[m.zone] = (allMomentsZoneBreakdown[m.zone] || 0) + 1;
+                });
+                console.log('📊 Complete Moment Inventory by Zone:', allMomentsZoneBreakdown);
               } else {
                 console.log('⚠️ No new frames found - proceeding with existing moments');
               }
@@ -4858,6 +4865,18 @@ const exportVideo = async () => {
 
             // PHASE 5: Select final clips with ALL moments known
             console.log(`📝 Now selecting clips from ${allMoments.length} total moments...`);
+
+            // Debug: Log sample moments from each zone
+            console.log('🔍 Sample moments by zone:');
+            const zoneGroups = {};
+            allMoments.forEach((m, idx) => {
+              if (!zoneGroups[m.zone]) zoneGroups[m.zone] = [];
+              zoneGroups[m.zone].push(`#${idx + 1}: ${m.description.substring(0, 30)}... [imp:${m.importance}]`);
+            });
+            Object.entries(zoneGroups).forEach(([zone, moments]) => {
+              console.log(`  ${zone}: ${moments.slice(0, 2).join(', ')}`);
+            });
+
             const clipSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType);
 
             // Map moment indices back to actual moments and create anchors
