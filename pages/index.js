@@ -104,8 +104,15 @@ const ReelForge = () => {
   const [enableBeatSync, setEnableBeatSync] = useState(false);
   const [userApiKey, setUserApiKey] = useState('');
 
-  // Sidebar navigation state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Sidebar navigation state (load from localStorage)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('clipboost-sidebar-collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [currentSection, setCurrentSection] = useState('edit'); // 'edit' | 'export'
 
   // FFmpeg state
@@ -220,6 +227,15 @@ const platforms = {
       return () => clearTimeout(timeoutId);
     }
   }, [anchors, musicStartTime, audioBalance, video]);
+
+  // Persist sidebar state
+  useEffect(() => {
+    try {
+      localStorage.setItem('clipboost-sidebar-collapsed', String(sidebarCollapsed));
+    } catch (error) {
+      console.error('Error saving sidebar state:', error);
+    }
+  }, [sidebarCollapsed]);
 
   // Clear autosave after successful export
   const clearAutoSave = () => {
