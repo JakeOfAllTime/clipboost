@@ -4880,8 +4880,10 @@ const exportVideo = async () => {
             const clipSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType);
 
             // Map moment indices back to actual moments and create anchors
+            console.log('🔧 Mapping selected clips to anchors:');
             const allAnchors = clipSelection.selectedClips.map((clip, index) => {
               const moment = allMoments[clip.momentIndex - 1];
+              console.log(`  Clip ${index + 1}: Moment #${clip.momentIndex} [${moment.zone}] @ ${formatTime(moment.timestamp)} → Anchor ${formatTime(clip.startTime)}-${formatTime(clip.endTime)}`);
               return {
                 id: Date.now() + index,
                 start: clip.startTime,
@@ -4890,6 +4892,11 @@ const exportVideo = async () => {
                 _importance: moment.importance
               };
             }).sort((a, b) => a.start - b.start);
+
+            console.log(`\n📍 Final anchor timestamps (sorted):`);
+            allAnchors.forEach((anchor, idx) => {
+              console.log(`  Anchor ${idx + 1}: ${formatTime(anchor.start)}-${formatTime(anchor.end)} (${(anchor.end - anchor.start).toFixed(1)}s)`);
+            });
 
             // Enforce target duration - trim clips to fit within target (+10s tolerance)
             const targetLimit = targetDuration + 10;
