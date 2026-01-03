@@ -1755,10 +1755,16 @@ const selectFinalClips = async (allMoments, targetDuration, storyType) => {
   console.log(`📝 PHASE 5: Selecting final clips from ${allMoments.length} total moments...`);
 
   try {
-    // Build moment inventory
+    // Build moment inventory with zone information
     const momentsList = allMoments.map((m, idx) =>
-      `Moment ${idx + 1}: ${m.description} @ ${formatTime(m.timestamp)} [${m.category}, importance: ${m.importance}]`
+      `Moment ${idx + 1}: ${m.description} @ ${formatTime(m.timestamp)} [zone: ${m.zone}, ${m.category}, importance: ${m.importance}]`
     ).join('\n');
+
+    // Count moments by zone
+    const zoneDistribution = {};
+    allMoments.forEach(m => {
+      zoneDistribution[m.zone] = (zoneDistribution[m.zone] || 0) + 1;
+    });
 
     const promptText = `
 You have identified ${allMoments.length} moments in a ${storyType} video.
@@ -1767,12 +1773,21 @@ Now select the BEST moments and assign clip lengths to create a ${targetDuration
 AVAILABLE MOMENTS:
 ${momentsList}
 
+ZONE DISTRIBUTION:
+${Object.entries(zoneDistribution).map(([zone, count]) => `- ${zone}: ${count} moments`).join('\n')}
+
 TARGET: ${targetDuration} seconds total duration
 
 Your job: Select 8-12 moments and assign appropriate clip lengths (2-10s each).
 
+CRITICAL: BALANCE ACROSS ZONES
+- Do NOT select all clips from opening/early zones
+- MUST include finale zone moments (result/reaction moments are critical!)
+- Aim for representation from at least 5-6 different zones
+- Think chronologically: opening → early → middle → late → finale
+
 PROFESSIONAL EDITING PRINCIPLES:
-- Prioritize high-importance moments (0.8-1.0)
+- Prioritize high-importance moments (0.7-1.0)
 - Balance the narrative arc (opening → process → climax → finale)
 - Vary clip lengths for pacing (mix 2-3s quick cuts with 6-10s showcase moments)
 - Don't neglect finale/result moments - they're critical for payoff
@@ -1838,6 +1853,17 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     console.log('✂️ Selected Clips:', clipSelection.selectedClips.length);
     console.log('⏱️ Total Duration:', clipSelection.totalDuration + 's (target: ' + targetDuration + 's)');
     console.log('📋 Strategy:', clipSelection.editingRationale);
+
+    // Log zone representation in selected clips
+    const selectedZones = clipSelection.selectedClips.map(clip => {
+      const moment = allMoments[clip.momentIndex - 1];
+      return moment.zone;
+    });
+    const selectedZoneDistribution = {};
+    selectedZones.forEach(zone => {
+      selectedZoneDistribution[zone] = (selectedZoneDistribution[zone] || 0) + 1;
+    });
+    console.log('📍 Zone Distribution in Selected Clips:', selectedZoneDistribution);
 
     return clipSelection;
 
@@ -4778,8 +4804,20 @@ const exportVideo = async () => {
               return;
             }
 
-            // Build initial moment inventory
-            let allMoments = initialAnalysis.keyMoments || [];
+            // Build initial moment inventory with zone enrichment
+            const enrichMomentsWithZones = (moments, zones) => {
+              return moments.map(moment => {
+                // Find which zone this timestamp falls into
+                const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
+                return {
+                  ...moment,
+                  zone: zone?.name || 'unknown',
+                  zoneIndex: zones.indexOf(zone)
+                };
+              });
+            };
+
+            let allMoments = enrichMomentsWithZones(initialAnalysis.keyMoments || [], zones);
 
             // PHASE 3: Agentic seeking for missing moments
             if (initialAnalysis.missingMoments && initialAnalysis.missingMoments.length > 0) {
@@ -4803,10 +4841,11 @@ const exportVideo = async () => {
                   [] // No cuts yet, just moments
                 );
 
-                // Merge moments
+                // Merge moments with zone enrichment
+                const enrichedNewMoments = enrichMomentsWithZones(supplemental.newMoments || [], zones);
                 allMoments = [
                   ...allMoments,
-                  ...(supplemental.newMoments || [])
+                  ...enrichedNewMoments
                 ];
 
                 console.log(`✅ Moment Inventory: ${initialAnalysis.keyMoments.length} original + ${supplemental.newMoments?.length || 0} new = ${allMoments.length} total moments`);
