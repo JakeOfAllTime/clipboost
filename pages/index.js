@@ -1757,7 +1757,7 @@ const selectFinalClips = async (allMoments, targetDuration, storyType) => {
   try {
     // Build moment inventory with zone information
     const momentsList = allMoments.map((m, idx) =>
-      `Moment ${idx + 1}: ${m.description} @ ${formatTime(m.timestamp)} [zone: ${m.zone}, ${m.category}, importance: ${m.importance}]`
+      `Moment ${idx + 1}: ${m.description} @ ${m.timestamp}s [zone: ${m.zone}, ${m.category}, importance: ${m.importance}]`
     ).join('\n');
 
     // Count moments by zone
