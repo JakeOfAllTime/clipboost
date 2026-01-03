@@ -5557,8 +5557,8 @@ onMouseLeave={() => {
 
         {/* Trim Modal */}
         {showTrimModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+          <div className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-50">
+            <div className="glass-panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
              <div className="space-y-2 mb-3">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
@@ -5709,7 +5709,7 @@ onMouseLeave={() => {
         {/* Precision Modal */}
 {showPrecisionModal && precisionAnchor && (
   <div
-    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
+    className="fixed inset-0 glass-modal-overlay flex items-center justify-center p-2 sm:p-4"
     style={{ zIndex: 9999, touchAction: 'none', WebkitOverflowScrolling: 'auto' }}
     onTouchMove={(e) => {
       // Allow scrolling within modal but prevent body scroll
@@ -5719,7 +5719,7 @@ onMouseLeave={() => {
       }
     }}
   >
-    <div className="panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
+    <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
             <div className="space-y-4 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
@@ -6130,8 +6130,8 @@ onMouseLeave={() => {
         {/* Export Platform Modal */}
 {/* Export Platform Modal */}
 {showExportModal && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-lg w-full mx-4">
+  <div className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-50">
+    <div className="glass-panel p-8 rounded-2xl max-w-lg w-full mx-4">
       <h3 className="text-xl font-semibold mb-6 text-center">Select Export Platforms</h3>
 
       <div className="space-y-3 mb-6">
