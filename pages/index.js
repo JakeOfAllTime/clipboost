@@ -2443,8 +2443,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Toggle preview playback
   const togglePreviewPlayback = useCallback(() => {
-    if (!isPreviewMode) return;
+    // If not in preview mode, start it
+    if (!isPreviewMode) {
+      startEnhancedPreview();
+      return;
+    }
 
+    // Toggle play/pause
     if (isPreviewPlaying) {
       setIsPreviewPlaying(false);
       if (videoRef.current) videoRef.current.pause();
@@ -2454,7 +2459,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       if (videoRef.current) videoRef.current.play();
       if (musicRef.current) musicRef.current.play();
     }
-  }, [isPreviewMode, isPreviewPlaying]);
+  }, [isPreviewMode, isPreviewPlaying, startEnhancedPreview]);
 
   // Rebuild timeline when anchors change
   useEffect(() => {
@@ -4216,40 +4221,53 @@ const exportVideo = async () => {
                                 </div>
                               </div>
 
-                              {/* Fine-tune Buttons */}
+                              {/* Fine-tune Buttons + Preview (Desktop: side-by-side, Mobile: stacked) */}
                               <div className="mb-3">
-                                <div className="flex items-center justify-center gap-2 mb-2">
-                                  <span className="text-xs text-gray-400 mr-2">
-                                    {selectedMusicHandle ? `Adjusting: ${selectedMusicHandle === 'start' ? 'Start' : 'End'}` : 'Select a handle'}
-                                  </span>
+                                {/* Desktop: Preview Audio Button on the left, Adjustment Buttons on the right */}
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
+                                  {/* Preview Audio Button - Left side on desktop */}
                                   <button
-                                    onClick={() => adjustMusicHandle(-1)}
-                                    disabled={!selectedMusicHandle}
-                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                    onClick={toggleMusicPreview}
+                                    className="px-3 py-1.5 btn-accent rounded-lg flex items-center justify-center gap-1.5 text-xs sm:w-auto whitespace-nowrap"
                                   >
-                                    -1s
+                                    {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
+                                    {isMusicPlaying ? 'Pause' : 'Preview'}
                                   </button>
-                                  <button
-                                    onClick={() => adjustMusicHandle(-0.1)}
-                                    disabled={!selectedMusicHandle}
-                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                                  >
-                                    -0.1s
-                                  </button>
-                                  <button
-                                    onClick={() => adjustMusicHandle(+0.1)}
-                                    disabled={!selectedMusicHandle}
-                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                                  >
-                                    +0.1s
-                                  </button>
-                                  <button
-                                    onClick={() => adjustMusicHandle(+1)}
-                                    disabled={!selectedMusicHandle}
-                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                                  >
-                                    +1s
-                                  </button>
+
+                                  {/* Adjustment Buttons - Right side on desktop */}
+                                  <div className="flex items-center justify-center gap-2 flex-1">
+                                    <span className="text-xs text-gray-400 hidden sm:inline">
+                                      {selectedMusicHandle ? `Adjusting: ${selectedMusicHandle === 'start' ? 'Start' : 'End'}` : 'Select handle'}
+                                    </span>
+                                    <button
+                                      onClick={() => adjustMusicHandle(-1)}
+                                      disabled={!selectedMusicHandle}
+                                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                    >
+                                      -1s
+                                    </button>
+                                    <button
+                                      onClick={() => adjustMusicHandle(-0.1)}
+                                      disabled={!selectedMusicHandle}
+                                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                    >
+                                      -0.1s
+                                    </button>
+                                    <button
+                                      onClick={() => adjustMusicHandle(+0.1)}
+                                      disabled={!selectedMusicHandle}
+                                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                    >
+                                      +0.1s
+                                    </button>
+                                    <button
+                                      onClick={() => adjustMusicHandle(+1)}
+                                      disabled={!selectedMusicHandle}
+                                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                    >
+                                      +1s
+                                    </button>
+                                  </div>
                                 </div>
                                 <p className="text-xs text-gray-400 text-center">
                                   Tip: Arrow keys ±1s • Shift+Arrow ±5s • Space to preview
@@ -4280,15 +4298,6 @@ const exportVideo = async () => {
                                   }}
                                 />
                               </div>
-
-                              {/* Music Preview Button */}
-                              <button
-                                onClick={toggleMusicPreview}
-                                className="w-full px-3 py-1.5 btn-accent rounded-lg flex items-center justify-center gap-1.5 text-xs"
-                              >
-                                {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
-                                {isMusicPlaying ? 'Pause Music' : 'Preview Audio'}
-                              </button>
                             </div>
                           </div>
                         )}
@@ -4299,14 +4308,14 @@ const exportVideo = async () => {
 
                 {/* Video Editor - Unified Panel */}
                 <div
-                  className={`panel rounded-xl p-4 sm:p-6 transition-all ${
+                  className={`panel rounded-xl p-2 sm:p-6 transition-all ${
                     playbackMode === 'clips'
                       ? 'ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
                       : 'ring-2 ring-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.3)]'
                   }`}
                 >
                   {/* Video Player Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     <video
                       ref={videoRef}
@@ -4514,7 +4523,7 @@ const exportVideo = async () => {
                   )}
 
                     {/* Playback Info - Subtle inner box */}
-                    <div className="bg-slate-800/50 rounded px-3 py-1.5 text-xs text-gray-300 text-center">
+                    <div className="bg-slate-800/50 rounded px-2 sm:px-3 py-1.5 text-xs text-gray-300 text-center">
                       {playbackMode === 'clips' && anchors.length > 0 ? (
                         <>
                           Clip {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s total
@@ -4527,7 +4536,7 @@ const exportVideo = async () => {
                   {/* End Video Player Section */}
 
                   {/* Playback Controls + Clips Timeline Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
                     {/* Controls Row - sits directly above clips timeline */}
                     {anchors.length > 0 && (
                       <div className="flex items-center justify-center gap-2 mb-3">
@@ -4583,7 +4592,14 @@ const exportVideo = async () => {
                             onClick={() => {
                               const anchor = anchors.find(a => a.id === selectedAnchor);
                               if (anchor) {
-                                setPrecisionAnchor(anchor);
+                                const anchorIndex = anchors.findIndex(a => a.id === selectedAnchor);
+                                const timelineOffset = anchors
+                                  .slice(0, anchorIndex)
+                                  .reduce((sum, a) => sum + (a.end - a.start), 0);
+
+                                setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
+                                setPrecisionTime(anchor.end);
+                                setSelectedHandle('end');
                                 setShowPrecisionModal(true);
                               }
                             }}
@@ -4659,7 +4675,7 @@ const exportVideo = async () => {
                   {/* End Playback Controls + Clips Timeline Section */}
 
                   {/* Main Timeline Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
                     {/* Main Timeline visualization */}
                     <div
                       ref={timelineRef}
@@ -4835,7 +4851,7 @@ const exportVideo = async () => {
                   {/* End Main Timeline Section */}
 
                   {/* Action Toolbar Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-3">
+                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3">
                     {/* Toolbar Buttons Row */}
                     <div className="flex flex-wrap gap-2 mb-3">
                       <button
@@ -4884,7 +4900,7 @@ const exportVideo = async () => {
                     </div>
 
                     {/* Stats Row */}
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-xs mb-3">
                       <div className="bg-slate-800/50 p-2 rounded text-center">
                         <div className="text-gray-400">Clips</div>
                         <div className="font-semibold text-white">{anchors.length}</div>
@@ -4899,6 +4915,361 @@ const exportVideo = async () => {
                           {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Auto-Generator Controls */}
+                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3">
+                      {/* Mode Selection + Beat-Sync */}
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            id="mode-quick"
+                            name="autoGenMode"
+                            value="quick"
+                            checked={autoGenMode === 'quick'}
+                            onChange={(e) => setAutoGenMode(e.target.value)}
+                            className="w-3 h-3"
+                          />
+                          <label htmlFor="mode-quick" className="cursor-pointer text-gray-300">
+                            Quick <span className="text-green-400">(FREE)</span>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            id="mode-smart"
+                            name="autoGenMode"
+                            value="smart"
+                            checked={autoGenMode === 'smart'}
+                            onChange={(e) => setAutoGenMode(e.target.value)}
+                            className="w-3 h-3"
+                          />
+                          <label htmlFor="mode-smart" className="cursor-pointer text-gray-300">
+                            Smart <span className="text-blue-400">($0.60)</span>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            id="mode-pro"
+                            name="autoGenMode"
+                            value="pro"
+                            checked={autoGenMode === 'pro'}
+                            onChange={(e) => setAutoGenMode(e.target.value)}
+                            className="w-3 h-3"
+                          />
+                          <label htmlFor="mode-pro" className="cursor-pointer text-gray-300">
+                            Pro <span className="text-purple-400">($1.20)</span>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-600">
+                          <input
+                            type="checkbox"
+                            id="beat-sync-toggle"
+                            checked={enableBeatSync}
+                            onChange={(e) => setEnableBeatSync(e.target.checked)}
+                            disabled={!music}
+                            className="w-3 h-3 cursor-pointer"
+                          />
+                          <label htmlFor="beat-sync-toggle" className="cursor-pointer text-gray-300">
+                            Beat-Sync
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Target Duration Slider */}
+                      <div className="flex items-center gap-3 text-xs">
+                        <label htmlFor="target-duration" className="text-gray-300 whitespace-nowrap">
+                          Target: {targetDuration}s
+                        </label>
+                        <input
+                          type="range"
+                          id="target-duration"
+                          min="15"
+                          max="180"
+                          step="1"
+                          value={targetDuration}
+                          onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+                          className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-amber-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-amber-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                        />
+                        <span className="text-gray-500 text-xs">180s</span>
+                      </div>
+
+                      {/* Auto-Generate Button */}
+                      <button
+                        onClick={async () => {
+                          if (!video || isAnalyzing) return;
+
+                          try {
+                            setIsAnalyzing(true);
+
+                            console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
+
+                            // === MODE 1: QUICK GEN (FREE - Motion Only) ===
+                            if (autoGenMode === 'quick') {
+                              console.log('⚡ Quick Gen: Motion detection only (FREE)');
+
+                              // Step 1: Motion detection
+                              let videoAnalysisResult = videoAnalysis;
+                              if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+                                console.log('🎬 Running motion detection...');
+                                videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+                                setVideoAnalysis(videoAnalysisResult);
+                              } else {
+                                console.log('✅ Using cached motion analysis');
+                              }
+
+                              // Step 2: Find high-motion moments
+                              const motionCuts = videoAnalysisResult
+                                .filter(m => m.motionScore > 0.6 || m.sceneChange)
+                                .sort((a, b) => b.motionScore - a.motionScore)
+                                .slice(0, 8)
+                                .map((m, index) => ({
+                                  start: Math.max(0, m.time - 1),
+                                  end: Math.min(duration, m.time + 3),
+                                  reason: m.sceneChange ? 'Scene change' : 'High motion',
+                                  importance: m.motionScore
+                                }));
+
+                              // Step 3: Apply gentle beat-sync if enabled
+                              let finalCuts = motionCuts;
+                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+                                console.log('🎵 Applying gentle beat-sync...');
+                                finalCuts = applyGentleBeatSync(motionCuts, musicAnalysis);
+                              }
+
+                              // Step 4: Create anchors
+                              const newAnchors = finalCuts.map((cut, index) => ({
+                                id: Date.now() + index,
+                                start: Math.max(0, cut.start),
+                                end: Math.min(duration, cut.end),
+                                _narrativeReason: cut.reason,
+                                _importance: cut.importance
+                              }));
+
+                              const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
+                                if (index === 0) {
+                                  kept.push(anchor);
+                                  return kept;
+                                }
+                                const lastKept = kept[kept.length - 1];
+                                if (anchor.start >= lastKept.end) {
+                                  kept.push(anchor);
+                                }
+                                return kept;
+                              }, []);
+
+                              console.log('✅ QUICK GEN COMPLETE:', {
+                                anchorsCreated: finalAnchors.length,
+                                totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+                              });
+
+                              setAnchors(finalAnchors);
+                              saveToHistory(finalAnchors);
+                            }
+
+                            // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
+                            else if (autoGenMode === 'smart') {
+                              console.log('🧠 Smart Gen: Five-Phase Editorial Workflow (~$0.60-$1.50)');
+
+                              // PHASE 1: Gather comprehensive frames
+                              const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
+
+                              if (allFrames.length === 0) {
+                                alert('Failed to extract any frames from video. Please try again.');
+                                return;
+                              }
+
+                              // PHASE 2: Identify moments (no clip lengths yet)
+                              const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
+
+                              if (!initialAnalysis) {
+                                alert('Narrative analysis failed. Please try again.');
+                                return;
+                              }
+
+                              // Build initial moment inventory with zone enrichment
+                              const enrichMomentsWithZones = (moments, zones) => {
+                                return moments.map(moment => {
+                                  // Find which zone this timestamp falls into
+                                  const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
+                                  return {
+                                    ...moment,
+                                    zone: zone?.name || 'unknown',
+                                    zoneIndex: zones.indexOf(zone)
+                                  };
+                                });
+                              };
+
+                              let allMoments = enrichMomentsWithZones(initialAnalysis.keyMoments || [], zones);
+
+                              // PHASE 3: Agentic seeking for missing moments
+                              if (initialAnalysis.missingMoments && initialAnalysis.missingMoments.length > 0) {
+                                const { newFrames, searches } = await seekMissingMoments(
+                                  video,
+                                  duration,
+                                  initialAnalysis.missingMoments,
+                                  allFrames,
+                                  zones
+                                );
+
+                                if (newFrames && newFrames.length > 0) {
+                                  const seekAnalysis = await analyzeSeekResults(newFrames, initialAnalysis.missingMoments);
+                                  if (seekAnalysis && seekAnalysis.foundMoments) {
+                                    allMoments = allMoments.concat(enrichMomentsWithZones(seekAnalysis.foundMoments, zones));
+                                  }
+                                }
+                              }
+
+                              // PHASE 4: Supplement with motion detection
+                              let videoAnalysisResult = videoAnalysis;
+                              if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+                                videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+                                setVideoAnalysis(videoAnalysisResult);
+                              }
+
+                              const motionMoments = videoAnalysisResult
+                                .filter(m => m.motionScore > 0.7 || m.sceneChange)
+                                .map(m => ({
+                                  timestamp: m.time,
+                                  importance: m.motionScore * 0.6,
+                                  description: m.sceneChange ? 'Scene change (motion)' : 'High motion',
+                                  source: 'motion',
+                                  zone: zones.find(z => m.time >= z.start && m.time <= z.end)?.name || 'unknown'
+                                }));
+
+                              allMoments = allMoments.concat(motionMoments);
+
+                              // PHASE 5: Final selection
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, zones);
+
+                              if (!finalSelection || !finalSelection.selectedClips) {
+                                alert('Final clip selection failed. Please try again.');
+                                return;
+                              }
+
+                              // Apply beat-sync if enabled
+                              let selectedClips = finalSelection.selectedClips;
+                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+                                selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
+                              }
+
+                              // Create anchors
+                              const newAnchors = selectedClips.map((clip, index) => ({
+                                id: Date.now() + index,
+                                start: Math.max(0, clip.start),
+                                end: Math.min(duration, clip.end),
+                                _narrativeReason: clip.description || clip.reason || 'Selected moment',
+                                _importance: clip.importance || 0.5
+                              }));
+
+                              console.log('✅ SMART GEN COMPLETE:', {
+                                anchorsCreated: newAnchors.length,
+                                totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+                              });
+
+                              setAnchors(newAnchors);
+                              saveToHistory(newAnchors);
+                            }
+
+                            // === MODE 3: PRO GEN (Full Narrative Analysis) ===
+                            else if (autoGenMode === 'pro') {
+                              console.log('💎 Pro Gen: Full Narrative Analysis (~$1.20-$2.00)');
+
+                              // Similar to Smart Gen but with more comprehensive analysis
+                              const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
+
+                              if (allFrames.length === 0) {
+                                alert('Failed to extract any frames from video. Please try again.');
+                                return;
+                              }
+
+                              // Run full narrative analysis with pro settings
+                              const narrativeResult = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'pro' });
+
+                              if (!narrativeResult) {
+                                alert('Narrative analysis failed. Please try again.');
+                                return;
+                              }
+
+                              const enrichMomentsWithZones = (moments, zones) => {
+                                return moments.map(moment => {
+                                  const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
+                                  return {
+                                    ...moment,
+                                    zone: zone?.name || 'unknown',
+                                    zoneIndex: zones.indexOf(zone)
+                                  };
+                                });
+                              };
+
+                              let allMoments = enrichMomentsWithZones(narrativeResult.keyMoments || [], zones);
+
+                              // Pro mode: More aggressive seeking
+                              if (narrativeResult.missingMoments && narrativeResult.missingMoments.length > 0) {
+                                const { newFrames } = await seekMissingMoments(
+                                  video,
+                                  duration,
+                                  narrativeResult.missingMoments,
+                                  allFrames,
+                                  zones
+                                );
+
+                                if (newFrames && newFrames.length > 0) {
+                                  const seekAnalysis = await analyzeSeekResults(newFrames, narrativeResult.missingMoments);
+                                  if (seekAnalysis && seekAnalysis.foundMoments) {
+                                    allMoments = allMoments.concat(enrichMomentsWithZones(seekAnalysis.foundMoments, zones));
+                                  }
+                                }
+                              }
+
+                              // Final selection with pro quality
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, zones, { mode: 'pro' });
+
+                              if (!finalSelection || !finalSelection.selectedClips) {
+                                alert('Final clip selection failed. Please try again.');
+                                return;
+                              }
+
+                              let selectedClips = finalSelection.selectedClips;
+                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+                                selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
+                              }
+
+                              const newAnchors = selectedClips.map((clip, index) => ({
+                                id: Date.now() + index,
+                                start: Math.max(0, clip.start),
+                                end: Math.min(duration, clip.end),
+                                _narrativeReason: clip.description || clip.reason || 'Selected moment',
+                                _importance: clip.importance || 0.5
+                              }));
+
+                              console.log('✅ PRO GEN COMPLETE:', {
+                                anchorsCreated: newAnchors.length,
+                                totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+                              });
+
+                              setAnchors(newAnchors);
+                              saveToHistory(newAnchors);
+                            }
+
+                          } catch (error) {
+                            console.error('❌ Auto-generate error:', error);
+                            alert(`Auto-generate failed: ${error.message}`);
+                          } finally {
+                            setIsAnalyzing(false);
+                          }
+                        }}
+                        disabled={!duration || isAnalyzing}
+                        className="w-full px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center justify-center gap-2 font-semibold shadow-lg transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Sparkles size={18} />
+                        <span>{isAnalyzing ? 'Analyzing Story...' : 'Auto-Generate'}</span>
+                      </button>
                     </div>
                   </div>
                   {/* End Action Toolbar Section */}
