@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -117,6 +117,9 @@ const ReelForge = () => {
 
   // Playback mode state
   const [playbackMode, setPlaybackMode] = useState('full'); // 'full' | 'clips'
+
+  // Media Center collapse state
+  const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(false);
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -3961,75 +3964,338 @@ const exportVideo = async () => {
               </div>
             ) : (
               <div className="h-full flex flex-col">
-                {/* Toolbar: Video Info + Mode Toggle + Change Video */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
-                  <div>
-                    <h3 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-                      {video.name}
-                    </h3>
-                    <p className="text-xs sm:text-sm" style={{ color: 'var(--text-dim)' }}>
-                      Duration: {formatTime(duration)}
-                    </p>
-                  </div>
+                {/* MEDIA CENTER - Collapsible */}
+                <div className="panel rounded-xl mb-4">
+                  <button
+                    onClick={() => setMediaCenterCollapsed(!mediaCenterCollapsed)}
+                    className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        🎬 Media Center
+                      </h3>
+                      <span className="text-xs text-gray-400">
+                        {video.name} • {formatTime(duration)}
+                      </span>
+                    </div>
+                    <ChevronDown
+                      className={`transition-transform ${mediaCenterCollapsed ? '' : 'rotate-180'}`}
+                      size={20}
+                    />
+                  </button>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    {/* Playback Mode Toggle */}
-                    {anchors.length > 0 && (
-                      <div className="flex rounded-lg overflow-hidden border border-gray-600">
-                        <button
-                          onClick={() => {
-                            setPlaybackMode('full');
-                            if (playbackMode === 'clips') {
-                              stopEnhancedPreview();
-                            }
-                          }}
-                          className={`px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
-                            playbackMode === 'full'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                          }`}
-                        >
-                          Full Video
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPlaybackMode('clips');
-                            if (playbackMode === 'full') {
-                              startEnhancedPreview();
-                            }
-                          }}
-                          className={`px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
-                            playbackMode === 'clips'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                          }`}
-                        >
-                          Play Clips
-                        </button>
+                  {!mediaCenterCollapsed && (
+                    <div className="p-4 pt-0 space-y-3">
+                      {/* Change Video Button */}
+                      <button
+                        onClick={() => {
+                          if (videoUrl) URL.revokeObjectURL(videoUrl);
+                          setVideo(null);
+                          setVideoUrl(null);
+                          setAnchors([]);
+                          setHistory([]);
+                          setHistoryIndex(-1);
+                          setMusic(null);
+                          setMusicUrl(null);
+                          setPlaybackMode('full');
+                        }}
+                        className="w-full px-4 py-2 btn-secondary rounded-lg flex items-center justify-center gap-2 text-sm"
+                        title="Change Video"
+                      >
+                        <Upload size={16} />
+                        Change Video
+                      </button>
+
+                      {/* Music Section */}
+                      <div className="border-t border-gray-700 pt-3">
+                        {!music ? (
+                          <label className="block px-4 py-2 btn-secondary rounded-lg cursor-pointer text-center text-sm">
+                            🎵 Add Music (Optional)
+                            <input
+                              type="file"
+                              accept="audio/*"
+                              onChange={handleMusicUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-300 truncate">🎵 {music.name}</span>
+                              <button
+                                onClick={() => {
+                                  setMusic(null);
+                                  setMusicUrl(null);
+                                }}
+                                className="text-gray-400 hover:text-white ml-2"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+
+                            <audio
+                              ref={musicRef}
+                              src={musicUrl}
+                              onLoadedMetadata={handleMusicLoadedMetadata}
+                              onEnded={() => setIsMusicPlaying(false)}
+                              className="hidden"
+                            />
+
+                            {/* Music Range Selector */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs text-gray-400">Music Range</label>
+                                <span className="text-xs text-gray-500">
+                                  {formatTime(musicEndTime - musicStartTime)} selected
+                                </span>
+                              </div>
+
+                              {/* Visual range selector */}
+                              <div
+                                className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer"
+                                onClick={() => setSelectedMusicHandle(null)}
+                              >
+                                {/* Selected range highlight */}
+                                <div
+                                  className="absolute top-0 bottom-0 rounded pointer-events-none"
+                                  style={{
+                                    left: `${(musicStartTime / musicDuration) * 100}%`,
+                                    width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`,
+                                    background: 'linear-gradient(to right, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.6))'
+                                  }}
+                                />
+
+                                {/* Start handle */}
+                                <div
+                                  className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
+                                    selectedMusicHandle === 'start'
+                                      ? 'bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]'
+                                      : 'bg-green-500/60'
+                                  }`}
+                                  style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMusicHandle('start');
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMusicHandle('start');
+                                    const startX = e.clientX;
+                                    const startTime = musicStartTime;
+                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                                    const handleMouseMove = (moveE) => {
+                                      const deltaX = moveE.clientX - startX;
+                                      const deltaTime = (deltaX / rect.width) * musicDuration;
+                                      const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
+                                      setMusicStartTime(newTime);
+                                    };
+
+                                    const handleMouseUp = () => {
+                                      document.removeEventListener('mousemove', handleMouseMove);
+                                      document.removeEventListener('mouseup', handleMouseUp);
+                                    };
+
+                                    document.addEventListener('mousemove', handleMouseMove);
+                                    document.addEventListener('mouseup', handleMouseUp);
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.stopPropagation();
+                                    if (navigator.vibrate) {
+                                      navigator.vibrate(10);
+                                    }
+                                    const startX = e.touches[0].clientX;
+                                    const startTime = musicStartTime;
+                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                                    const handleTouchMove = (moveE) => {
+                                      const deltaX = moveE.touches[0].clientX - startX;
+                                      const deltaTime = (deltaX / rect.width) * musicDuration;
+                                      const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
+                                      setMusicStartTime(newTime);
+                                    };
+
+                                    const handleTouchEnd = () => {
+                                      if (navigator.vibrate) {
+                                        navigator.vibrate(15);
+                                      }
+                                      document.removeEventListener('touchmove', handleTouchMove);
+                                      document.removeEventListener('touchend', handleTouchEnd);
+                                    };
+
+                                    document.addEventListener('touchmove', handleTouchMove);
+                                    document.addEventListener('touchend', handleTouchEnd);
+                                  }}
+                                  title="Drag to adjust start"
+                                >
+                                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-green-400 group-hover:bg-green-300 group-active:bg-green-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
+                                </div>
+
+                                {/* End handle */}
+                                <div
+                                  className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
+                                    selectedMusicHandle === 'end'
+                                      ? 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.8)]'
+                                      : 'bg-red-500/60'
+                                  }`}
+                                  style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMusicHandle('end');
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMusicHandle('end');
+                                    const startX = e.clientX;
+                                    const startTime = musicEndTime;
+                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                                    const handleMouseMove = (moveE) => {
+                                      const deltaX = moveE.clientX - startX;
+                                      const deltaTime = (deltaX / rect.width) * musicDuration;
+                                      const newTime = Math.max(musicStartTime + 1, Math.min(musicDuration, startTime + deltaTime));
+                                      setMusicEndTime(newTime);
+                                    };
+
+                                    const handleMouseUp = () => {
+                                      document.removeEventListener('mousemove', handleMouseMove);
+                                      document.removeEventListener('mouseup', handleMouseUp);
+                                    };
+
+                                    document.addEventListener('mousemove', handleMouseMove);
+                                    document.addEventListener('mouseup', handleMouseUp);
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.stopPropagation();
+                                    if (navigator.vibrate) {
+                                      navigator.vibrate(10);
+                                    }
+                                    const startX = e.touches[0].clientX;
+                                    const startTime = musicEndTime;
+                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+
+                                    const handleTouchMove = (moveE) => {
+                                      const deltaX = moveE.touches[0].clientX - startX;
+                                      const deltaTime = (deltaX / rect.width) * musicDuration;
+                                      const newTime = Math.max(musicStartTime + 1, Math.min(musicDuration, startTime + deltaTime));
+                                      setMusicEndTime(newTime);
+                                    };
+
+                                    const handleTouchEnd = () => {
+                                      if (navigator.vibrate) {
+                                        navigator.vibrate(15);
+                                      }
+                                      document.removeEventListener('touchmove', handleTouchMove);
+                                      document.removeEventListener('touchend', handleTouchEnd);
+                                    };
+
+                                    document.addEventListener('touchmove', handleTouchMove);
+                                    document.addEventListener('touchend', handleTouchEnd);
+                                  }}
+                                  title="Drag to adjust end"
+                                >
+                                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-400 group-hover:bg-red-300 group-active:bg-red-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
+                                </div>
+                              </div>
+
+                              {/* Time displays */}
+                              <div className="flex justify-between text-xs mb-2">
+                                <div
+                                  onClick={() => setSelectedMusicHandle('start')}
+                                  className={`cursor-pointer transition-colors ${selectedMusicHandle === 'start' ? 'font-bold text-green-400' : 'text-gray-300 hover:text-green-300'}`}
+                                >
+                                  🟢 Start: {formatTime(musicStartTime)}
+                                </div>
+                                <div className="text-gray-400">
+                                  Duration: {formatTime((musicEndTime || musicDuration) - musicStartTime)}
+                                </div>
+                                <div
+                                  onClick={() => setSelectedMusicHandle('end')}
+                                  className={`cursor-pointer transition-colors ${selectedMusicHandle === 'end' ? 'font-bold text-red-400' : 'text-gray-300 hover:text-red-300'}`}
+                                >
+                                  🔴 End: {formatTime(musicEndTime || musicDuration)}
+                                </div>
+                              </div>
+
+                              {/* Fine-tune Buttons */}
+                              <div className="mb-3">
+                                <div className="flex items-center justify-center gap-2 mb-2">
+                                  <span className="text-xs text-gray-400 mr-2">
+                                    {selectedMusicHandle ? `Adjusting: ${selectedMusicHandle === 'start' ? 'Start' : 'End'}` : 'Select a handle'}
+                                  </span>
+                                  <button
+                                    onClick={() => adjustMusicHandle(-1)}
+                                    disabled={!selectedMusicHandle}
+                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                  >
+                                    -1s
+                                  </button>
+                                  <button
+                                    onClick={() => adjustMusicHandle(-0.1)}
+                                    disabled={!selectedMusicHandle}
+                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                  >
+                                    -0.1s
+                                  </button>
+                                  <button
+                                    onClick={() => adjustMusicHandle(+0.1)}
+                                    disabled={!selectedMusicHandle}
+                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                  >
+                                    +0.1s
+                                  </button>
+                                  <button
+                                    onClick={() => adjustMusicHandle(+1)}
+                                    disabled={!selectedMusicHandle}
+                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
+                                  >
+                                    +1s
+                                  </button>
+                                </div>
+                                <p className="text-xs text-gray-400 text-center">
+                                  Tip: Arrow keys ±1s • Shift+Arrow ±5s • Space to preview
+                                </p>
+                              </div>
+
+                              {/* Audio Balance - Color-coded */}
+                              <div className="mb-3">
+                                <div className="flex justify-between items-center mb-0.5">
+                                  <label className="text-xs text-gray-400">Balance</label>
+                                  <span className="text-xs flex items-center gap-1.5">
+                                    <span className="text-blue-400 font-semibold">Video {100 - audioBalance}%</span>
+                                    <span className="text-gray-600">•</span>
+                                    <span className="text-green-400 font-semibold">Music {audioBalance}%</span>
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={audioBalance}
+                                  onChange={(e) => setAudioBalance(parseInt(e.target.value))}
+                                  onTouchStart={(e) => setAudioBalance(parseInt(e.target.value))}
+                                  onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
+                                  className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
+                                  style={{
+                                    background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
+                                  }}
+                                />
+                              </div>
+
+                              {/* Music Preview Button */}
+                              <button
+                                onClick={toggleMusicPreview}
+                                className="w-full px-3 py-1.5 btn-accent rounded-lg flex items-center justify-center gap-1.5 text-xs"
+                              >
+                                {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
+                                {isMusicPlaying ? 'Pause Music' : 'Preview Audio'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-
-                    {/* Change Video Button */}
-                    <button
-                      onClick={() => {
-                        if (videoUrl) URL.revokeObjectURL(videoUrl);
-                        setVideo(null);
-                        setVideoUrl(null);
-                        setAnchors([]);
-                        setHistory([]);
-                        setHistoryIndex(-1);
-                        setMusic(null);
-                        setMusicUrl(null);
-                        setPlaybackMode('full');
-                      }}
-                      className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
-                      title="Change Video"
-                    >
-                      <Upload size={16} />
-                      <span className="hidden sm:inline">Change Video</span>
-                      <span className="sm:hidden">Change</span>
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Primary Video Player (Timeline-based) */}
@@ -4251,322 +4517,86 @@ const exportVideo = async () => {
                       <>{formatTime(currentTime)} / {formatTime(duration)}</>
                     )}
                   </div>
+
+                  {/* Controls Row */}
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    {/* Prev Button */}
+                    {anchors.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (playbackMode === 'clips') {
+                            const prevIndex = Math.max(0, previewAnchorIndex - 1);
+                            if (prevIndex !== previewAnchorIndex) {
+                              seekPreviewTime(previewTimeline[prevIndex].previewStart);
+                            }
+                          }
+                        }}
+                        disabled={playbackMode !== 'clips' || previewAnchorIndex <= 0}
+                        className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Previous Clip (Left Arrow)"
+                      >
+                        <span>◄</span>
+                        <span className="hidden sm:inline">Prev</span>
+                      </button>
+                    )}
+
+                    {/* Play Clips Button */}
+                    {anchors.length > 0 && (
+                      <button
+                        onClick={togglePreviewPlayback}
+                        className="px-6 py-2 bg-gradient-to-br from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg flex items-center gap-2 font-semibold shadow-lg transition text-sm"
+                        title="Play Clips (Spacebar)"
+                      >
+                        {isPreviewPlaying ? <Pause size={18} /> : <Play size={18} />}
+                        <span>{isPreviewPlaying ? 'Pause Clips' : 'Play Clips'}</span>
+                      </button>
+                    )}
+
+                    {/* Next Button */}
+                    {anchors.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (playbackMode === 'clips') {
+                            const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
+                            if (nextIndex !== previewAnchorIndex) {
+                              seekPreviewTime(previewTimeline[nextIndex].previewStart);
+                            }
+                          }
+                        }}
+                        disabled={playbackMode !== 'clips' || previewAnchorIndex >= previewTimeline.length - 1}
+                        className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Next Clip (Right Arrow)"
+                      >
+                        <span className="hidden sm:inline">Next</span>
+                        <span>►</span>
+                      </button>
+                    )}
+
+                    {/* Precision Button */}
+                    {selectedAnchor !== null && (
+                      <button
+                        onClick={() => {
+                          setPrecisionAnchor(selectedAnchor);
+                          setShowPrecisionModal(true);
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg flex items-center gap-2 text-sm transition"
+                        title="Precision Editor"
+                      >
+                        <Edit size={16} />
+                        <span className="hidden sm:inline">Precision</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Music & Timeline (part of Edit section) */}
+        {/* Timeline Section (part of Edit section) */}
         {currentSection === 'edit' && video && (
           <div className="space-y-4">
-            {/* Compact Music Panel */}
-            <div className="panel rounded-xl p-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-start">
-                {/* Music Section - Compact */}
-                <div className="flex-1 w-full">
-                  {!music ? (
-                    <label className="block px-3 py-2 btn-secondary rounded-lg cursor-pointer text-center text-sm">
-                      🎵 Add Music (Optional)
-                      <input
-                        type="file"
-                        accept="audio/*"
-                        onChange={handleMusicUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-300 truncate">🎵 {music.name}</span>
-                        <button
-                          onClick={() => {
-                            setMusic(null);
-                            setMusicUrl(null);
-                          }}
-                          className="text-gray-400 hover:text-white ml-2"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-
-                      <audio
-                        ref={musicRef}
-                        src={musicUrl}
-                        onLoadedMetadata={handleMusicLoadedMetadata}
-                        onEnded={() => setIsMusicPlaying(false)}
-                        className="hidden"
-                      />
-
-                      {/* Music Range Selector */}
-                      <div className="mb-4">
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs text-gray-400">Music Range</label>
-                          <span className="text-xs text-gray-500">
-                            {formatTime(musicEndTime - musicStartTime)} selected
-                          </span>
-                        </div>
-
-                        {/* Visual range selector */}
-                        <div
-                          className="relative h-10 bg-slate-700 rounded-lg mb-1 cursor-pointer"
-                          onClick={() => setSelectedMusicHandle(null)}
-                        >
-                          {/* Selected range highlight - Orange gradient */}
-                          <div
-                            className="absolute top-0 bottom-0 rounded pointer-events-none"
-                            style={{
-                              left: `${(musicStartTime / musicDuration) * 100}%`,
-                              width: `${((musicEndTime - musicStartTime) / musicDuration) * 100}%`,
-                              background: 'linear-gradient(to right, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.6))'
-                            }}
-                          />
-
-                          {/* Start handle - Sleek pill design */}
-                          <div
-                            className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
-                              selectedMusicHandle === 'start'
-                                ? 'bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]'
-                                : 'bg-green-500/60'
-                            }`}
-                            style={{ left: `${(musicStartTime / musicDuration) * 100}%` }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedMusicHandle('start');
-                            }}
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              setSelectedMusicHandle('start');
-                              const startX = e.clientX;
-                              const startTime = musicStartTime;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-
-                              const handleMouseMove = (moveE) => {
-                                const deltaX = moveE.clientX - startX;
-                                const deltaTime = (deltaX / rect.width) * musicDuration;
-                                const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
-                                setMusicStartTime(newTime);
-                              };
-
-                              const handleMouseUp = () => {
-                                document.removeEventListener('mousemove', handleMouseMove);
-                                document.removeEventListener('mouseup', handleMouseUp);
-                              };
-
-                              document.addEventListener('mousemove', handleMouseMove);
-                              document.addEventListener('mouseup', handleMouseUp);
-                            }}
-                            onTouchStart={(e) => {
-                              e.stopPropagation();
-                              // Haptic feedback
-                              if (navigator.vibrate) {
-                                navigator.vibrate(10);
-                              }
-                              const startX = e.touches[0].clientX;
-                              const startTime = musicStartTime;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-
-                              const handleTouchMove = (moveE) => {
-                                const deltaX = moveE.touches[0].clientX - startX;
-                                const deltaTime = (deltaX / rect.width) * musicDuration;
-                                const newTime = Math.max(0, Math.min(musicEndTime - 1, startTime + deltaTime));
-                                setMusicStartTime(newTime);
-                              };
-
-                              const handleTouchEnd = () => {
-                                // Haptic feedback on release
-                                if (navigator.vibrate) {
-                                  navigator.vibrate(15);
-                                }
-                                document.removeEventListener('touchmove', handleTouchMove);
-                                document.removeEventListener('touchend', handleTouchEnd);
-                              };
-
-                              document.addEventListener('touchmove', handleTouchMove);
-                              document.addEventListener('touchend', handleTouchEnd);
-                            }}
-                            title="Drag to adjust start"
-                          >
-                            {/* Pill-shaped grab handle */}
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-green-400 group-hover:bg-green-300 group-active:bg-green-200 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
-                          </div>
-
-                          {/* End handle - Sleek pill design */}
-                          <div
-                            className={`absolute top-0 bottom-0 w-1 cursor-ew-resize z-10 rounded-full group ${
-                              selectedMusicHandle === 'end'
-                                ? 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.8)]'
-                                : 'bg-red-500/60'
-                            }`}
-                            style={{ left: `${(musicEndTime / musicDuration) * 100}%` }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedMusicHandle('end');
-                            }}
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              setSelectedMusicHandle('end');
-                              const startX = e.clientX;
-                              const startTime = musicEndTime;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-
-                              const handleMouseMove = (moveE) => {
-                                const deltaX = moveE.clientX - startX;
-                                const deltaTime = (deltaX / rect.width) * musicDuration;
-                                const newTime = Math.min(musicDuration, Math.max(musicStartTime + 1, startTime + deltaTime));
-                                setMusicEndTime(newTime);
-                              };
-
-                              const handleMouseUp = () => {
-                                document.removeEventListener('mousemove', handleMouseMove);
-                                document.removeEventListener('mouseup', handleMouseUp);
-                              };
-
-                              document.addEventListener('mousemove', handleMouseMove);
-                              document.addEventListener('mouseup', handleMouseUp);
-                            }}
-                            onTouchStart={(e) => {
-                              e.stopPropagation();
-                              // Haptic feedback
-                              if (navigator.vibrate) {
-                                navigator.vibrate(10);
-                              }
-                              const startX = e.touches[0].clientX;
-                              const startTime = musicEndTime;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-
-                              const handleTouchMove = (moveE) => {
-                                const deltaX = moveE.touches[0].clientX - startX;
-                                const deltaTime = (deltaX / rect.width) * musicDuration;
-                                const newTime = Math.min(musicDuration, Math.max(musicStartTime + 1, startTime + deltaTime));
-                                setMusicEndTime(newTime);
-                              };
-
-                              const handleTouchEnd = () => {
-                                // Haptic feedback on release
-                                if (navigator.vibrate) {
-                                  navigator.vibrate(15);
-                                }
-                                document.removeEventListener('touchmove', handleTouchMove);
-                                document.removeEventListener('touchend', handleTouchEnd);
-                              };
-
-                              document.addEventListener('touchmove', handleTouchMove);
-                              document.addEventListener('touchend', handleTouchEnd);
-                            }}
-                            title="Drag to adjust end"
-                          >
-                            {/* Pill-shaped grab handle */}
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-5 bg-red-500 group-hover:bg-red-400 group-active:bg-red-300 rounded-full shadow-lg border-2 border-white/30 pointer-events-none" />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between text-xs text-gray-500">
-                          <span>{formatTime(musicStartTime)}</span>
-                          <span>{formatTime(musicEndTime)}</span>
-                        </div>
-                      </div>
-
-                      {/* Audio Balance - Color-coded */}
-                      <div>
-                        <div className="flex justify-between items-center mb-0.5">
-                          <label className="text-xs text-gray-400">Balance</label>
-                          <span className="text-xs flex items-center gap-1.5">
-                            <span className="text-blue-400 font-semibold">Video {100 - audioBalance}%</span>
-                            <span className="text-gray-600">•</span>
-                            <span className="text-green-400 font-semibold">Music {audioBalance}%</span>
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={audioBalance}
-                          onChange={(e) => setAudioBalance(parseInt(e.target.value))}
-                          onTouchStart={(e) => setAudioBalance(parseInt(e.target.value))}
-                          onTouchMove={(e) => setAudioBalance(parseInt(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer outline-none focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-webkit-slider-thumb]:outline-none [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-purple-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-[0_0_12px_rgba(168,85,247,0.6)] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:outline-none"
-                          style={{
-                            background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${audioBalance}%, rgb(96, 165, 250) ${audioBalance}%, rgb(96, 165, 250) 100%)`
-                          }}
-                        />
-                      </div>
-
-                      {/* Time Display */}
-                      <div className="flex justify-between items-center mt-2 text-sm mb-3">
-                        <div
-                          onClick={() => setSelectedMusicHandle('start')}
-                          className={`cursor-pointer transition-colors ${selectedMusicHandle === 'start' ? 'font-bold text-green-400' : 'text-gray-300 hover:text-green-300'}`}
-                        >
-                          🟢 Start: {formatTime(musicStartTime)}
-                        </div>
-                        <div className="text-gray-400">
-                          Duration: {formatTime((musicEndTime || musicDuration) - musicStartTime)}
-                        </div>
-                        <div
-                          onClick={() => setSelectedMusicHandle('end')}
-                          className={`cursor-pointer transition-colors ${selectedMusicHandle === 'end' ? 'font-bold text-red-400' : 'text-gray-300 hover:text-red-300'}`}
-                        >
-                          🔴 End: {formatTime(musicEndTime || musicDuration)}
-                        </div>
-                      </div>
-
-                      {/* Fine-tune Buttons */}
-                      <div className="mb-3">
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                          <span className="text-xs text-gray-400 mr-2">
-                            {selectedMusicHandle ? `Adjusting: ${selectedMusicHandle === 'start' ? 'Start' : 'End'}` : 'Select a handle'}
-                          </span>
-                          <button
-                            onClick={() => adjustMusicHandle(-1)}
-                            disabled={!selectedMusicHandle}
-                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                          >
-                            -1s
-                          </button>
-                          <button
-                            onClick={() => adjustMusicHandle(-0.1)}
-                            disabled={!selectedMusicHandle}
-                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                          >
-                            -0.1s
-                          </button>
-                          <button
-                            onClick={() => adjustMusicHandle(+0.1)}
-                            disabled={!selectedMusicHandle}
-                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                          >
-                            +0.1s
-                          </button>
-                          <button
-                            onClick={() => adjustMusicHandle(+1)}
-                            disabled={!selectedMusicHandle}
-                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded disabled:opacity-30 text-xs transition-colors"
-                          >
-                            +1s
-                          </button>
-                        </div>
-                        <p className="text-xs text-gray-400 text-center">
-                          Tip: Arrow keys ±1s • Shift+Arrow ±5s • Space to preview
-                        </p>
-                      </div>
-
-                      {/* Music Preview Button */}
-                      <button
-                        onClick={toggleMusicPreview}
-                        className="w-full px-3 py-1.5 btn-accent rounded-lg flex items-center justify-center gap-1.5 text-xs"
-                      >
-                        {isMusicPlaying ? <Pause size={14} /> : <Play size={14} />}
-                        {isMusicPlaying ? 'Pause Music' : 'Preview Audio'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-
-{/* Timeline */}
+            {/* Timeline */}
 <div className="panel rounded-2xl p-6">
 
 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 touch-manipulation">
