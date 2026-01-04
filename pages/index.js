@@ -4661,18 +4661,246 @@ const exportVideo = async () => {
 
                   {/* Main Timeline Section */}
                   <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
-                    <div className="text-xs text-gray-400 text-center mb-2">
-                      Main Timeline • {formatTime(duration)} • Double-click to add clip
+                    {/* Main Timeline visualization */}
+                    <div
+                      ref={timelineRef}
+                      onMouseDown={handleTimelineMouseDown}
+                      onClick={(e) => {
+                        // Clicking main timeline switches to full video mode
+                        if (playbackMode === 'clips') {
+                          setPlaybackMode('full');
+                          stopEnhancedPreview();
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        handleTimelineMouseDown({ ...e, clientX: touch.clientX });
+                      }}
+                      onTouchMove={(e) => {
+                        e.preventDefault();
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        const now = Date.now();
+                        const timeSinceLastTap = now - lastTapTimeRef.current;
+                        const touch = e.changedTouches[0];
+                        const tapPosition = { x: touch.clientX, y: touch.clientY };
+                        const distance = Math.sqrt(
+                          Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
+                          Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
+                        );
+
+                        if (timeSinceLastTap < 300 && distance < 30) {
+                          handleTimelineDoubleTap(e);
+                          lastTapTimeRef.current = 0;
+                        } else {
+                          lastTapTimeRef.current = now;
+                          lastTapPositionRef.current = tapPosition;
+                        }
+                      }}
+                      onDoubleClick={(e) => {
+                        if (!timelineRef.current || !duration) return;
+                        const rect = timelineRef.current.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const percent = Math.max(0, Math.min(1, x / rect.width));
+                        const time = percent * duration;
+
+                        const newAnchor = {
+                          id: Date.now(),
+                          start: time,
+                          end: Math.min(time + 2, duration)
+                        };
+
+                        const hasOverlap = anchors.some(a =>
+                          (newAnchor.start >= a.start && newAnchor.start < a.end) ||
+                          (newAnchor.end > a.start && newAnchor.end <= a.end) ||
+                          (newAnchor.start <= a.start && newAnchor.end >= a.end)
+                        );
+
+                        if (hasOverlap) {
+                          alert('Anchor overlaps with existing anchor');
+                          return;
+                        }
+
+                        const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+                        setAnchors(updated);
+                        saveToHistory(updated);
+                        setSelectedAnchor(newAnchor.id);
+                      }}
+                      className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
+                      style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
+                      title="Double-click to add anchor"
+                    >
+                      {/* Current time indicator */}
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
+                        style={{ left: `${(currentTime / duration) * 100}%` }}
+                      />
+
+                      {/* Anchors - copied from old timeline */}
+                      {anchors.map((anchor, index) => {
+                        const isSelected = selectedAnchor === anchor.id;
+                        const colors = getAnchorColor(index, isSelected);
+                        const width = ((anchor.end - anchor.start) / duration) * 100;
+
+                        return (
+                          <div
+                            key={anchor.id}
+                            className="absolute top-0 bottom-0"
+                            style={{
+                              left: `${(anchor.start / duration) * 100}%`,
+                              width: `${width}%`,
+                              zIndex: isSelected ? 50 : 30
+                            }}
+                          >
+                            <div
+                              data-anchor-element="true"
+                              onClick={(e) => handleAnchorClick(e, anchor)}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                deleteAnchor(anchor.id);
+                              }}
+                              onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedAnchor(anchor.id);
+                                handleAnchorTouchStart(e, anchor, 'anchor-move');
+                              }}
+                              onMouseEnter={() => {
+                                if (!previewAnchor) {
+                                  setHoveredAnchor(anchor);
+                                }
+                              }}
+                              onMouseLeave={() => {
+                                if (!previewAnchor || previewAnchor.id !== anchor.id) {
+                                  setHoveredAnchor(null);
+                                }
+                              }}
+                              className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition touch-manipulation`}
+                              style={{ touchAction: 'none', zIndex: 10 }}
+                            >
+                              <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                                {formatTime(anchor.end - anchor.start)}
+                              </div>
+
+                              {isSelected && (
+                                <>
+                                  {/* Left handle */}
+                                  <div
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleAnchorMouseDown(e, anchor, 'anchor-left');
+                                    }}
+                                    onTouchStart={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleAnchorTouchStart(e, anchor, 'anchor-left');
+                                    }}
+                                    className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 transition-all rounded-full touch-none -translate-x-1/2"
+                                    style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                  >
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                                  </div>
+                                  {/* Right handle */}
+                                  <div
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleAnchorMouseDown(e, anchor, 'anchor-right');
+                                    }}
+                                    onTouchStart={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleAnchorTouchStart(e, anchor, 'anchor-right');
+                                    }}
+                                    className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 transition-all rounded-full touch-none translate-x-1/2"
+                                    style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                  >
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
-                  {/* Main Timeline - will be inserted here from old location */}
-
+                    <div className="text-xs text-gray-400 text-center">
+                      {anchors.length === 0
+                        ? '💡 Double-click timeline to add anchor'
+                        : 'Click to preview • Double-click to delete • Drag handles to resize • Drag middle to move • Click "Precision" for zoom'}
+                    </div>
                   </div>
                   {/* End Main Timeline Section */}
 
                   {/* Action Toolbar Section */}
                   <div className="bg-slate-900/30 rounded-lg p-3">
-                    {/* Toolbar buttons will be moved here */}
+                    {/* Toolbar Buttons Row */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <button
+                        onClick={undo}
+                        disabled={historyIndex <= 0}
+                        className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs"
+                        title="Undo (Ctrl+Z)"
+                      >
+                        <RotateCcw size={14} />
+                        <span>Undo</span>
+                      </button>
+                      <button
+                        onClick={redo}
+                        disabled={historyIndex >= history.length - 1}
+                        className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs"
+                        title="Redo (Ctrl+Y)"
+                      >
+                        <RotateCw size={14} />
+                        <span>Redo</span>
+                      </button>
+                      <button
+                        onClick={() => setShowTrimModal(true)}
+                        className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-1 text-xs"
+                      >
+                        <Scissors size={14} />
+                        <span>Trim</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (anchors.length > 0) {
+                            if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+                              const emptyAnchors = [];
+                              setAnchors(emptyAnchors);
+                              saveToHistory(emptyAnchors);
+                              setSelectedAnchor(null);
+                              setPreviewAnchor(null);
+                            }
+                          }
+                        }}
+                        disabled={anchors.length === 0}
+                        className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 size={14} />
+                        <span>Clear</span>
+                      </button>
+                    </div>
+
+                    {/* Stats Row */}
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="bg-slate-800/50 p-2 rounded text-center">
+                        <div className="text-gray-400">Clips</div>
+                        <div className="font-semibold text-white">{anchors.length}</div>
+                      </div>
+                      <div className="bg-slate-800/50 p-2 rounded text-center">
+                        <div className="text-gray-400">Duration</div>
+                        <div className="font-semibold text-blue-400">{formatTime(anchorTime)}</div>
+                      </div>
+                      <div className="bg-slate-800/50 p-2 rounded text-center">
+                        <div className="text-gray-400">Selected</div>
+                        <div className="font-semibold text-amber-400">
+                          {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   {/* End Action Toolbar Section */}
 
