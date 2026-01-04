@@ -4298,10 +4298,17 @@ const exportVideo = async () => {
                   )}
                 </div>
 
-                {/* Primary Video Player (Timeline-based) */}
-                <div className="panel rounded-xl p-4 sm:p-6">
-                  {/* Video Player */}
-                  <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
+                {/* Video Editor - Unified Panel */}
+                <div
+                  className={`panel rounded-xl p-4 sm:p-6 transition-all ${
+                    playbackMode === 'clips'
+                      ? 'ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
+                      : 'ring-2 ring-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.3)]'
+                  }`}
+                >
+                  {/* Video Player Section */}
+                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                    <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     <video
                       ref={videoRef}
                       src={videoUrl}
@@ -4507,95 +4514,178 @@ const exportVideo = async () => {
                     </div>
                   )}
 
-                  {/* Playback Info */}
-                  <div className="text-sm text-gray-300 text-center mt-3">
-                    {playbackMode === 'clips' && anchors.length > 0 ? (
-                      <>
-                        Clip {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s total
-                      </>
-                    ) : (
-                      <>{formatTime(currentTime)} / {formatTime(duration)}</>
+                    {/* Playback Info - Subtle inner box */}
+                    <div className="bg-slate-800/50 rounded px-3 py-1.5 text-xs text-gray-300 text-center">
+                      {playbackMode === 'clips' && anchors.length > 0 ? (
+                        <>
+                          Clip {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s total
+                        </>
+                      ) : (
+                        <>{formatTime(currentTime)} / {formatTime(duration)}</>
+                      )}
+                    </div>
+                  </div>
+                  {/* End Video Player Section */}
+
+                  {/* Playback Controls + Clips Timeline Section */}
+                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                    {/* Controls Row - sits directly above clips timeline */}
+                    {anchors.length > 0 && (
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        {/* Prev Button */}
+                        <button
+                          onClick={() => {
+                            if (playbackMode === 'clips') {
+                              const prevIndex = Math.max(0, previewAnchorIndex - 1);
+                              if (prevIndex !== previewAnchorIndex) {
+                                seekPreviewTime(previewTimeline[prevIndex].previewStart);
+                              }
+                            }
+                          }}
+                          disabled={playbackMode !== 'clips' || previewAnchorIndex <= 0}
+                          className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Previous Clip (Left Arrow)"
+                        >
+                          <span>◄</span>
+                          <span className="hidden sm:inline">Prev</span>
+                        </button>
+
+                        {/* Play Clips Button - Updated gradient */}
+                        <button
+                          onClick={togglePreviewPlayback}
+                          className="px-6 py-2 bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 rounded-lg flex items-center gap-2 font-semibold shadow-lg transition text-sm"
+                          title="Play Clips (Spacebar)"
+                        >
+                          {isPreviewPlaying ? <Pause size={18} /> : <Play size={18} />}
+                          <span>{isPreviewPlaying ? 'Pause Clips' : 'Play Clips'}</span>
+                        </button>
+
+                        {/* Next Button */}
+                        <button
+                          onClick={() => {
+                            if (playbackMode === 'clips') {
+                              const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
+                              if (nextIndex !== previewAnchorIndex) {
+                                seekPreviewTime(previewTimeline[nextIndex].previewStart);
+                              }
+                            }
+                          }}
+                          disabled={playbackMode !== 'clips' || previewAnchorIndex >= previewTimeline.length - 1}
+                          className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Next Clip (Right Arrow)"
+                        >
+                          <span className="hidden sm:inline">Next</span>
+                          <span>►</span>
+                        </button>
+
+                        {/* Precision Button - Updated icon and gradient */}
+                        {selectedAnchor !== null && (
+                          <button
+                            onClick={() => {
+                              const anchor = anchors.find(a => a.id === selectedAnchor);
+                              if (anchor) {
+                                setPrecisionAnchor(anchor);
+                                setShowPrecisionModal(true);
+                              }
+                            }}
+                            className="px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center gap-2 text-sm transition"
+                            title="Edit Current Anchor"
+                          >
+                            <div className="relative">
+                              <ZoomIn size={16} />
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full" />
+                            </div>
+                            <span className="hidden sm:inline">Precision</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Clips Timeline - directly below controls */}
+                    {anchors.length > 0 && (
+                      <div>
+                        <div
+                          className="relative h-20 bg-slate-800 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500/40 transition-all"
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const clickX = e.clientX - rect.left;
+                            const percentage = clickX / rect.width;
+                            const newTime = percentage * previewTotalDuration;
+                            seekPreviewTime(newTime);
+                            setPlaybackMode('clips');
+                          }}
+                        >
+                          {/* Render clip segments */}
+                          {previewTimeline.map((segment, idx) => {
+                            const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
+                            const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
+                            const isCurrentSegment = idx === previewAnchorIndex;
+                            const colors = getAnchorColor(idx, isCurrentSegment);
+
+                            return (
+                              <div
+                                key={idx}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2`}
+                                style={{
+                                  left: `${segmentLeft}%`,
+                                  width: `${segmentWidth}%`
+                                }}
+                                title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s`}
+                              >
+                                <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                                  {idx + 1}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Playhead for clips timeline */}
+                          {playbackMode === 'clips' && (
+                            <div
+                              className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
+                              style={{
+                                left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
+                              }}
+                            >
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 text-center mt-2">
+                          {anchors.length} clip{anchors.length !== 1 ? 's' : ''} • {previewTotalDuration.toFixed(1)}s total
+                        </div>
+                      </div>
                     )}
                   </div>
+                  {/* End Playback Controls + Clips Timeline Section */}
 
-                  {/* Controls Row */}
-                  <div className="flex items-center justify-center gap-2 mt-4">
-                    {/* Prev Button */}
-                    {anchors.length > 0 && (
-                      <button
-                        onClick={() => {
-                          if (playbackMode === 'clips') {
-                            const prevIndex = Math.max(0, previewAnchorIndex - 1);
-                            if (prevIndex !== previewAnchorIndex) {
-                              seekPreviewTime(previewTimeline[prevIndex].previewStart);
-                            }
-                          }
-                        }}
-                        disabled={playbackMode !== 'clips' || previewAnchorIndex <= 0}
-                        className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Previous Clip (Left Arrow)"
-                      >
-                        <span>◄</span>
-                        <span className="hidden sm:inline">Prev</span>
-                      </button>
-                    )}
+                  {/* Main Timeline Section */}
+                  <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+                    <div className="text-xs text-gray-400 text-center mb-2">
+                      Main Timeline • {formatTime(duration)} • Double-click to add clip
+                    </div>
 
-                    {/* Play Clips Button */}
-                    {anchors.length > 0 && (
-                      <button
-                        onClick={togglePreviewPlayback}
-                        className="px-6 py-2 bg-gradient-to-br from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg flex items-center gap-2 font-semibold shadow-lg transition text-sm"
-                        title="Play Clips (Spacebar)"
-                      >
-                        {isPreviewPlaying ? <Pause size={18} /> : <Play size={18} />}
-                        <span>{isPreviewPlaying ? 'Pause Clips' : 'Play Clips'}</span>
-                      </button>
-                    )}
+                  {/* Main Timeline - will be inserted here from old location */}
 
-                    {/* Next Button */}
-                    {anchors.length > 0 && (
-                      <button
-                        onClick={() => {
-                          if (playbackMode === 'clips') {
-                            const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
-                            if (nextIndex !== previewAnchorIndex) {
-                              seekPreviewTime(previewTimeline[nextIndex].previewStart);
-                            }
-                          }
-                        }}
-                        disabled={playbackMode !== 'clips' || previewAnchorIndex >= previewTimeline.length - 1}
-                        className="px-4 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Next Clip (Right Arrow)"
-                      >
-                        <span className="hidden sm:inline">Next</span>
-                        <span>►</span>
-                      </button>
-                    )}
-
-                    {/* Precision Button */}
-                    {selectedAnchor !== null && (
-                      <button
-                        onClick={() => {
-                          setPrecisionAnchor(selectedAnchor);
-                          setShowPrecisionModal(true);
-                        }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg flex items-center gap-2 text-sm transition"
-                        title="Precision Editor"
-                      >
-                        <Edit size={16} />
-                        <span className="hidden sm:inline">Precision</span>
-                      </button>
-                    )}
                   </div>
+                  {/* End Main Timeline Section */}
+
+                  {/* Action Toolbar Section */}
+                  <div className="bg-slate-900/30 rounded-lg p-3">
+                    {/* Toolbar buttons will be moved here */}
+                  </div>
+                  {/* End Action Toolbar Section */}
+
                 </div>
+                {/* End Video Editor Unified Panel */}
               </div>
             )}
           </div>
         )}
 
-        {/* Timeline Section (part of Edit section) */}
-        {currentSection === 'edit' && video && (
-          <div className="space-y-4">
+        {/* OLD Timeline Section - TO BE REMOVED */}
+        {false && (
+          <div className="hidden space-y-4">
             {/* Connected Timelines Box */}
             <div className="panel rounded-2xl p-6">
               <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">Timelines</h3>
