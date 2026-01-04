@@ -115,6 +115,9 @@ const ReelForge = () => {
   });
   const [currentSection, setCurrentSection] = useState('edit'); // 'edit' | 'export'
 
+  // Playback mode state
+  const [playbackMode, setPlaybackMode] = useState('full'); // 'full' | 'clips'
+
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
   const [ffmpegLoaded, setFFmpegLoaded] = useState(false);
@@ -3949,102 +3952,296 @@ const exportVideo = async () => {
               </div>
             ) : (
               <div className="h-full flex flex-col">
-                {/* Video Info Header */}
-                <div className="mb-3">
-                  <h3 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Video Preview</h3>
-                  <p className="text-xs sm:text-sm" style={{ color: 'var(--text-dim)' }}>
-                    Duration: {formatTime(duration)} • {video.name}
-                  </p>
-                </div>
+                {/* Toolbar: Video Info + Mode Toggle + Change Video */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+                      {video.name}
+                    </h3>
+                    <p className="text-xs sm:text-sm" style={{ color: 'var(--text-dim)' }}>
+                      Duration: {formatTime(duration)}
+                    </p>
+                  </div>
 
-                {/* Video Player - Full Container */}
-                <div className="relative bg-black rounded-lg overflow-hidden flex-1 mb-4" style={{ minHeight: '300px' }}>
-                  <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="w-full h-full object-contain"
-                    onLoadedMetadata={(e) => {
-                      setDuration(e.target.duration);
-                    }}
-                    onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
-                    onEnded={() => setIsPlaying(false)}
-                  />
-
-                  {/* Play/Pause Overlay */}
-                  {!isPlaying && (
-                    <div
-                      className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                      onClick={togglePlay}
-                    >
-                      <div className="bg-white/90 rounded-full p-6">
-                        <Play size={48} className="text-black ml-1" />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Playback Mode Toggle */}
+                    {anchors.length > 0 && (
+                      <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                        <button
+                          onClick={() => {
+                            setPlaybackMode('full');
+                            if (playbackMode === 'clips') {
+                              stopEnhancedPreview();
+                            }
+                          }}
+                          className={`px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                            playbackMode === 'full'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          Full Video
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPlaybackMode('clips');
+                            if (playbackMode === 'full') {
+                              startEnhancedPreview();
+                            }
+                          }}
+                          className={`px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                            playbackMode === 'clips'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          Play Clips
+                        </button>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
 
-                {/* Timeline Scrubber */}
-                <div className="mb-4">
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration}
-                    step="0.1"
-                    value={currentTime}
-                    onChange={(e) => {
-                      const time = parseFloat(e.target.value);
-                      setCurrentTime(time);
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = time;
-                      }
-                    }}
-                    className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
-                    style={{
-                      background: `linear-gradient(to right, rgb(74, 222, 128) 0%, rgb(74, 222, 128) ${(currentTime / duration) * 100}%, rgb(71, 85, 105) ${(currentTime / duration) * 100}%, rgb(71, 85, 105) 100%)`
-                    }}
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
+                    {/* Change Video Button */}
+                    <button
+                      onClick={() => {
+                        if (videoUrl) URL.revokeObjectURL(videoUrl);
+                        setVideo(null);
+                        setVideoUrl(null);
+                        setAnchors([]);
+                        setHistory([]);
+                        setHistoryIndex(-1);
+                        setMusic(null);
+                        setMusicUrl(null);
+                        setPlaybackMode('full');
+                      }}
+                      className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
+                      title="Change Video"
+                    >
+                      <Upload size={16} />
+                      <span className="hidden sm:inline">Change Video</span>
+                      <span className="sm:hidden">Change</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Control Buttons - Equal Width, Mobile Optimized */}
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <button
-                    onClick={togglePlay}
-                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
-                  >
-                    {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                    <span>{isPlaying ? 'Pause' : 'Play'}</span>
-                  </button>
+                {/* Primary Video Player (Timeline-based) */}
+                <div className="panel rounded-xl p-4 sm:p-6">
+                  {/* Video Player */}
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      className="w-full h-full object-contain"
+                      onTimeUpdate={handleTimeUpdate}
+                      onLoadedMetadata={handleLoadedMetadata}
+                      onEnded={() => setIsPlaying(false)}
+                    />
 
-                  <button
-                    onClick={() => setShowTrimModal(true)}
-                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
-                  >
-                    <Scissors size={18} />
-                    <span>Trim</span>
-                  </button>
+                    {/* Play/Pause Overlay Button */}
+                    <button
+                      onClick={togglePlay}
+                      className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+                        isPlaying
+                          ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20'
+                          : 'bg-black/40 opacity-100'
+                      }`}
+                    >
+                      <div className={`transition-all duration-300 ${
+                        isPlaying
+                          ? 'scale-75 opacity-60 group-hover:scale-100 group-hover:opacity-100'
+                          : 'scale-100 opacity-100'
+                      }`}>
+                        {isPlaying ? (
+                          <Pause size={64} className="text-white drop-shadow-lg" />
+                        ) : (
+                          <Play size={64} className="text-white drop-shadow-lg" />
+                        )}
+                      </div>
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      if (videoUrl) URL.revokeObjectURL(videoUrl);
-                      setVideo(null);
-                      setVideoUrl(null);
-                      setAnchors([]);
-                      setHistory([]);
-                      setHistoryIndex(-1);
-                      setMusic(null);
-                      setMusicUrl(null);
-                      setCurrentTab('materials');
-                    }}
-                    className="py-3 sm:py-3.5 btn-secondary rounded-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-semibold text-xs sm:text-sm min-h-[48px] active:scale-95 transition-transform"
-                    style={{ borderColor: 'var(--accent-hot)' }}
-                  >
-                    <X size={18} />
-                    <span>Change</span>
-                  </button>
+                    {/* Video Scrub Bar - Show for full video mode */}
+                    {playbackMode === 'full' && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-1 bg-slate-700/50 group-hover:h-3 transition-all cursor-pointer"
+                        onMouseDown={(e) => {
+                          const container = e.currentTarget;
+                          const rect = container.getBoundingClientRect();
+
+                          const scrubVideo = (clientX) => {
+                            const x = clientX - rect.left;
+                            const percent = Math.max(0, Math.min(1, x / rect.width));
+                            const time = percent * duration;
+                            if (videoRef.current) {
+                              videoRef.current.currentTime = time;
+                            }
+                          };
+
+                          scrubVideo(e.clientX);
+
+                          const handleMouseMove = (moveEvent) => {
+                            scrubVideo(moveEvent.clientX);
+                          };
+
+                          const handleMouseUp = () => {
+                            document.removeEventListener('mousemove', handleMouseMove);
+                            document.removeEventListener('mouseup', handleMouseUp);
+                          };
+
+                          document.addEventListener('mousemove', handleMouseMove);
+                          document.addEventListener('mouseup', handleMouseUp);
+                        }}
+                        onTouchStart={(e) => {
+                          const container = e.currentTarget;
+                          const rect = container.getBoundingClientRect();
+                          const touch = e.touches?.[0];
+                          if (!touch) return;
+
+                          const scrubVideo = (clientX) => {
+                            const x = clientX - rect.left;
+                            const percent = Math.max(0, Math.min(1, x / rect.width));
+                            const time = percent * duration;
+                            if (videoRef.current) {
+                              videoRef.current.currentTime = time;
+                            }
+                          };
+
+                          scrubVideo(touch.clientX);
+
+                          const handleTouchMove = (moveEvent) => {
+                            const touchX = moveEvent.touches?.[0]?.clientX;
+                            if (touchX !== undefined) {
+                              scrubVideo(touchX);
+                            }
+                          };
+
+                          const handleTouchEnd = () => {
+                            document.removeEventListener('touchmove', handleTouchMove);
+                            document.removeEventListener('touchend', handleTouchEnd);
+                          };
+
+                          document.addEventListener('touchmove', handleTouchMove);
+                          document.addEventListener('touchend', handleTouchEnd);
+                        }}
+                      >
+                        <div
+                          className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 transition-all relative pointer-events-none border-r-2 border-amber-500/60"
+                          style={{ width: `${(currentTime / duration) * 100}%` }}
+                        >
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview Mode Scrubber - Show for clips mode */}
+                  {playbackMode === 'clips' && previewTimeline.length > 0 && (
+                    <div className="mt-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+                      {/* Preview Controls */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-300">
+                          <span className="font-semibold">{formatTime(previewCurrentTime)}</span>
+                          <span className="text-gray-500"> / </span>
+                          <span>{formatTime(previewTotalDuration)}</span>
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Clip {previewAnchorIndex + 1} of {previewTimeline.length}
+                        </div>
+                      </div>
+
+                      {/* Scrubber Bar */}
+                      <div
+                        className="relative h-12 bg-slate-800 rounded-lg overflow-hidden cursor-pointer mb-3"
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const clickX = e.clientX - rect.left;
+                          const percentage = clickX / rect.width;
+                          const newTime = percentage * previewTotalDuration;
+                          seekPreviewTime(newTime);
+                        }}
+                      >
+                        {/* Render anchor segments */}
+                        {previewTimeline.map((segment, idx) => {
+                          const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
+                          const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
+                          const isCurrentSegment = idx === previewAnchorIndex;
+
+                          return (
+                            <div
+                              key={idx}
+                              className="absolute top-0 bottom-0 transition-all"
+                              style={{
+                                left: `${segmentLeft}%`,
+                                width: `${segmentWidth}%`,
+                                background: isCurrentSegment
+                                  ? 'linear-gradient(to right, rgba(59, 130, 246, 0.8), rgba(139, 92, 246, 0.8))'
+                                  : 'rgba(100, 116, 139, 0.5)'
+                              }}
+                            />
+                          );
+                        })}
+
+                        {/* Playhead */}
+                        <div
+                          className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
+                          style={{
+                            left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
+                          }}
+                        >
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-xl border-2 border-slate-900" />
+                        </div>
+                      </div>
+
+                      {/* Playback Controls */}
+                      <div className="flex items-center justify-center gap-1 sm:gap-2 w-full">
+                        <button
+                          onClick={() => {
+                            const prevIndex = Math.max(0, previewAnchorIndex - 1);
+                            if (prevIndex !== previewAnchorIndex) {
+                              seekPreviewTime(previewTimeline[prevIndex].previewStart);
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
+                          title="Previous Clip (Left Arrow)"
+                        >
+                          <span>◄</span>
+                          <span className="hidden sm:inline">Prev</span>
+                        </button>
+
+                        <button
+                          onClick={togglePreviewPlayback}
+                          className="flex-1 sm:flex-initial px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-blue-600/40 hover:border-blue-600/60 hover:shadow-[0_0_16px_rgba(59,130,246,0.5)] rounded-lg transition flex items-center justify-center gap-2 font-semibold shadow-lg"
+                          title="Play/Pause (Spacebar)"
+                        >
+                          {isPreviewPlaying ? <Pause size={16} className="sm:w-5 sm:h-5" /> : <Play size={16} className="sm:w-5 sm:h-5" />}
+                          <span className="hidden sm:inline">{isPreviewPlaying ? 'Pause' : 'Play'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
+                            if (nextIndex !== previewAnchorIndex) {
+                              seekPreviewTime(previewTimeline[nextIndex].previewStart);
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
+                          title="Next Clip (Right Arrow)"
+                        >
+                          <span className="hidden sm:inline">Next</span>
+                          <span>►</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Playback Info */}
+                  <div className="text-sm text-gray-300 text-center mt-3">
+                    {playbackMode === 'clips' && anchors.length > 0 ? (
+                      <>
+                        Clip {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s total
+                      </>
+                    ) : (
+                      <>{formatTime(currentTime)} / {formatTime(duration)}</>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -4359,321 +4556,6 @@ const exportVideo = async () => {
               </div>
             </div>
 
-            {/* Video Preview */}
-            <div className="panel rounded-xl p-4">
-            {/* Preview Button */}
-  <div className="flex justify-center mb-3">
-    <button
-      onClick={isPreviewMode ? stopEnhancedPreview : startEnhancedPreview}
-      disabled={isProcessing || anchors.length === 0}
-      className={`px-8 py-3 rounded-xl font-semibold text-base transition-all ${
-        anchors.length === 0
-          ? 'btn-secondary cursor-not-allowed opacity-50'
-          : isPreviewMode
-            ? 'btn-accent hover:scale-105'
-            : 'btn-accent hover:scale-105'
-      } shadow-lg disabled:hover:scale-100`}
-    >
-      <span className="flex items-center justify-center gap-2">
-        {isPreviewMode ? (
-          <>
-            <Pause size={18} />
-            <span className="hidden sm:inline">Stop Preview</span>
-            <span className="sm:hidden">Stop</span>
-            <span className="text-sm">{previewAnchorIndex + 1}/{anchors.length}</span>
-          </>
-        ) : (
-          <>
-            <Play size={18} />
-            <span className="hidden sm:inline">Preview Mode</span>
-            <span className="sm:hidden">Preview</span>
-          </>
-        )}
-      </span>
-    </button>
-  </div>
-
-{/* Video Player */}
-<div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative group w-full">
-  <video
-    ref={videoRef}
-    src={videoUrl}
-    className="w-full h-full object-contain"
-    onTimeUpdate={handleTimeUpdate}
-    onLoadedMetadata={handleLoadedMetadata}
-    onEnded={() => setIsPlaying(false)}
-  />
-  
-  {/* Play/Pause Overlay Button */}
-  <button
-  
-    onClick={togglePlay}
-    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-      isPlaying 
-        ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20' 
-        : 'bg-black/40 opacity-100'
-    }`}
-  >
-    <div className={`transition-all duration-300 ${
-      isPlaying
-        ? 'scale-75 opacity-60 group-hover:scale-100 group-hover:opacity-100'
-        : 'scale-100 opacity-100'
-    }`}>
-      {isPlaying ? (
-        <Pause size={64} className="text-white drop-shadow-lg" />
-      ) : (
-<Play size={64} className="text-white drop-shadow-lg" />
-      )}
-    </div>
-  </button>
-  
-{/* Video Scrub Bar with Handle - Hidden during preview */}
-{!isPreviewMode && (
-  <div 
-    className="absolute bottom-0 left-0 right-0 h-1 bg-slate-700/50 group-hover:h-3 transition-all cursor-pointer"
-    onMouseDown={(e) => {
-      const container = e.currentTarget;
-      const rect = container.getBoundingClientRect();
-
-      const scrubVideo = (clientX) => {
-        const x = clientX - rect.left;
-        const percent = Math.max(0, Math.min(1, x / rect.width));
-        const time = percent * duration;
-        if (videoRef.current) {
-          videoRef.current.currentTime = time;
-        }
-      };
-
-      scrubVideo(e.clientX);
-
-      const handleMouseMove = (moveEvent) => {
-        scrubVideo(moveEvent.clientX);
-      };
-
-      const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }}
-    onTouchStart={(e) => {
-      const container = e.currentTarget;
-      const rect = container.getBoundingClientRect();
-      const touch = e.touches?.[0];
-      if (!touch) return;
-
-      const scrubVideo = (clientX) => {
-        const x = clientX - rect.left;
-        const percent = Math.max(0, Math.min(1, x / rect.width));
-        const time = percent * duration;
-        if (videoRef.current) {
-          videoRef.current.currentTime = time;
-        }
-      };
-
-      scrubVideo(touch.clientX);
-
-      const handleTouchMove = (moveEvent) => {
-        const touchX = moveEvent.touches?.[0]?.clientX;
-        if (touchX !== undefined) {
-          scrubVideo(touchX);
-        }
-      };
-
-      const handleTouchEnd = () => {
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEnd);
-      };
-
-      document.addEventListener('touchmove', handleTouchMove);
-      document.addEventListener('touchend', handleTouchEnd);
-    }}
-  >
-    <div
-      className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 transition-all relative pointer-events-none border-r-2 border-amber-500/60"
-      style={{ width: `${(currentTime / duration) * 100}%` }}
-    >
-      {/* Scrubber Handle */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
-    </div>
-  </div>
-)}
-</div>
-
-{/* Preview Mode Scrubber - Only show in preview mode */}
-{isPreviewMode && previewTimeline.length > 0 && (
-  <div className="mt-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
-    {/* Preview Controls */}
-    <div className="flex items-center justify-between mb-3">
-      <div className="text-sm text-gray-300">
-        <span className="font-semibold">{formatTime(previewCurrentTime)}</span>
-        <span className="text-gray-500"> / </span>
-        <span>{formatTime(previewTotalDuration)}</span>
-      </div>
-      <div className="text-sm text-gray-400">
-        Anchor {previewAnchorIndex + 1} of {previewTimeline.length}
-      </div>
-    </div>
-
-    {/* Scrubber Bar */}
-    <div
-      className="relative h-12 bg-slate-800 rounded-lg overflow-hidden cursor-pointer mb-3"
-      onClick={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const percentage = clickX / rect.width;
-        const newTime = percentage * previewTotalDuration;
-        seekPreviewTime(newTime);
-      }}
-      onMouseDown={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-
-        const handleMouseMove = (moveEvent) => {
-          const moveX = moveEvent.clientX - rect.left;
-          const percentage = Math.max(0, Math.min(1, moveX / rect.width));
-          const newTime = percentage * previewTotalDuration;
-          seekPreviewTime(newTime);
-        };
-
-        const handleMouseUp = () => {
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-      }}
-      onTouchStart={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const touch = e.touches?.[0];
-        if (!touch) return;
-
-        // Seek to initial position
-        const clickX = touch.clientX - rect.left;
-        const percentage = clickX / rect.width;
-        const newTime = percentage * previewTotalDuration;
-        seekPreviewTime(newTime);
-
-        const handleTouchMove = (moveEvent) => {
-          const touchX = moveEvent.touches?.[0]?.clientX;
-          if (touchX !== undefined) {
-            const moveX = touchX - rect.left;
-            const percentage = Math.max(0, Math.min(1, moveX / rect.width));
-            const newTime = percentage * previewTotalDuration;
-            seekPreviewTime(newTime);
-          }
-        };
-
-        const handleTouchEnd = () => {
-          document.removeEventListener('touchmove', handleTouchMove);
-          document.removeEventListener('touchend', handleTouchEnd);
-        };
-
-        document.addEventListener('touchmove', handleTouchMove, { passive: false });
-        document.addEventListener('touchend', handleTouchEnd);
-      }}
-    >
-      {/* Anchor Segments */}
-      {previewTimeline.map((segment, idx) => {
-        const left = (segment.previewStart / previewTotalDuration) * 100;
-        const width = (segment.duration / previewTotalDuration) * 100;
-        const colors = anchorColors[idx % anchorColors.length];
-        const isActive = idx === previewAnchorIndex;
-
-        return (
-          <div
-            key={segment.anchorId}
-            className={`absolute top-0 bottom-0 transition-all ${colors.bg} ${isActive ? 'opacity-100' : 'opacity-60 hover:opacity-80'}`}
-            style={{
-              left: `${left}%`,
-              width: `${width}%`,
-              border: isActive ? `2px solid ${colors.border.replace('border-', '')}` : 'none'
-            }}
-            title={`Anchor ${idx + 1}: ${formatTime(segment.duration)}`}
-          />
-        );
-      })}
-
-      {/* Playhead */}
-      <div
-        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none"
-        style={{
-          left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
-        }}
-      >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-xl border-2 border-slate-900" />
-      </div>
-    </div>
-
-    {/* Playback Controls */}
-    <div className="flex items-center justify-center gap-1 sm:gap-2 w-full">
-      <button
-        onClick={() => {
-          const prevIndex = Math.max(0, previewAnchorIndex - 1);
-          if (prevIndex !== previewAnchorIndex) {
-            seekPreviewTime(previewTimeline[prevIndex].previewStart);
-          }
-        }}
-        className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
-        title="Previous Anchor (Left Arrow)"
-      >
-        <span>◄</span>
-        <span className="hidden sm:inline">Prev</span>
-      </button>
-
-      <button
-        onClick={togglePreviewPlayback}
-        className="flex-1 sm:flex-initial px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg transition flex items-center justify-center gap-2 font-semibold shadow-lg"
-        title="Play/Pause (Spacebar)"
-      >
-        {isPreviewPlaying ? <Pause size={16} className="sm:w-5 sm:h-5" /> : <Play size={16} className="sm:w-5 sm:h-5" />}
-        <span className="hidden sm:inline">{isPreviewPlaying ? 'Pause' : 'Play'}</span>
-      </button>
-
-      <button
-        onClick={() => {
-          const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
-          if (nextIndex !== previewAnchorIndex) {
-            seekPreviewTime(previewTimeline[nextIndex].previewStart);
-          }
-        }}
-        className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
-        title="Next Anchor (Right Arrow)"
-      >
-        <span className="hidden sm:inline">Next</span>
-        <span>►</span>
-      </button>
-
-      <button
-        onClick={() => {
-          const currentAnchor = anchors[previewAnchorIndex];
-          if (currentAnchor) {
-            openPrecisionModal(currentAnchor);
-          }
-        }}
-        className="flex-1 sm:flex-initial px-2 py-2 sm:px-4 sm:py-2 btn-secondary rounded-lg flex items-center justify-center gap-1 sm:gap-2 text-sm font-semibold"
-        title="Edit Current Anchor"
-      >
-        <ZoomIn size={14} className="sm:w-4 sm:h-4" />
-        <span className="hidden sm:inline">Edit</span>
-      </button>
-    </div>
-  </div>
-)}
-
- {/* Playback Info */}
-<div className="text-sm text-gray-300 text-center">
-  {isPreviewMode && anchors.length > 0 ? (
-    <>
-      Anchor {previewAnchorIndex + 1} • {(anchors[previewAnchorIndex]?.end - anchors[previewAnchorIndex]?.start).toFixed(1)}s / {previewTotalDuration.toFixed(1)}s
-    </>
-  ) : (
-    <>{formatTime(currentTime)} / {formatTime(duration)}</>
-  )}
-</div>
-            </div>
 
 {/* Timeline */}
 <div className="panel rounded-2xl p-6">
