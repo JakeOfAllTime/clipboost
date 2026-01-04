@@ -4596,10 +4596,86 @@ const exportVideo = async () => {
         {/* Timeline Section (part of Edit section) */}
         {currentSection === 'edit' && video && (
           <div className="space-y-4">
-            {/* Timeline */}
-<div className="panel rounded-2xl p-6">
+            {/* Connected Timelines Box */}
+            <div className="panel rounded-2xl p-6">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">Timelines</h3>
 
-<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 touch-manipulation">
+              {/* Clips Timeline - Sequential preview of final video */}
+              {anchors.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-gray-400 font-medium">Clips Timeline</label>
+                    <span className="text-xs text-gray-500">
+                      {anchors.length} clip{anchors.length !== 1 ? 's' : ''} • {previewTotalDuration.toFixed(1)}s total
+                    </span>
+                  </div>
+
+                  <div
+                    className="relative h-20 bg-slate-900 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-600/40 transition-all"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const percentage = clickX / rect.width;
+                      const newTime = percentage * previewTotalDuration;
+                      seekPreviewTime(newTime);
+                      setPlaybackMode('clips');
+                    }}
+                  >
+                    {/* Render clip segments */}
+                    {previewTimeline.map((segment, idx) => {
+                      const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
+                      const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
+                      const isCurrentSegment = idx === previewAnchorIndex;
+                      const colors = getAnchorColor(idx, isCurrentSegment);
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2`}
+                          style={{
+                            left: `${segmentLeft}%`,
+                            width: `${segmentWidth}%`
+                          }}
+                          title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s`}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                            {idx + 1}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Playhead for clips timeline */}
+                    {playbackMode === 'clips' && (
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
+                        style={{
+                          left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
+                        }}
+                      >
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="border-t border-gray-700 my-4"></div>
+
+              {/* Main Timeline - Full video duration with anchors */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-400 font-medium">Main Timeline</label>
+                  <span className="text-xs text-gray-500">
+                    {formatTime(duration)} • Double-click to add clip
+                  </span>
+                </div>
+
+            {/* Timeline Panel - Moved toolbar below */}
+            <div className="mb-4">
+
+<div className="hidden">
   {/* Left Group: Undo/Redo/Trim/Clear */}
   <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
   <button
@@ -5122,13 +5198,23 @@ const exportVideo = async () => {
       <span className="sm:hidden">{isAnalyzing ? 'Analyzing...' : 'Auto-Gen'}</span>
     </button>
 
- 
+
   </div>
 </div>
-{/* Timeline visualization */}
+</div>
+{/* End hidden old toolbar */}
+
+{/* Timeline visualization - Main Timeline */}
 <div
   ref={timelineRef}
   onMouseDown={handleTimelineMouseDown}
+  onClick={(e) => {
+    // Clicking main timeline switches to full video mode
+    if (playbackMode === 'clips') {
+      setPlaybackMode('full');
+      stopEnhancedPreview();
+    }
+  }}
   onTouchStart={(e) => {
     e.preventDefault(); // Prevent scroll only
     const touch = e.touches[0];
@@ -5426,14 +5512,72 @@ onMouseLeave={() => {
                 })}
               </div>
 
-              <div className="text-xs text-gray-400 text-center mb-4">
+              <div className="text-xs text-gray-400 text-center mt-4">
                 {anchors.length === 0
                   ? '💡 Double-click timeline to add anchor'
                   : 'Click to preview • Double-click to delete • Drag handles to resize • Drag middle to move • Click "Precision" for zoom'}
               </div>
+            </div>
+            {/* End Main Timeline */}
+          </div>
+          {/* End Connected Timelines Box */}
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-3 text-sm mb-4">
+          {/* Toolbar - Action Buttons */}
+          <div className="panel rounded-2xl p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+              {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
+              <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
+                <button
+                  onClick={undo}
+                  disabled={historyIndex <= 0}
+                  className="px-2 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
+                  title="Undo (Ctrl+Z)"
+                >
+                  <RotateCcw size={16} />
+                  <span className="hidden sm:inline">Undo</span>
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={historyIndex >= history.length - 1}
+                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                  title="Redo (Ctrl+Y)"
+                >
+                  <RotateCw size={16} />
+                  <span className="hidden sm:inline">Redo</span>
+                </button>
+                <button
+                  onClick={() => setShowTrimModal(true)}
+                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm"
+                >
+                  <Scissors size={16} />
+                  <span className="hidden sm:inline">Trim</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (anchors.length > 0) {
+                      if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+                        const emptyAnchors = [];
+                        setAnchors(emptyAnchors);
+                        saveToHistory(emptyAnchors);
+                        setSelectedAnchor(null);
+                        setPreviewAnchor(null);
+                      }
+                    }
+                  }}
+                  disabled={anchors.length === 0}
+                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--accent-hot)' }}
+                >
+                  <Trash2 size={16} />
+                  <span className="hidden sm:inline">Clear</span>
+                </button>
+              </div>
+
+              {/* Right Group: Auto-Gen controls - keep existing from line 4652+ */}
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3 text-sm mb-4">
                 <div className="bg-slate-900/50 p-3 rounded-lg text-center">
                   <div className="text-gray-400 text-xs">Total Anchors</div>
                   <div className="text-lg font-semibold text-white">{formatTime(anchorTime)}</div>
