@@ -2458,10 +2458,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Rebuild timeline when anchors change
   useEffect(() => {
-    if (isPreviewMode) {
-      buildPreviewTimeline();
-    }
-  }, [anchors, isPreviewMode, buildPreviewTimeline]);
+    // Always build preview timeline when anchors change (for clips timeline display)
+    buildPreviewTimeline();
+  }, [anchors, buildPreviewTimeline]);
 
   // Keyboard shortcuts for preview mode
   useEffect(() => {
@@ -4829,8 +4828,8 @@ const exportVideo = async () => {
 
                     <div className="text-xs text-gray-400 text-center">
                       {anchors.length === 0
-                        ? '💡 Double-click timeline to add anchor'
-                        : 'Click to preview • Double-click to delete • Drag handles to resize • Drag middle to move • Click "Precision" for zoom'}
+                        ? '💡 Double-click to add clip'
+                        : 'Click to preview • Double-click clip to delete • Drag handles to resize • Drag to move'}
                     </div>
                   </div>
                   {/* End Main Timeline Section */}
