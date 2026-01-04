@@ -240,6 +240,15 @@ const platforms = {
     }
   }, [sidebarCollapsed]);
 
+  // Sync playback mode with isPreviewMode state
+  useEffect(() => {
+    if (isPreviewMode && playbackMode === 'full') {
+      setPlaybackMode('clips');
+    } else if (!isPreviewMode && playbackMode === 'clips') {
+      setPlaybackMode('full');
+    }
+  }, [isPreviewMode, playbackMode]);
+
   // Clear autosave after successful export
   const clearAutoSave = () => {
     try {
