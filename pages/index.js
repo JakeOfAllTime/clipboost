@@ -3901,13 +3901,13 @@ const exportVideo = async () => {
 
   {/* Main Content Area */}
   <div className="flex-1 overflow-y-auto pb-20 sm:pb-0">
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+    <div className="p-2 sm:p-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+      <div className="mb-3 sm:mb-6 px-2 sm:px-0">
+        <h2 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
           {currentSection === 'edit' ? 'Edit Video' : 'Export Video'}
         </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-xs sm:text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
           {currentSection === 'edit'
             ? 'Upload, trim, and add music to your video'
             : 'Choose platforms and export your final video'
@@ -4422,106 +4422,6 @@ const exportVideo = async () => {
                     )}
                   </div>
 
-                  {/* Preview Mode Scrubber - Show for clips mode */}
-                  {playbackMode === 'clips' && previewTimeline.length > 0 && (
-                    <div className="mt-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
-                      {/* Preview Controls */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm text-gray-300">
-                          <span className="font-semibold">{formatTime(previewCurrentTime)}</span>
-                          <span className="text-gray-500"> / </span>
-                          <span>{formatTime(previewTotalDuration)}</span>
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          Clip {previewAnchorIndex + 1} of {previewTimeline.length}
-                        </div>
-                      </div>
-
-                      {/* Scrubber Bar */}
-                      <div
-                        className="relative h-12 bg-slate-800 rounded-lg overflow-hidden cursor-pointer mb-3"
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const clickX = e.clientX - rect.left;
-                          const percentage = clickX / rect.width;
-                          const newTime = percentage * previewTotalDuration;
-                          seekPreviewTime(newTime);
-                        }}
-                      >
-                        {/* Render anchor segments */}
-                        {previewTimeline.map((segment, idx) => {
-                          const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
-                          const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
-                          const isCurrentSegment = idx === previewAnchorIndex;
-
-                          return (
-                            <div
-                              key={idx}
-                              className="absolute top-0 bottom-0 transition-all"
-                              style={{
-                                left: `${segmentLeft}%`,
-                                width: `${segmentWidth}%`,
-                                background: isCurrentSegment
-                                  ? 'linear-gradient(to right, rgba(59, 130, 246, 0.8), rgba(139, 92, 246, 0.8))'
-                                  : 'rgba(100, 116, 139, 0.5)'
-                              }}
-                            />
-                          );
-                        })}
-
-                        {/* Playhead */}
-                        <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
-                          style={{
-                            left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
-                          }}
-                        >
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-xl border-2 border-slate-900" />
-                        </div>
-                      </div>
-
-                      {/* Playback Controls */}
-                      <div className="flex items-center justify-center gap-1 sm:gap-2 w-full">
-                        <button
-                          onClick={() => {
-                            const prevIndex = Math.max(0, previewAnchorIndex - 1);
-                            if (prevIndex !== previewAnchorIndex) {
-                              seekPreviewTime(previewTimeline[prevIndex].previewStart);
-                            }
-                          }}
-                          className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
-                          title="Previous Clip (Left Arrow)"
-                        >
-                          <span>◄</span>
-                          <span className="hidden sm:inline">Prev</span>
-                        </button>
-
-                        <button
-                          onClick={togglePreviewPlayback}
-                          className="flex-1 sm:flex-initial px-3 py-2 sm:px-6 sm:py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-blue-600/40 hover:border-blue-600/60 hover:shadow-[0_0_16px_rgba(59,130,246,0.5)] rounded-lg transition flex items-center justify-center gap-2 font-semibold shadow-lg"
-                          title="Play/Pause (Spacebar)"
-                        >
-                          {isPreviewPlaying ? <Pause size={16} className="sm:w-5 sm:h-5" /> : <Play size={16} className="sm:w-5 sm:h-5" />}
-                          <span className="hidden sm:inline">{isPreviewPlaying ? 'Pause' : 'Play'}</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            const nextIndex = Math.min(previewTimeline.length - 1, previewAnchorIndex + 1);
-                            if (nextIndex !== previewAnchorIndex) {
-                              seekPreviewTime(previewTimeline[nextIndex].previewStart);
-                            }
-                          }}
-                          className="flex-1 sm:flex-initial px-2 py-2 sm:px-3 sm:py-2 bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center justify-center gap-1 text-sm"
-                          title="Next Clip (Right Arrow)"
-                        >
-                          <span className="hidden sm:inline">Next</span>
-                          <span>►</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                     {/* Playback Info - Subtle inner box */}
                     <div className="bg-slate-800/50 rounded px-2 sm:px-3 py-1.5 text-xs text-gray-300 text-center">
                       {playbackMode === 'clips' && anchors.length > 0 ? (
@@ -4630,11 +4530,25 @@ const exportVideo = async () => {
                             setPlaybackMode('clips');
                           }}
                         >
+                          {/* Time Display - Top Left */}
+                          {playbackMode === 'clips' && (
+                            <div className="absolute top-1 left-2 text-xs font-semibold text-white bg-black/60 px-2 py-0.5 rounded z-20 pointer-events-none">
+                              {formatTime(previewCurrentTime)} / {formatTime(previewTotalDuration)}
+                            </div>
+                          )}
+
+                          {/* Clip Counter - Top Right */}
+                          {playbackMode === 'clips' && (
+                            <div className="absolute top-1 right-2 text-xs font-semibold text-white bg-black/60 px-2 py-0.5 rounded z-20 pointer-events-none">
+                              Clip {previewAnchorIndex + 1} of {previewTimeline.length}
+                            </div>
+                          )}
+
                           {/* Render clip segments */}
                           {previewTimeline.map((segment, idx) => {
                             const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
                             const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
-                            const isCurrentSegment = idx === previewAnchorIndex;
+                            const isCurrentSegment = playbackMode === 'clips' && idx === previewAnchorIndex;
                             const colors = getAnchorColor(idx, isCurrentSegment);
 
                             return (
@@ -4665,9 +4579,6 @@ const exportVideo = async () => {
                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
                             </div>
                           )}
-                        </div>
-                        <div className="text-xs text-gray-400 text-center mt-2">
-                          {anchors.length} clip{anchors.length !== 1 ? 's' : ''} • {previewTotalDuration.toFixed(1)}s total
                         </div>
                       </div>
                     )}
