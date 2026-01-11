@@ -4604,12 +4604,12 @@ const exportVideo = async () => {
                   </div>
                   {/* End Playback Controls + Clips Timeline Section */}
 
-                  {/* Timeline Section - Option B with Visual Bridges */}
-                  <div className="space-y-3 mb-2 sm:mb-4">
+                  {/* Unified Layered Timeline - Option B */}
+                  <div className="mb-2 sm:mb-4">
                     {/* Contextual Hints - Progressive Disclosure */}
                     {!hasCreatedFirstClip && anchors.length === 0 && (
                       <div className="hint-toast">
-                        💡 <strong>Get started:</strong> Double-click the timeline below to mark moments you want to keep
+                        💡 <strong>Get started:</strong> Double-click the clips lane below to mark moments you want to keep
                       </div>
                     )}
                     {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && (
@@ -4618,161 +4618,93 @@ const exportVideo = async () => {
                       </div>
                     )}
 
-                    {/* Video Navigator - Pure navigation, no editing */}
-                    <div className="bg-slate-900/40 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Video Navigator</h3>
-                        <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)}</div>
-                      </div>
-                      <div
-                        ref={timelineRef}
-                        onMouseDown={handleTimelineMouseDown}
-                        onMouseMove={(e) => {
-                          // Show hover preview tooltip
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const x = e.clientX - rect.left;
-                          const percent = Math.max(0, Math.min(1, x / rect.width));
-                          const time = percent * duration;
-                          setHoverTime(time);
-                        }}
-                        onMouseLeave={() => setHoverTime(null)}
-                        onClick={(e) => {
-                          // Clicking navigation scrubber switches to full video mode
-                          if (playbackMode === 'clips') {
-                            setPlaybackMode('full');
-                            stopEnhancedPreview();
-                          }
-                        }}
-                        onTouchStart={(e) => {
-                          e.preventDefault();
-                          const touch = e.touches[0];
-                          handleTimelineMouseDown({ ...e, clientX: touch.clientX });
-                        }}
-                        onTouchMove={(e) => {
-                          e.preventDefault();
-                        }}
-                        className="relative h-16 bg-gradient-to-b from-slate-800/80 to-slate-900/80 rounded-lg cursor-pointer hover:ring-2 hover:ring-cyan-500/40 transition-all select-none border border-slate-700/50"
-                        style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
-                        title="Click to seek video"
-                      >
-                        {/* Time markers */}
-                        <div className="absolute top-0 left-0 right-0 flex justify-between px-2 py-1 text-[10px] text-gray-500 pointer-events-none">
-                          <span>0:00</span>
-                          <span>{formatTime(duration / 4)}</span>
-                          <span>{formatTime(duration / 2)}</span>
-                          <span>{formatTime(3 * duration / 4)}</span>
-                          <span>{formatTime(duration)}</span>
-                        </div>
-
-                        {/* Current time indicator (playhead) - YouTube style */}
-                        <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] cursor-ew-resize z-20 pointer-events-none"
-                          style={{ left: `${(currentTime / duration) * 100}%` }}
-                        >
-                          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
-                        </div>
-
-                        {/* Progress bar fill (watched portion) */}
-                        <div
-                          className="absolute bottom-0 left-0 h-1 bg-cyan-500/30 pointer-events-none"
-                          style={{ width: `${(currentTime / duration) * 100}%` }}
-                        />
-
-                        {/* Visual Bridge: Selected clip indicator on navigator */}
-                        {selectedAnchor && anchors.find(a => a.id === selectedAnchor) && (() => {
-                          const anchor = anchors.find(a => a.id === selectedAnchor);
-                          return (
-                            <>
-                              <div
-                                className="absolute top-0 bottom-0 bg-pink-500/20 border-l-2 border-r-2 border-pink-500/60 pointer-events-none z-10"
-                                style={{
-                                  left: `${(anchor.start / duration) * 100}%`,
-                                  width: `${((anchor.end - anchor.start) / duration) * 100}%`
-                                }}
-                              />
-                              <div
-                                className="absolute top-0 w-0.5 h-full bg-pink-500 pointer-events-none z-15"
-                                style={{ left: `${(anchor.start / duration) * 100}%` }}
-                              >
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-pink-500 rounded-full shadow-[0_0_8px_rgba(255,0,255,0.8)]" />
-                              </div>
-                            </>
-                          );
-                        })()}
-
-                        {/* Hover preview tooltip */}
-                        {hoverTime !== null && (
-                          <div
-                            className="absolute top-0 -translate-y-8 pointer-events-none z-30"
-                            style={{ left: `${(hoverTime / duration) * 100}%`, transform: 'translateX(-50%) translateY(-100%)' }}
-                          >
-                            <div className="bg-slate-900 px-2 py-1 rounded text-xs text-cyan-400 border border-cyan-500/50 shadow-lg">
-                              {formatTime(hoverTime)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 text-center mt-2">
-                        Click to navigate video • Editing happens below ↓
-                      </div>
-                    </div>
-
-                    {/* Clips Timeline - All editing controls here */}
+                    {/* Unified Timeline Container - Layered Design (Option B) */}
                     <div className="bg-slate-900/30 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-pink-400">Clips Timeline</h3>
-                        <div className="text-xs text-gray-400">{anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
+                        <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)} • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
                       </div>
 
-                      {/* Clips editing container */}
-                      <div
-                        onDoubleClick={(e) => {
-                          // Double-click clips timeline to create anchor
-                          if (!duration) return;
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const x = e.clientX - rect.left;
-                          const percent = Math.max(0, Math.min(1, x / rect.width));
-                          const time = percent * duration;
+                      {/* Layered Timeline: Top = Playhead Track, Bottom = Clips Lane */}
+                      <div className="relative bg-gradient-to-b from-slate-800/60 to-slate-900/80 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '160px' }}>
 
-                          const newAnchor = {
-                            id: Date.now(),
-                            start: time,
-                            end: Math.min(time + 2, duration)
-                          };
-
-                          const hasOverlap = anchors.some(a =>
-                            (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-                            (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-                            (newAnchor.start <= a.start && newAnchor.end >= a.end)
-                          );
-
-                          if (hasOverlap) {
-                            alert('Clip overlaps with existing clip');
-                            return;
-                          }
-
-                          const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-                          setAnchors(updated);
-                          saveToHistory(updated);
-                          setSelectedAnchor(newAnchor.id);
-                          setHasCreatedFirstClip(true); // Mark first clip created
-                        }}
-                        onTouchEnd={(e) => {
-                          // Handle double-tap for mobile
-                          e.preventDefault();
-                          const now = Date.now();
-                          const timeSinceLastTap = now - lastTapTimeRef.current;
-                          const touch = e.changedTouches[0];
-                          const tapPosition = { x: touch.clientX, y: touch.clientY };
-                          const distance = Math.sqrt(
-                            Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
-                            Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
-                          );
-
-                          if (timeSinceLastTap < 300 && distance < 30) {
-                            // Trigger double-click logic
+                        {/* Top Layer: Playhead Track (30% height) - Click to seek */}
+                        <div
+                          ref={timelineRef}
+                          onMouseDown={handleTimelineMouseDown}
+                          onMouseMove={(e) => {
+                            // Show hover preview tooltip
                             const rect = e.currentTarget.getBoundingClientRect();
-                            const percent = Math.max(0, Math.min(1, tapPosition.x / rect.width));
+                            const x = e.clientX - rect.left;
+                            const percent = Math.max(0, Math.min(1, x / rect.width));
+                            const time = percent * duration;
+                            setHoverTime(time);
+                          }}
+                          onMouseLeave={() => setHoverTime(null)}
+                          onClick={(e) => {
+                            // Clicking playhead track switches to full video mode
+                            if (playbackMode === 'clips') {
+                              setPlaybackMode('full');
+                              stopEnhancedPreview();
+                            }
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault();
+                            const touch = e.touches[0];
+                            handleTimelineMouseDown({ ...e, clientX: touch.clientX });
+                          }}
+                          onTouchMove={(e) => {
+                            e.preventDefault();
+                          }}
+                          className="absolute top-0 left-0 right-0 h-12 cursor-pointer hover:bg-slate-800/40 transition-colors border-b border-slate-700/50"
+                          style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                          title="Click to seek video"
+                        >
+                          {/* Time markers at top */}
+                          <div className="absolute top-1 left-0 right-0 flex justify-between px-2 text-[10px] text-gray-500 pointer-events-none">
+                            <span>0:00</span>
+                            <span>{formatTime(duration / 4)}</span>
+                            <span>{formatTime(duration / 2)}</span>
+                            <span>{formatTime(3 * duration / 4)}</span>
+                            <span>{formatTime(duration)}</span>
+                          </div>
+
+                          {/* Playhead - spans full height of timeline */}
+                          <div
+                            className="absolute top-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none"
+                            style={{ left: `${(currentTime / duration) * 100}%`, height: '160px', zIndex: 50 }}
+                          >
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
+                          </div>
+
+                          {/* Progress bar fill */}
+                          <div
+                            className="absolute bottom-0 left-0 h-1 bg-cyan-500/30 pointer-events-none"
+                            style={{ width: `${(currentTime / duration) * 100}%` }}
+                          />
+
+                          {/* Hover preview tooltip */}
+                          {hoverTime !== null && (
+                            <div
+                              className="absolute top-0 -translate-y-8 pointer-events-none z-30"
+                              style={{ left: `${(hoverTime / duration) * 100}%`, transform: 'translateX(-50%) translateY(-100%)' }}
+                            >
+                              <div className="bg-slate-900 px-2 py-1 rounded text-xs text-cyan-400 border border-cyan-500/50 shadow-lg">
+                                {formatTime(hoverTime)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bottom Layer: Clips Lane (70% height) - Create and edit clips */}
+                        <div
+                          onDoubleClick={(e) => {
+                            // Double-click clips lane to create anchor
+                            if (!duration) return;
+                            const container = e.currentTarget.parentElement;
+                            const rect = container.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const percent = Math.max(0, Math.min(1, x / rect.width));
                             const time = percent * duration;
 
                             const newAnchor = {
@@ -4787,129 +4719,171 @@ const exportVideo = async () => {
                               (newAnchor.start <= a.start && newAnchor.end >= a.end)
                             );
 
-                            if (!hasOverlap) {
-                              const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-                              setAnchors(updated);
-                              saveToHistory(updated);
-                              setSelectedAnchor(newAnchor.id);
-                              setHasCreatedFirstClip(true); // Mark first clip created
+                            if (hasOverlap) {
+                              alert('Clip overlaps with existing clip');
+                              return;
                             }
 
-                            lastTapTimeRef.current = 0;
-                          } else {
-                            lastTapTimeRef.current = now;
-                            lastTapPositionRef.current = tapPosition;
-                          }
-                        }}
-                        className="relative h-28 bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-lg border border-slate-700/30 cursor-crosshair hover:border-pink-500/30 transition-all"
-                        title="Double-click to create clip at this position"
-                      >
-                        {anchors.length === 0 ? (
-                          // Empty state with visual guidance
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
-                            <div className="text-3xl mb-2 opacity-40">✂️</div>
-                            <div className="text-sm font-medium">No clips yet</div>
-                            <div className="text-xs mt-1 opacity-60">Double-click anywhere to create a clip</div>
-                            <div className="text-[10px] mt-2 opacity-40 max-w-xs text-center">
-                              Tip: Clips mark the moments you want in your final video
-                            </div>
-                          </div>
-                        ) : (
-                          // Anchors display
-                          <>
-                            {anchors.map((anchor, index) => {
-                              const isSelected = selectedAnchor === anchor.id;
-                              const colors = getAnchorColor(index, isSelected);
-                              const width = ((anchor.end - anchor.start) / duration) * 100;
+                            const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+                            setAnchors(updated);
+                            saveToHistory(updated);
+                            setSelectedAnchor(newAnchor.id);
+                            setHasCreatedFirstClip(true);
+                          }}
+                          onTouchEnd={(e) => {
+                            // Handle double-tap for mobile
+                            e.preventDefault();
+                            const now = Date.now();
+                            const timeSinceLastTap = now - lastTapTimeRef.current;
+                            const touch = e.changedTouches[0];
+                            const tapPosition = { x: touch.clientX, y: touch.clientY };
+                            const distance = Math.sqrt(
+                              Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
+                              Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
+                            );
 
-                              return (
-                                <div
-                                  key={anchor.id}
-                                  className="absolute top-0 bottom-0"
-                                  style={{
-                                    left: `${(anchor.start / duration) * 100}%`,
-                                    width: `${width}%`,
-                                    zIndex: isSelected ? 50 : 30
-                                  }}
-                                >
-                                  <div
-                                    data-anchor-element="true"
-                                    onClick={(e) => handleAnchorClick(e, anchor)}
-                                    onDoubleClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteAnchor(anchor.id);
-                                    }}
-                                    onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-                                    onTouchStart={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setSelectedAnchor(anchor.id);
-                                      handleAnchorTouchStart(e, anchor, 'anchor-move');
-                                    }}
-                                    onMouseEnter={() => {
-                                      if (!previewAnchor) {
-                                        setHoveredAnchor(anchor);
-                                      }
-                                    }}
-                                    onMouseLeave={() => {
-                                      if (!previewAnchor || previewAnchor.id !== anchor.id) {
-                                        setHoveredAnchor(null);
-                                      }
-                                    }}
-                                    className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} ${isSelected ? colors.glow : ''} rounded-lg cursor-move transition-all hover:scale-[1.02] touch-manipulation`}
-                                    style={{ touchAction: 'none', zIndex: 10 }}
-                                  >
-                                    <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
-                                      {formatTime(anchor.end - anchor.start)}
-                                    </div>
+                            if (timeSinceLastTap < 300 && distance < 30) {
+                              const container = e.currentTarget.parentElement;
+                              const rect = container.getBoundingClientRect();
+                              const percent = Math.max(0, Math.min(1, tapPosition.x / rect.width));
+                              const time = percent * duration;
 
-                                    {isSelected && (
-                                      <>
-                                        {/* Left handle */}
-                                        <div
-                                          onMouseDown={(e) => {
-                                            e.stopPropagation();
-                                            handleAnchorMouseDown(e, anchor, 'anchor-left');
-                                          }}
-                                          onTouchStart={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleAnchorTouchStart(e, anchor, 'anchor-left');
-                                          }}
-                                          className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 transition-all rounded-full touch-none -translate-x-1/2"
-                                          style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                                        >
-                                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
-                                        </div>
-                                        {/* Right handle */}
-                                        <div
-                                          onMouseDown={(e) => {
-                                            e.stopPropagation();
-                                            handleAnchorMouseDown(e, anchor, 'anchor-right');
-                                          }}
-                                          onTouchStart={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleAnchorTouchStart(e, anchor, 'anchor-right');
-                                          }}
-                                          className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 transition-all rounded-full touch-none translate-x-1/2"
-                                          style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                                        >
-                                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
+                              const newAnchor = {
+                                id: Date.now(),
+                                start: time,
+                                end: Math.min(time + 2, duration)
+                              };
+
+                              const hasOverlap = anchors.some(a =>
+                                (newAnchor.start >= a.start && newAnchor.start < a.end) ||
+                                (newAnchor.end > a.start && newAnchor.end <= a.end) ||
+                                (newAnchor.start <= a.start && newAnchor.end >= a.end)
                               );
-                            })}
-                          </>
-                        )}
+
+                              if (!hasOverlap) {
+                                const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+                                setAnchors(updated);
+                                saveToHistory(updated);
+                                setSelectedAnchor(newAnchor.id);
+                                setHasCreatedFirstClip(true);
+                              }
+
+                              lastTapTimeRef.current = 0;
+                            } else {
+                              lastTapTimeRef.current = now;
+                              lastTapPositionRef.current = tapPosition;
+                            }
+                          }}
+                          className="absolute bottom-0 left-0 right-0 cursor-crosshair hover:bg-slate-800/20 transition-colors"
+                          style={{ height: 'calc(160px - 48px)', top: '48px' }}
+                          title="Double-click to create clip"
+                        >
+                          {anchors.length === 0 ? (
+                            // Empty state
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                              <div className="text-2xl mb-1 opacity-40">✂️</div>
+                              <div className="text-xs font-medium">No clips yet</div>
+                              <div className="text-[10px] mt-1 opacity-60">Double-click to create a clip</div>
+                            </div>
+                          ) : (
+                            // Clips display
+                            <>
+                              {anchors.map((anchor, index) => {
+                                const isSelected = selectedAnchor === anchor.id;
+                                const colors = getAnchorColor(index, isSelected);
+                                const width = ((anchor.end - anchor.start) / duration) * 100;
+
+                                return (
+                                  <div
+                                    key={anchor.id}
+                                    className="absolute top-0 bottom-0"
+                                    style={{
+                                      left: `${(anchor.start / duration) * 100}%`,
+                                      width: `${width}%`,
+                                      zIndex: isSelected ? 50 : 30
+                                    }}
+                                  >
+                                    <div
+                                      data-anchor-element="true"
+                                      onClick={(e) => handleAnchorClick(e, anchor)}
+                                      onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteAnchor(anchor.id);
+                                      }}
+                                      onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
+                                      onTouchStart={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setSelectedAnchor(anchor.id);
+                                        handleAnchorTouchStart(e, anchor, 'anchor-move');
+                                      }}
+                                      onMouseEnter={() => {
+                                        if (!previewAnchor) {
+                                          setHoveredAnchor(anchor);
+                                        }
+                                      }}
+                                      onMouseLeave={() => {
+                                        if (!previewAnchor || previewAnchor.id !== anchor.id) {
+                                          setHoveredAnchor(null);
+                                        }
+                                      }}
+                                      className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} ${isSelected ? colors.glow : ''} rounded-lg cursor-move transition-all hover:scale-[1.02] touch-manipulation`}
+                                      style={{ touchAction: 'none', zIndex: 10 }}
+                                    >
+                                      <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                                        {formatTime(anchor.end - anchor.start)}
+                                      </div>
+
+                                      {isSelected && (
+                                        <>
+                                          {/* Left handle */}
+                                          <div
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleAnchorMouseDown(e, anchor, 'anchor-left');
+                                            }}
+                                            onTouchStart={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              handleAnchorTouchStart(e, anchor, 'anchor-left');
+                                            }}
+                                            className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 transition-all rounded-full touch-none -translate-x-1/2"
+                                            style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                          >
+                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                                          </div>
+                                          {/* Right handle */}
+                                          <div
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleAnchorMouseDown(e, anchor, 'anchor-right');
+                                            }}
+                                            onTouchStart={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              handleAnchorTouchStart(e, anchor, 'anchor-right');
+                                            }}
+                                            className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 transition-all rounded-full touch-none translate-x-1/2"
+                                            style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                          >
+                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Helper text */}
                       <div className="text-xs text-gray-500 text-center mt-2">
                         {anchors.length > 0
-                          ? 'Click to select • Double-click to delete • Drag to move • Drag handles to trim'
-                          : 'Create clips by double-clicking the timeline above'}
+                          ? 'Top: Click to seek • Bottom: Double-click to create • Drag clips to move • Drag handles to trim'
+                          : 'Playhead above shows current position • Double-click below to create clips'}
                       </div>
                     </div>
                   </div>
