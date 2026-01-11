@@ -4468,10 +4468,10 @@ const exportVideo = async () => {
                   </div>
                   {/* End Video Player Section */}
 
-                  {/* Playback Controls + Clips Timeline Section */}
+                  {/* Playback Controls + Clips Preview Section */}
                   <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
-                    {/* Controls Row - sits directly above clips timeline */}
-                    {anchors.length > 0 && (
+                    {/* Controls Row - always visible */}
+                    {anchors.length > 0 ? (
                       <div className="flex items-center justify-center gap-2 mb-3">
                         {/* Prev Button */}
                         <button
@@ -4548,10 +4548,10 @@ const exportVideo = async () => {
                           </button>
                         )}
                       </div>
-                    )}
+                    ) : null}
 
-                    {/* Clips Timeline - directly below controls */}
-                    {anchors.length > 0 && (
+                    {/* Clips Preview Bar - always visible */}
+                    {anchors.length > 0 ? (
                       <div>
                         <div
                           className="relative h-20 bg-slate-800 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500/40 transition-all"
@@ -4615,9 +4615,17 @@ const exportVideo = async () => {
                           )}
                         </div>
                       </div>
+                    ) : (
+                      /* Empty state - shows structure before clips exist */
+                      <div className="relative h-20 bg-slate-800/30 rounded-lg border-2 border-dashed border-slate-700/50">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                          <div className="text-sm font-medium mb-1">Clips Preview</div>
+                          <div className="text-xs opacity-70">Create clips below to see them here</div>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  {/* End Playback Controls + Clips Timeline Section */}
+                  {/* End Playback Controls + Clips Preview Section */}
 
                   {/* Unified Layered Timeline - Option B */}
                   <div className="mb-2 sm:mb-4">
