@@ -2567,8 +2567,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
+    let isTransitioning = false;
+
     const updatePreviewTime = () => {
-      if (!videoRef.current || !isPreviewPlaying) return;
+      if (!videoRef.current || isTransitioning) {
+        previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
+        return;
+      }
 
       const currentSegment = previewTimeline[previewAnchorIndex];
       if (!currentSegment) return;
@@ -2580,35 +2585,24 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       setPreviewCurrentTime(newPreviewTime);
 
       // Check if we've reached the end of current segment
-      if (sourceTime >= currentSegment.sourceEnd - 0.05) { // 50ms tolerance
+      if (sourceTime >= currentSegment.sourceEnd - 0.1) { // 100ms tolerance
         const nextIndex = previewAnchorIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
           // Jump to next segment
+          isTransitioning = true;
           const nextSegment = previewTimeline[nextIndex];
 
-          // Pause RAF updates during seek to prevent race conditions
-          if (previewAnimationRef.current) {
-            cancelAnimationFrame(previewAnimationRef.current);
-            previewAnimationRef.current = null;
-          }
-
-          // Wait for seek to complete before continuing
-          const handleSeeked = () => {
-            videoRef.current.removeEventListener('seeked', handleSeeked);
-            setPreviewAnchorIndex(nextIndex);
-            setPreviewCurrentTime(nextSegment.previewStart);
-
-            // Resume RAF updates
-            if (isPreviewPlaying) {
-              previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
-            }
-          };
-
-          videoRef.current.addEventListener('seeked', handleSeeked);
+          // Simple direct seek without waiting
           videoRef.current.currentTime = nextSegment.sourceStart;
+          setPreviewAnchorIndex(nextIndex);
+          setPreviewCurrentTime(nextSegment.previewStart);
 
-          return; // Exit RAF loop until seek completes
+          // Small delay to let seek settle
+          setTimeout(() => {
+            isTransitioning = false;
+          }, 50);
+
         } else {
           // End of preview - loop or stop
           setIsPreviewPlaying(false);
@@ -2616,6 +2610,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           if (musicRef.current) musicRef.current.pause();
           // Reset to beginning
           seekPreviewTime(0);
+          return;
         }
       }
 
