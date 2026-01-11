@@ -2586,9 +2586,29 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         if (nextIndex < previewTimeline.length) {
           // Jump to next segment
           const nextSegment = previewTimeline[nextIndex];
+
+          // Pause RAF updates during seek to prevent race conditions
+          if (previewAnimationRef.current) {
+            cancelAnimationFrame(previewAnimationRef.current);
+            previewAnimationRef.current = null;
+          }
+
+          // Wait for seek to complete before continuing
+          const handleSeeked = () => {
+            videoRef.current.removeEventListener('seeked', handleSeeked);
+            setPreviewAnchorIndex(nextIndex);
+            setPreviewCurrentTime(nextSegment.previewStart);
+
+            // Resume RAF updates
+            if (isPreviewPlaying) {
+              previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
+            }
+          };
+
+          videoRef.current.addEventListener('seeked', handleSeeked);
           videoRef.current.currentTime = nextSegment.sourceStart;
-          setPreviewAnchorIndex(nextIndex);
-          setPreviewCurrentTime(nextSegment.previewStart);
+
+          return; // Exit RAF loop until seek completes
         } else {
           // End of preview - loop or stop
           setIsPreviewPlaying(false);
