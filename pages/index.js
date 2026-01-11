@@ -89,6 +89,11 @@ const ReelForge = () => {
   const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
   const [hoveredAnchor, setHoveredAnchor] = useState(null);
 
+  // UX Enhancement: Visual bridges & progressive disclosure
+  const [hoverTime, setHoverTime] = useState(null); // Hover position on clips timeline
+  const [hasSeenPrecisionHint, setHasSeenPrecisionHint] = useState(false);
+  const [hasCreatedFirstClip, setHasCreatedFirstClip] = useState(false);
+
   // Mobile edit mode state
   const [previewMuted, setPreviewMuted] = useState(false);
 
@@ -4514,10 +4519,11 @@ const exportVideo = async () => {
                                 setPrecisionTime(anchor.end);
                                 setSelectedHandle('end');
                                 setShowPrecisionModal(true);
+                                setHasSeenPrecisionHint(true); // Mark hint as seen
                               }
                             }}
-                            className="px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center gap-2 text-sm transition"
-                            title="Edit Current Anchor"
+                            className={`px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center gap-2 text-sm transition ${selectedAnchor && !hasSeenPrecisionHint ? 'precision-button-active' : ''}`}
+                            title="Edit Current Anchor - Frame-perfect trimming"
                           >
                             <div className="relative">
                               <ZoomIn size={16} />
@@ -4598,8 +4604,20 @@ const exportVideo = async () => {
                   </div>
                   {/* End Playback Controls + Clips Timeline Section */}
 
-                  {/* Timeline Section - Option B: Navigation Scrubber + Clips Timeline */}
+                  {/* Timeline Section - Option B with Visual Bridges */}
                   <div className="space-y-3 mb-2 sm:mb-4">
+                    {/* Contextual Hints - Progressive Disclosure */}
+                    {!hasCreatedFirstClip && anchors.length === 0 && (
+                      <div className="hint-toast">
+                        💡 <strong>Get started:</strong> Double-click the timeline below to mark moments you want to keep
+                      </div>
+                    )}
+                    {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && (
+                      <div className="hint-toast">
+                        ✨ <strong>Pro tip:</strong> Use Precision Edit (below) for frame-perfect trimming
+                      </div>
+                    )}
+
                     {/* Video Navigator - Pure navigation, no editing */}
                     <div className="bg-slate-900/40 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
@@ -4609,6 +4627,15 @@ const exportVideo = async () => {
                       <div
                         ref={timelineRef}
                         onMouseDown={handleTimelineMouseDown}
+                        onMouseMove={(e) => {
+                          // Show hover preview tooltip
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          const percent = Math.max(0, Math.min(1, x / rect.width));
+                          const time = percent * duration;
+                          setHoverTime(time);
+                        }}
+                        onMouseLeave={() => setHoverTime(null)}
                         onClick={(e) => {
                           // Clicking navigation scrubber switches to full video mode
                           if (playbackMode === 'clips') {
@@ -4650,6 +4677,40 @@ const exportVideo = async () => {
                           className="absolute bottom-0 left-0 h-1 bg-cyan-500/30 pointer-events-none"
                           style={{ width: `${(currentTime / duration) * 100}%` }}
                         />
+
+                        {/* Visual Bridge: Selected clip indicator on navigator */}
+                        {selectedAnchor && anchors.find(a => a.id === selectedAnchor) && (() => {
+                          const anchor = anchors.find(a => a.id === selectedAnchor);
+                          return (
+                            <>
+                              <div
+                                className="absolute top-0 bottom-0 bg-pink-500/20 border-l-2 border-r-2 border-pink-500/60 pointer-events-none z-10"
+                                style={{
+                                  left: `${(anchor.start / duration) * 100}%`,
+                                  width: `${((anchor.end - anchor.start) / duration) * 100}%`
+                                }}
+                              />
+                              <div
+                                className="absolute top-0 w-0.5 h-full bg-pink-500 pointer-events-none z-15"
+                                style={{ left: `${(anchor.start / duration) * 100}%` }}
+                              >
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-pink-500 rounded-full shadow-[0_0_8px_rgba(255,0,255,0.8)]" />
+                              </div>
+                            </>
+                          );
+                        })()}
+
+                        {/* Hover preview tooltip */}
+                        {hoverTime !== null && (
+                          <div
+                            className="absolute top-0 -translate-y-8 pointer-events-none z-30"
+                            style={{ left: `${(hoverTime / duration) * 100}%`, transform: 'translateX(-50%) translateY(-100%)' }}
+                          >
+                            <div className="bg-slate-900 px-2 py-1 rounded text-xs text-cyan-400 border border-cyan-500/50 shadow-lg">
+                              {formatTime(hoverTime)}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 text-center mt-2">
                         Click to navigate video • Editing happens below ↓
@@ -4694,6 +4755,7 @@ const exportVideo = async () => {
                           setAnchors(updated);
                           saveToHistory(updated);
                           setSelectedAnchor(newAnchor.id);
+                          setHasCreatedFirstClip(true); // Mark first clip created
                         }}
                         onTouchEnd={(e) => {
                           // Handle double-tap for mobile
@@ -4730,6 +4792,7 @@ const exportVideo = async () => {
                               setAnchors(updated);
                               saveToHistory(updated);
                               setSelectedAnchor(newAnchor.id);
+                              setHasCreatedFirstClip(true); // Mark first clip created
                             }
 
                             lastTapTimeRef.current = 0;
