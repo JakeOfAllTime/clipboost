@@ -150,34 +150,34 @@ const ReelForge = () => {
 
   // Platform configurations
 const platforms = {
-  vertical: { 
-    name: '9:16 Vertical', 
+  vertical: {
+    name: '9:16 Vertical',
     subtitle: 'TikTok • Reels • Shorts',
-    aspect: '9:16', 
-    color: 'from-black via-pink-500 to-red-600',
+    aspect: '9:16',
+    color: 'from-cyan-500 to-blue-500',  // Matches accent-cyan/accent-blue
     width: 1080,
     height: 1920
   },
-  instagram: { 
-    name: '4:5 Instagram Feed', 
-    aspect: '4:5', 
-    color: 'from-pink-500 to-purple-600',
+  instagram: {
+    name: '4:5 Instagram Feed',
+    aspect: '4:5',
+    color: 'from-pink-500 to-purple-600',  // Matches accent-pink/accent-purple
     width: 1080,
     height: 1350
   },
-  horizontal: { 
-    name: '16:9 Horizontal', 
+  horizontal: {
+    name: '16:9 Horizontal',
     subtitle: 'Twitter/X',
-    aspect: '16:9', 
-    color: 'from-gray-900 to-gray-700',
+    aspect: '16:9',
+    color: 'from-blue-500 to-cyan-400',  // Matches accent-blue/accent-cyan
     width: 1920,
     height: 1080
   },
-  original: { 
-    name: 'Original', 
+  original: {
+    name: 'Original',
     subtitle: 'No crop',
-    aspect: 'original', 
-    color: 'from-blue-600 to-blue-800'
+    aspect: 'original',
+    color: 'from-purple-500 to-purple-700'  // Matches accent-purple
   }
 };
 
@@ -292,16 +292,16 @@ const dismissRestoreToast = () => {
   }, []);
 
   const anchorColors = useMemo(() => [
-    { bg: 'bg-green-500/20', border: 'border-green-600/60', handle: 'bg-green-600' },
-    { bg: 'bg-blue-500/20', border: 'border-blue-600/60', handle: 'bg-blue-600' },
-    { bg: 'bg-red-500/20', border: 'border-red-600/60', handle: 'bg-red-600' },
-    { bg: 'bg-purple-500/20', border: 'border-purple-600/60', handle: 'bg-purple-600' },
-    { bg: 'bg-yellow-500/20', border: 'border-yellow-600/60', handle: 'bg-yellow-600' }
+    { bg: 'bg-cyan-500/30', border: 'border-cyan-400/80', handle: 'bg-cyan-400', glow: 'shadow-[0_0_15px_rgba(0,212,255,0.4)]' },
+    { bg: 'bg-pink-500/30', border: 'border-pink-400/80', handle: 'bg-pink-400', glow: 'shadow-[0_0_15px_rgba(255,0,255,0.4)]' },
+    { bg: 'bg-purple-500/30', border: 'border-purple-400/80', handle: 'bg-purple-400', glow: 'shadow-[0_0_15px_rgba(147,51,234,0.4)]' },
+    { bg: 'bg-blue-500/30', border: 'border-blue-400/80', handle: 'bg-blue-400', glow: 'shadow-[0_0_15px_rgba(79,172,254,0.4)]' },
+    { bg: 'bg-fuchsia-500/30', border: 'border-fuchsia-400/80', handle: 'bg-fuchsia-400', glow: 'shadow-[0_0_15px_rgba(233,30,140,0.4)]' }
   ], []);
 
   const getAnchorColor = useCallback((index, isSelected) => {
     const color = anchorColors[index % anchorColors.length];
-    return isSelected ? { ...color, bg: color.bg.replace('/20', '/40') } : color;
+    return isSelected ? { ...color, bg: color.bg.replace('/30', '/50') } : color;
   }, [anchorColors]);
 
   // Undo/Redo functions (memoized)
@@ -3806,10 +3806,15 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
-<div className="flex min-h-screen" style={{ color: 'var(--text-primary)', background: 'var(--bg-primary)' }}>
+<div className="flex min-h-screen relative" style={{ color: 'var(--text-primary)', background: 'var(--bg-primary)' }}>
+  {/* Animated Hero Gradient Background */}
+  <div className="hero-gradient">
+    <div className="hero-particles" />
+  </div>
+
   {/* Sidebar Navigation */}
   <div
-    className={`${sidebarCollapsed ? 'w-16' : 'w-64'} hidden sm:flex flex-col panel border-r transition-all duration-300`}
+    className={`${sidebarCollapsed ? 'w-16' : 'w-64'} hidden sm:flex flex-col panel border-r transition-all duration-300 relative z-10`}
     style={{
       borderRadius: 0,
       borderTop: 'none',
@@ -3821,8 +3826,8 @@ const exportVideo = async () => {
     {/* Logo & Toggle */}
     <div className="p-4 flex items-center justify-between border-b" style={{ borderColor: 'var(--border-subtle)' }}>
       {!sidebarCollapsed && (
-        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          ClipBoost
+        <h1 className="text-2xl font-bold glow-text-cyan" style={{ letterSpacing: '1px', fontWeight: 800 }}>
+          REELFORGE
         </h1>
       )}
       <button
@@ -3838,29 +3843,31 @@ const exportVideo = async () => {
     <nav className="flex-1 p-2">
       <button
         onClick={() => setCurrentSection('edit')}
-        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg mb-1 transition ${
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-2 transition-all ${
           currentSection === 'edit'
-            ? 'bg-blue-500/20 text-blue-400'
-            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
+            : 'text-gray-400 hover:bg-gray-700/30 hover:text-gray-200'
         }`}
+        style={currentSection === 'edit' ? { boxShadow: '0 0 20px rgba(0, 212, 255, 0.2)' } : {}}
       >
         <Edit size={20} className="flex-shrink-0" />
-        {!sidebarCollapsed && <span className="font-medium">Edit</span>}
+        {!sidebarCollapsed && <span className="font-semibold">EDIT</span>}
       </button>
 
       <button
         onClick={() => setCurrentSection('export')}
         disabled={!video}
-        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition ${
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
           currentSection === 'export'
-            ? 'bg-blue-500/20 text-blue-400'
+            ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 text-pink-400 border border-pink-500/30'
             : !video
             ? 'text-gray-600 cursor-not-allowed'
-            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+            : 'text-gray-400 hover:bg-gray-700/30 hover:text-gray-200'
         }`}
+        style={currentSection === 'export' ? { boxShadow: '0 0 20px rgba(255, 0, 255, 0.2)' } : {}}
       >
         <Download size={20} className="flex-shrink-0" />
-        {!sidebarCollapsed && <span className="font-medium">Export</span>}
+        {!sidebarCollapsed && <span className="font-semibold">EXPORT</span>}
       </button>
     </nav>
 
@@ -3900,14 +3907,14 @@ const exportVideo = async () => {
   </div>
 
   {/* Main Content Area */}
-  <div className="flex-1 overflow-y-auto pb-20 sm:pb-0">
+  <div className="flex-1 overflow-y-auto pb-20 sm:pb-0 relative z-10">
     <div className="p-2 sm:p-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-3 sm:mb-6 px-2 sm:px-0">
-        <h2 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          {currentSection === 'edit' ? 'Edit Video' : 'Export Video'}
+        <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
+          {currentSection === 'edit' ? 'EDIT VIDEO' : 'EXPORT VIDEO'}
         </h2>
-        <p className="text-xs sm:text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-sm sm:text-base mt-2" style={{ color: 'var(--text-secondary)' }}>
           {currentSection === 'edit'
             ? 'Upload, trim, and add music to your video'
             : 'Choose platforms and export your final video'
@@ -4585,181 +4592,235 @@ const exportVideo = async () => {
                   </div>
                   {/* End Playback Controls + Clips Timeline Section */}
 
-                  {/* Main Timeline Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
-                    {/* Main Timeline visualization */}
-                    <div
-                      ref={timelineRef}
-                      onMouseDown={handleTimelineMouseDown}
-                      onClick={(e) => {
-                        // Clicking main timeline switches to full video mode
-                        if (playbackMode === 'clips') {
-                          setPlaybackMode('full');
-                          stopEnhancedPreview();
-                        }
-                      }}
-                      onTouchStart={(e) => {
-                        e.preventDefault();
-                        const touch = e.touches[0];
-                        handleTimelineMouseDown({ ...e, clientX: touch.clientX });
-                      }}
-                      onTouchMove={(e) => {
-                        e.preventDefault();
-                      }}
-                      onTouchEnd={(e) => {
-                        e.preventDefault();
-                        const now = Date.now();
-                        const timeSinceLastTap = now - lastTapTimeRef.current;
-                        const touch = e.changedTouches[0];
-                        const tapPosition = { x: touch.clientX, y: touch.clientY };
-                        const distance = Math.sqrt(
-                          Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
-                          Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
-                        );
-
-                        if (timeSinceLastTap < 300 && distance < 30) {
-                          handleTimelineDoubleTap(e);
-                          lastTapTimeRef.current = 0;
-                        } else {
-                          lastTapTimeRef.current = now;
-                          lastTapPositionRef.current = tapPosition;
-                        }
-                      }}
-                      onDoubleClick={(e) => {
-                        if (!timelineRef.current || !duration) return;
-                        const rect = timelineRef.current.getBoundingClientRect();
-                        const x = e.clientX - rect.left;
-                        const percent = Math.max(0, Math.min(1, x / rect.width));
-                        const time = percent * duration;
-
-                        const newAnchor = {
-                          id: Date.now(),
-                          start: time,
-                          end: Math.min(time + 2, duration)
-                        };
-
-                        const hasOverlap = anchors.some(a =>
-                          (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-                          (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-                          (newAnchor.start <= a.start && newAnchor.end >= a.end)
-                        );
-
-                        if (hasOverlap) {
-                          alert('Anchor overlaps with existing anchor');
-                          return;
-                        }
-
-                        const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-                        setAnchors(updated);
-                        saveToHistory(updated);
-                        setSelectedAnchor(newAnchor.id);
-                      }}
-                      className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
-                      style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
-                      title="Double-click to add anchor"
-                    >
-                      {/* Current time indicator */}
+                  {/* Dual Timeline Section */}
+                  <div className="space-y-3 mb-2 sm:mb-4">
+                    {/* Main Video Timeline */}
+                    <div className="bg-slate-900/40 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Main Timeline</h3>
+                        <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)}</div>
+                      </div>
                       <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
-                        style={{ left: `${(currentTime / duration) * 100}%` }}
-                      />
+                        ref={timelineRef}
+                        onMouseDown={handleTimelineMouseDown}
+                        onClick={(e) => {
+                          // Clicking main timeline switches to full video mode
+                          if (playbackMode === 'clips') {
+                            setPlaybackMode('full');
+                            stopEnhancedPreview();
+                          }
+                        }}
+                        onTouchStart={(e) => {
+                          e.preventDefault();
+                          const touch = e.touches[0];
+                          handleTimelineMouseDown({ ...e, clientX: touch.clientX });
+                        }}
+                        onTouchMove={(e) => {
+                          e.preventDefault();
+                        }}
+                        onTouchEnd={(e) => {
+                          e.preventDefault();
+                          const now = Date.now();
+                          const timeSinceLastTap = now - lastTapTimeRef.current;
+                          const touch = e.changedTouches[0];
+                          const tapPosition = { x: touch.clientX, y: touch.clientY };
+                          const distance = Math.sqrt(
+                            Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
+                            Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
+                          );
 
-                      {/* Anchors - copied from old timeline */}
-                      {anchors.map((anchor, index) => {
-                        const isSelected = selectedAnchor === anchor.id;
-                        const colors = getAnchorColor(index, isSelected);
-                        const width = ((anchor.end - anchor.start) / duration) * 100;
+                          if (timeSinceLastTap < 300 && distance < 30) {
+                            handleTimelineDoubleTap(e);
+                            lastTapTimeRef.current = 0;
+                          } else {
+                            lastTapTimeRef.current = now;
+                            lastTapPositionRef.current = tapPosition;
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          if (!timelineRef.current || !duration) return;
+                          const rect = timelineRef.current.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          const percent = Math.max(0, Math.min(1, x / rect.width));
+                          const time = percent * duration;
 
-                        return (
+                          const newAnchor = {
+                            id: Date.now(),
+                            start: time,
+                            end: Math.min(time + 2, duration)
+                          };
+
+                          const hasOverlap = anchors.some(a =>
+                            (newAnchor.start >= a.start && newAnchor.start < a.end) ||
+                            (newAnchor.end > a.start && newAnchor.end <= a.end) ||
+                            (newAnchor.start <= a.start && newAnchor.end >= a.end)
+                          );
+
+                          if (hasOverlap) {
+                            alert('Anchor overlaps with existing anchor');
+                            return;
+                          }
+
+                          const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
+                          setAnchors(updated);
+                          saveToHistory(updated);
+                          setSelectedAnchor(newAnchor.id);
+                        }}
+                        className="relative h-20 bg-gradient-to-b from-slate-800/80 to-slate-900/80 rounded-lg cursor-pointer hover:ring-2 hover:ring-cyan-500/40 transition-all select-none border border-slate-700/50"
+                        style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
+                        title="Double-click to create anchor at this position"
+                      >
+                        {/* Time markers */}
+                        <div className="absolute top-0 left-0 right-0 flex justify-between px-2 py-1 text-[10px] text-gray-500 pointer-events-none">
+                          <span>0:00</span>
+                          <span>{formatTime(duration / 4)}</span>
+                          <span>{formatTime(duration / 2)}</span>
+                          <span>{formatTime(3 * duration / 4)}</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+
+                        {/* Current time indicator (playhead) */}
+                        <div
+                          className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] cursor-ew-resize z-20 pointer-events-none"
+                          style={{ left: `${(currentTime / duration) * 100}%` }}
+                        >
+                          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
+                        </div>
+
+                        {/* Anchor position indicators (subtle reference marks) */}
+                        {anchors.map((anchor, index) => (
                           <div
                             key={anchor.id}
-                            className="absolute top-0 bottom-0"
+                            className="absolute top-0 bottom-0 pointer-events-none opacity-30"
                             style={{
                               left: `${(anchor.start / duration) * 100}%`,
-                              width: `${width}%`,
-                              zIndex: isSelected ? 50 : 30
+                              width: `${((anchor.end - anchor.start) / duration) * 100}%`,
+                              background: `linear-gradient(to right, ${getAnchorColor(index, false).bg.replace('bg-', 'rgba(').replace('/30', ', 0.15)')})`
                             }}
-                          >
-                            <div
-                              data-anchor-element="true"
-                              onClick={(e) => handleAnchorClick(e, anchor)}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                deleteAnchor(anchor.id);
-                              }}
-                              onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-                              onTouchStart={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setSelectedAnchor(anchor.id);
-                                handleAnchorTouchStart(e, anchor, 'anchor-move');
-                              }}
-                              onMouseEnter={() => {
-                                if (!previewAnchor) {
-                                  setHoveredAnchor(anchor);
-                                }
-                              }}
-                              onMouseLeave={() => {
-                                if (!previewAnchor || previewAnchor.id !== anchor.id) {
-                                  setHoveredAnchor(null);
-                                }
-                              }}
-                              className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition touch-manipulation`}
-                              style={{ touchAction: 'none', zIndex: 10 }}
-                            >
-                              <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
-                                {formatTime(anchor.end - anchor.start)}
-                              </div>
-
-                              {isSelected && (
-                                <>
-                                  {/* Left handle */}
-                                  <div
-                                    onMouseDown={(e) => {
-                                      e.stopPropagation();
-                                      handleAnchorMouseDown(e, anchor, 'anchor-left');
-                                    }}
-                                    onTouchStart={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleAnchorTouchStart(e, anchor, 'anchor-left');
-                                    }}
-                                    className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 transition-all rounded-full touch-none -translate-x-1/2"
-                                    style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                                  >
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
-                                  </div>
-                                  {/* Right handle */}
-                                  <div
-                                    onMouseDown={(e) => {
-                                      e.stopPropagation();
-                                      handleAnchorMouseDown(e, anchor, 'anchor-right');
-                                    }}
-                                    onTouchStart={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleAnchorTouchStart(e, anchor, 'anchor-right');
-                                    }}
-                                    className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 transition-all rounded-full touch-none translate-x-1/2"
-                                    style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                                  >
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          />
+                        ))}
+                      </div>
+                      <div className="text-xs text-gray-500 text-center mt-2">
+                        Double-click timeline to create anchor
+                      </div>
                     </div>
 
-                    <div className="text-xs text-gray-400 text-center">
-                      {anchors.length === 0
-                        ? '💡 Double-click to add clip'
-                        : 'Click to preview • Double-click clip to delete • Drag handles to resize • Drag to move'}
+                    {/* Anchors Timeline */}
+                    <div className="bg-slate-900/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-pink-400">Anchors Timeline</h3>
+                        <div className="text-xs text-gray-400">{anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
+                      </div>
+
+                      {/* Anchors container */}
+                      <div className="relative h-24 bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-lg border border-slate-700/30">
+                        {anchors.length === 0 ? (
+                          // Empty state
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                            <div className="text-2xl mb-2 opacity-40">✂️</div>
+                            <div className="text-xs font-medium">No anchors yet</div>
+                            <div className="text-[10px] mt-1 opacity-60">Double-click main timeline above to create one</div>
+                          </div>
+                        ) : (
+                          // Anchors display
+                          <>
+                            {anchors.map((anchor, index) => {
+                              const isSelected = selectedAnchor === anchor.id;
+                              const colors = getAnchorColor(index, isSelected);
+                              const width = ((anchor.end - anchor.start) / duration) * 100;
+
+                              return (
+                                <div
+                                  key={anchor.id}
+                                  className="absolute top-0 bottom-0"
+                                  style={{
+                                    left: `${(anchor.start / duration) * 100}%`,
+                                    width: `${width}%`,
+                                    zIndex: isSelected ? 50 : 30
+                                  }}
+                                >
+                                  <div
+                                    data-anchor-element="true"
+                                    onClick={(e) => handleAnchorClick(e, anchor)}
+                                    onDoubleClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteAnchor(anchor.id);
+                                    }}
+                                    onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
+                                    onTouchStart={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setSelectedAnchor(anchor.id);
+                                      handleAnchorTouchStart(e, anchor, 'anchor-move');
+                                    }}
+                                    onMouseEnter={() => {
+                                      if (!previewAnchor) {
+                                        setHoveredAnchor(anchor);
+                                      }
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (!previewAnchor || previewAnchor.id !== anchor.id) {
+                                        setHoveredAnchor(null);
+                                      }
+                                    }}
+                                    className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} ${isSelected ? colors.glow : ''} rounded-lg cursor-move transition-all hover:scale-[1.02] touch-manipulation`}
+                                    style={{ touchAction: 'none', zIndex: 10 }}
+                                  >
+                                    <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                                      {formatTime(anchor.end - anchor.start)}
+                                    </div>
+
+                                    {isSelected && (
+                                      <>
+                                        {/* Left handle */}
+                                        <div
+                                          onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            handleAnchorMouseDown(e, anchor, 'anchor-left');
+                                          }}
+                                          onTouchStart={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleAnchorTouchStart(e, anchor, 'anchor-left');
+                                          }}
+                                          className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 transition-all rounded-full touch-none -translate-x-1/2"
+                                          style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                        >
+                                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                                        </div>
+                                        {/* Right handle */}
+                                        <div
+                                          onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            handleAnchorMouseDown(e, anchor, 'anchor-right');
+                                          }}
+                                          onTouchStart={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleAnchorTouchStart(e, anchor, 'anchor-right');
+                                          }}
+                                          className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 transition-all rounded-full touch-none translate-x-1/2"
+                                          style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
+                                        >
+                                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 text-center mt-2">
+                        {anchors.length > 0
+                          ? 'Click to preview • Double-click to delete • Drag handles to resize • Drag to move'
+                          : 'Anchors you create will appear here'}
+                      </div>
                     </div>
                   </div>
-                  {/* End Main Timeline Section */}
+                  {/* End Dual Timeline Section */}
 
                   {/* Action Toolbar Section */}
                   <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3">
@@ -5176,10 +5237,10 @@ const exportVideo = async () => {
                           }
                         }}
                         disabled={!duration || isAnalyzing}
-                        className="w-full px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center justify-center gap-2 font-semibold shadow-lg transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500 hover:shadow-[0_0_25px_rgba(255,0,255,0.5)] rounded-xl flex items-center justify-center gap-2 font-bold uppercase shadow-lg transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
                       >
-                        <Sparkles size={18} />
-                        <span>{isAnalyzing ? 'Analyzing Story...' : 'Auto-Generate'}</span>
+                        <Sparkles size={18} className="animate-pulse" />
+                        <span>{isAnalyzing ? 'ANALYZING STORY...' : 'SMART GEN ✨'}</span>
                       </button>
                     </div>
                   </div>

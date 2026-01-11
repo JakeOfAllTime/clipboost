@@ -61,13 +61,160 @@
 
 ---
 
+## Design Principles & Visual Language
+
+**Aesthetic:** Pocket Picks-inspired futuristic dark theme with neon accents, particle effects, and glassmorphism.
+
+### Color Palette (CSS Variables)
+```css
+/* Deep Space Backgrounds */
+--bg-primary: #0a0e27      /* Main background - deep navy */
+--bg-secondary: #141832    /* Panel backgrounds */
+--bg-tertiary: #1e2442     /* Elevated elements */
+
+/* Vibrant Neon Accents */
+--accent-cyan: #00d4ff     /* Primary interactive elements */
+--accent-pink: #ff00ff     /* Secondary accents, active states */
+--accent-magenta: #e91e8c  /* Gradient endpoints */
+--accent-purple: #9333ea   /* Mid-tones, variety */
+--accent-blue: #4facfe     /* Complementary blues */
+
+/* Gradients (for buttons, backgrounds) */
+--gradient-primary: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)  /* Cyan */
+--gradient-accent: linear-gradient(135deg, #e91e8c 0%, #ff00ff 100%)   /* Pink/Magenta */
+--gradient-hero: linear-gradient(135deg, #1e3a8a 0%, #3b0764 50%, #831843 100%)  /* Background */
+```
+
+### Typography Standards
+- **Headers:** Bold (800 weight), uppercase, 0.5-1px letter-spacing
+  - Main titles: 3xl-4xl (48-60px)
+  - Section headers: xl-2xl (24-32px)
+- **Body:** Regular weight, sentence case, clear hierarchy
+  - Primary text: #ffffff (--text-primary)
+  - Secondary: #cbd5e1 (--text-secondary)
+  - Tertiary: #94a3b8 (--text-tertiary)
+- **Buttons:** Semibold-Bold (600-700), uppercase for primary actions
+
+### Component Patterns
+
+**Panels (Cards):**
+- Glassmorphism: `background: rgba(20, 24, 50, 0.7)` + `backdrop-filter: blur(10px)`
+- Border: `1px solid var(--border-subtle)` (subtle blue glow)
+- Border-radius: `16px` (rounded, modern)
+- Shadow: `0 8px 32px rgba(0, 0, 0, 0.4)` (depth)
+
+**Buttons:**
+- **Primary (Cyan):** Gradient cyan → light cyan, glow on hover, scale(1.02)
+- **Accent (Pink/Magenta):** Gradient magenta → pink, strong glow, scale(1.02)
+- **Secondary:** Solid bg-tertiary, subtle border, no gradient
+- **Hover states:**
+  - `transform: translateY(-2px)` or `scale(1.02-1.05)`
+  - Glow effect: `box-shadow: 0 0 20px rgba(color, 0.4-0.6)`
+- **Active states:** Reset transform, reduce shadow
+- **Disabled:** Opacity 0.4, no interaction
+
+**Timeline Anchors:**
+- 5 vibrant colors: cyan, pink, purple, blue, fuchsia
+- Semi-transparent backgrounds (30% opacity, 50% when selected)
+- Glow borders matching anchor color
+- Hover: `scale(1.02)`, subtle glow increase
+- Selected: Stronger glow, higher opacity, pink accent border
+
+**Animations:**
+- Transitions: `0.25-0.3s ease` for most interactions
+- Hero gradient: 15s infinite shift animation
+- Particle effects: 20s float animation (translateY + scale)
+- Sparkle icons: `animate-pulse` for Smart Gen button
+- Loading states: Alternating cyan/pink glow (2s pulse)
+
+### Elite Frontend Standards (Inspired by Industry Leaders)
+
+**Sara Soueidan (Accessibility & SVG):**
+- All interactive elements MUST have ARIA labels
+- Focus states visible (outline or glow)
+- Keyboard navigation fully supported
+- SVG animations smooth (60fps), accessible fallbacks
+
+**Rachel Andrew / Jen Simmons (Responsive Layout):**
+- CSS Grid for complex layouts (timeline, export options)
+- Container queries where appropriate (not just media queries)
+- Intrinsic sizing: `min()`, `max()`, `clamp()` for fluid typography
+- Mobile-first approach: touch targets ≥44px, test on mobile viewport
+
+**Addy Osmani (Performance):**
+- Lighthouse score target: >90 (performance, accessibility, best practices)
+- Lazy load heavy components (FFmpeg.wasm, video player)
+- Minimize re-renders: `useCallback`, `useMemo` for expensive operations
+- Animations: `transform` and `opacity` only (GPU-accelerated)
+- 60fps interactions: No layout thrashing, requestAnimationFrame for smooth UI
+
+**Chris Coyier / Lea Verou (Creative CSS):**
+- Document complex patterns inline (gradient recipes, shadow combinations)
+- Use CSS custom properties for themability
+- Prefer CSS solutions over JS where possible (animations, layouts)
+- Experimental features with fallbacks (backdrop-filter → solid bg)
+
+### Verification Checklist (Before Completing Features)
+
+**Visual Quality:**
+- [ ] Colors match palette (use DevTools to verify hex values)
+- [ ] Typography follows standards (weights, spacing, casing)
+- [ ] Spacing consistent (Tailwind scale: 2, 4, 6, 8, 12, 16, 24)
+- [ ] Animations smooth (no jank, 60fps confirmed)
+- [ ] Glow effects applied to interactive elements
+- [ ] Glassmorphism blur visible on panels
+
+**Responsiveness:**
+- [ ] Mobile viewport tested (375px, 768px, 1024px, 1920px)
+- [ ] Touch targets ≥44px on mobile
+- [ ] No horizontal scroll on narrow screens
+- [ ] Readable text at all sizes (min 14px body, 12px labels)
+
+**Accessibility:**
+- [ ] ARIA labels on buttons, controls, regions
+- [ ] Keyboard navigation works (Tab, Enter, Escape)
+- [ ] Focus indicators visible (outline or glow)
+- [ ] Color contrast ≥4.5:1 for text (use WebAIM contrast checker)
+- [ ] Screen reader friendly (semantic HTML, proper headings)
+
+**Performance:**
+- [ ] Lighthouse performance >90
+- [ ] No unnecessary re-renders (React DevTools profiler)
+- [ ] Images/videos lazy loaded
+- [ ] Animations use `transform`/`opacity` only
+- [ ] Bundle size acceptable (<500kb gzipped for main chunk)
+
+**Code Quality:**
+- [ ] Complex CSS documented inline (gradient values, shadow combos)
+- [ ] Tailwind utilities preferred over custom CSS
+- [ ] No magic numbers (use CSS variables or Tailwind scale)
+- [ ] Consistent patterns (button variants, panel styles)
+
+### Reference Screenshots
+
+**Current Implementation:**
+- `reelforge-final.png` - Landing page with Pocket Picks aesthetic
+- `reelforge-screenshot.png` - Full interface with video loaded
+- Sidebar: Glowing cyan "EDIT" button, pink "EXPORT" when active
+- Hero: Animated gradient (blue→purple→pink) at top
+- Panels: Glassmorphism with subtle blue borders
+- Buttons: Vibrant gradients with glow effects
+
+**Design Inspiration:**
+- Pocket Picks app (minefixds.app) - Reference for color palette, particle effects, neon glow
+- Sara Soueidan's portfolio - SVG animations, accessibility patterns
+- Jen Simmons' Layout Land demos - CSS Grid mastery
+- Awwwards winners 2024-2026 - Modern interaction patterns
+
+---
+
 ## File Structure
 ```
 clipboost/
 ├── pages/
-│   ├── index.js              # Main ReelForge component (~1450 lines)
-│   │                         # Contains: video player, timeline, anchors, 
-│   │                         # preview mode, Smart Gen logic
+│   ├── index.js              # Main ReelForge component (~6500 lines)
+│   │                         # Video player, timeline, anchors, preview, Smart Gen
+│   ├── CLAUDE.md             # Detailed index.js context (functions, state, patterns)
 │   └── api/
 │       └── analyze-narrative.js  # Claude API integration
 │
@@ -75,16 +222,26 @@ clipboost/
 │   └── globals.css           # Tailwind base
 ├── public/                   # Static assets
 ├── .claude/                  # Claude Code memory & commands
-│   ├── commands/             # Reusable workflows
-│   └── agents/               # Subagents (future: smart-gen-validator)
-├── CLAUDE.md                 # This file (project brain)
+│   ├── commands/             # Reusable slash commands
+│   │   ├── test-smart-gen.md
+│   │   ├── fix-timestamp-accuracy.md
+│   │   └── update-claude-md.md
+│   └── settings.local.json   # Git permissions, MCP config
+├── CLAUDE.md                 # This file (project brain, injected into every session)
 └── package.json
 ```
 
-**Key Functions in pages/index.js:**
+**IMPORTANT:** Before working on pages/index.js, read `pages/CLAUDE.md` for:
+- Detailed function documentation (~50 key functions)
+- State management patterns
+- Component structure
+- Testing procedures
+- Recent changes and known issues
+
+**Key Functions (see pages/CLAUDE.md for details):**
 - `gatherComprehensiveFrames()` - Extract 50 frames across zones
 - `analyzeNarrativeComprehensive()` - Claude API call with frames
-- `extractFramesFromRange()` - FFmpeg frame extraction helper
+- `buildPreviewTimeline()` - Sequential timeline from anchors
 - `exportVideo()` - Multi-platform export pipeline
 
 ---
@@ -199,16 +356,157 @@ Frame 42: 26:30 (1590.0s) - finale zone
 - Need: Validation that clips span opening → middle → finale
 
 **Next Steps:**
-1. Add Playwright visual verification
-2. Claude screenshots timeline after Smart Gen
-3. Validates anchor distribution visually
-4. Iterates if all clustered at start
+1. Install Playwright MCP for visual verification
+2. Create sub-agent for Smart Gen validation
+3. Implement iterative loop: generate → screenshot → validate → retry
+
+---
+
+## Playwright MCP Integration
+
+**Purpose:** Give Claude "eyes" to see the UI and validate designs/layouts visually.
+
+**Installation:**
+```bash
+npx @anthropic/claude-code mcp add @modelcontextprotocol/server-playwright
+```
+
+**Key Capabilities:**
+- Screenshot pages automatically
+- Read browser console logs
+- Navigate and interact with UI
+- Emulate different devices/viewports
+- Visual regression testing
+
+**Smart Gen Use Case:**
+After Smart Gen completes:
+1. Playwright opens `localhost:3000`
+2. Screenshots the timeline
+3. Claude analyzes: "Are clips distributed across timeline or clustered at start?"
+4. If clustered → retry Smart Gen with stronger prompt emphasis
+5. Max 2-3 iterations to get proper distribution
+
+**Configuration Notes:**
+- Default browser: Chromium (headless mode optional)
+- Desktop viewport: 1920x1080 (or custom)
+- Mobile testing: Can emulate iPhone 15, etc.
+- Enable in `.claude/settings.local.json` MCP config
+
+**Workflow Pattern (from Patrick Ellis):**
+```
+Context + Tools + Validation = Success
+
+Context: CLAUDE.md, pages/CLAUDE.md, prompts
+Tools: Playwright MCP, git, grep, etc.
+Validation: Visual checks, console logs, acceptance criteria
+```
+
+---
+
+## Sub-Agents for Specialized Workflows
+
+ReelForge uses specialized sub-agents (inspired by Patrick Ellis's agentic workflows) for quality assurance and iterative refinement. These agents live in `.claude/agents/` and can be invoked for specific validation tasks.
+
+### Available Sub-Agents
+
+**1. Design Reviewer** (`.claude/agents/design-reviewer.md`)
+- **Purpose:** Validate visual quality and design standards
+- **Expertise:** Sara Soueidan (accessibility), Rachel Andrew (layout), Pocket Picks aesthetic
+- **Tasks:**
+  - Color palette verification (hex values, gradients)
+  - Typography standards (weights, spacing, casing)
+  - Component patterns (glassmorphism, button states, glow effects)
+  - Accessibility audit (ARIA, keyboard nav, focus states, contrast)
+  - Responsive design (mobile viewports, touch targets)
+  - Performance checks (60fps animations, no layout thrashing)
+- **Outputs:** Detailed report with screenshots, specific code fixes, prioritized action items
+
+**How to invoke:**
+```
+Use the design-reviewer sub-agent to validate the homepage design. Check if colors, typography, and interactions match our Pocket Picks-inspired standards.
+```
+
+**2. Smart Gen Validator** (`.claude/agents/smart-gen-validator.md`)
+- **Purpose:** Ensure Smart Gen clips distribute correctly across timeline (fix 0:00 clustering bug)
+- **Expertise:** Timestamp accuracy, zone distribution, narrative quality
+- **Tasks:**
+  - Upload test video via Playwright
+  - Trigger Smart Gen and capture console logs
+  - Screenshot timeline to verify clip distribution
+  - Programmatically check timestamps match frame manifest
+  - Iterate fixes (prompt tuning, validation logic, zone forcing) max 2-3 times
+- **Outputs:** PASS/FAIL report with screenshot evidence, console logs, root cause diagnosis, code fixes
+
+**How to invoke:**
+```
+Use the smart-gen-validator sub-agent to test Smart Gen with Cooking_Mushrooms.mp4. Verify clips span opening → middle → finale zones, not all at 0:00.
+```
+
+### When to Use Sub-Agents
+
+**Design Reviewer:**
+- After implementing new UI features (buttons, panels, timeline)
+- Before merging design changes (ensure standards met)
+- When user reports visual inconsistencies
+- For accessibility audits (before production deploy)
+
+**Smart Gen Validator:**
+- After modifying Smart Gen logic or API prompt
+- When testing new video types (cooking, tutorial, livestream)
+- To diagnose timestamp accuracy issues
+- Before releasing Smart Gen updates
+
+### Workflow: Iterative Validation Loop
+
+**Standard Pattern (for any feature):**
+1. **Build Context:** Read CLAUDE.md, pages/CLAUDE.md for patterns
+2. **Implement Feature:** Write code following design principles
+3. **Invoke Sub-Agent:** Validate quality (design-reviewer or smart-gen-validator)
+4. **Review Report:** Check PASS/FAIL, read action items
+5. **Apply Fixes:** Implement specific code changes from report
+6. **Re-validate:** Invoke sub-agent again (max 2-3 iterations)
+7. **Approve or Escalate:** If PASS → done. If still FAIL → ask user for guidance
+
+**Example: Adding a New Button**
+```
+1. Read CLAUDE.md Design Principles → Button patterns (cyan gradient, glow on hover)
+2. Implement button in index.js with Tailwind classes
+3. Invoke design-reviewer: "Review the new Export button for color, hover state, and accessibility"
+4. Receive report: "❌ Glow effect too weak, ⚠️ Missing ARIA label"
+5. Fix: Increase glow to 0 0 25px, add aria-label="Export video"
+6. Re-invoke design-reviewer: "Re-check Export button after fixes"
+7. Receive report: "✅ PASS - All standards met"
+```
+
+### Benefits of This Approach
+
+- **Consistency:** Sub-agents ensure every feature meets same quality bar
+- **Efficiency:** Automated validation faster than manual review
+- **Learning:** Reports teach patterns (what good design looks like)
+- **Iteration:** Built-in retry logic (up to 3 attempts) without user intervention
+- **Scalability:** Add more sub-agents as project grows (e.g., performance-auditor, a11y-tester)
 
 ---
 
 ## Changelog
 
+**2025-01-09:**
+- Implemented Pocket Picks-inspired redesign (futuristic dark theme, neon accents, glassmorphism)
+- Added comprehensive Design Principles section to CLAUDE.md (color palette, typography, component patterns, elite frontend standards)
+- Created sub-agents for quality assurance:
+  - `.claude/agents/design-reviewer.md` - Visual quality & accessibility validation
+  - `.claude/agents/smart-gen-validator.md` - Timeline distribution & timestamp accuracy testing
+- Updated CSS with vibrant gradients, glow effects, animated hero background
+- Enhanced UI components: sidebar nav, buttons, timeline anchors with neon colors
+- Documented iterative validation workflow (Context + Tools + Validation = Success)
+
 **2025-01-08:**
+- Added pages/CLAUDE.md for detailed index.js documentation
+- Refined Claude Code setup based on Patrick Ellis workflow patterns
+- Removed GitHub Actions workflow (not needed for parallel processing yet)
+- Added Playwright MCP integration notes for visual verification
+
+**2025-01-08 (earlier):**
 - Implemented two-phase Smart Gen (gather → analyze)
 - Added frame manifest with explicit timestamps
 - Removed agentic loop (too complex, unpredictable)
@@ -224,23 +522,65 @@ Frame 42: 26:30 (1590.0s) - finale zone
 
 ---
 
+## Workflow Best Practices (Patrick Ellis Method)
+
+**This CLAUDE.md is your working memory** - It's injected into every Claude Code session. Think of it as a README specifically for AI agents.
+
+**Before starting ANY session:**
+1. Read this CLAUDE.md file (you're doing it now!)
+2. If working on pages/index.js → read pages/CLAUDE.md for function details
+3. Use `/test-smart-gen` or `/fix-timestamp-accuracy` commands for guided workflows
+4. Check changelog to understand recent changes
+
+**Orchestration Framework:**
+```
+Context (CLAUDE.md files, prompts)
+  + Tools (Playwright, git, grep, bash)
+  + Validation (console logs, screenshots, acceptance criteria)
+  = Successful Agentic Workflow
+```
+
+**Iterative Agentic Loop:**
+1. Read spec/requirements (from user prompt or CLAUDE.md)
+2. Take action (write code, generate clips, etc.)
+3. Validate output (screenshot, console check, test)
+4. Compare to spec
+5. If not matching → iterate (go to step 2)
+6. Max 2-3 iterations before asking user for clarification
+
+**Using Sub-Agents:**
+- Commands (`.claude/commands/*.md`) = Reusable prompts you can `/invoke`
+- Agents (`.claude/agents/*.md`) = Independent workers with their own context
+- Agents can call other agents (e.g., design-reviewer → mobile-validator)
+- Keeps main thread context clean
+
+**Context Management:**
+- When context heavy (~180k tokens) → user can type `/rewind` to compact to 40%
+- Build context BEFORE making changes (grep, read files, check logs)
+- Don't ask user for info that's already in CLAUDE.md or code
+
+---
+
 ## Notes for Claude
 
 **When working on Smart Gen:**
-1. ALWAYS read this file first: "Prepare to discuss Smart Gen architecture"
-2. Build 50k token context before making changes
-3. Check console logs for actual clip timestamps
+1. ALWAYS read CLAUDE.md first + pages/CLAUDE.md for function details
+2. Build 50k token context before making changes (grep, read relevant functions)
+3. Check console logs for actual clip timestamps after generation
 4. If touching analyzeNarrativeComprehensive: preserve frame manifest usage
 5. Test with 3 video types: cooking (28min), livestream (85min), short (5min)
+6. Use Playwright to screenshot timeline after generation (when MCP installed)
 
 **When adding features:**
 - Check if impacts mobile (test touch events)
 - Verify FFmpeg.wasm compatibility
-- Update this CLAUDE.md changelog
+- Update this CLAUDE.md changelog using `/update-claude-md` command
+- Read pages/CLAUDE.md to understand existing patterns
 
 **Red Flags to Avoid:**
-- Using localStorage in artifacts
-- Backwards compatibility (creates silent failures)
+- Using localStorage in artifacts (violates Claude.ai restrictions)
+- Backwards compatibility hacks (creates silent failures)
 - Generic "shadcn purple UI" (ReelForge = dark mode, medieval forge aesthetic)
 - Long clips (>10s) for social media
 - Ignoring frame manifest timestamps
+- Making changes without reading CLAUDE.md files first

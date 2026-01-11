@@ -3,30 +3,45 @@
 @tailwind utilities;
 
 :root {
-  /* Modern Dark Theme - Clean & Professional */
-  --bg-primary: #0f1419;
-  --bg-secondary: #1a1f2e;
-  --bg-tertiary: #252d3d;
-  --bg-elevated: #2d3748;
+  /* Pocket Picks Inspired - Futuristic Dark Theme */
+  --bg-primary: #0a0e27;
+  --bg-secondary: #141832;
+  --bg-tertiary: #1e2442;
+  --bg-elevated: #282f52;
 
   /* Borders & Dividers */
-  --border-subtle: #374151;
-  --border-medium: #4b5563;
-  --border-strong: #6b7280;
+  --border-subtle: rgba(79, 142, 255, 0.15);
+  --border-medium: rgba(79, 142, 255, 0.25);
+  --border-strong: rgba(79, 142, 255, 0.4);
 
-  /* Accent Colors */
-  --accent-primary: #3b82f6;
-  --accent-primary-hover: #2563eb;
-  --accent-secondary: #8b5cf6;
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-error: #ef4444;
+  /* Vibrant Accent Colors */
+  --accent-cyan: #00d4ff;
+  --accent-cyan-hover: #00b8e6;
+  --accent-pink: #ff00ff;
+  --accent-magenta: #e91e8c;
+  --accent-purple: #9333ea;
+  --accent-blue: #4facfe;
+
+  /* Primary Actions - Gradient */
+  --gradient-primary: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-accent: linear-gradient(135deg, #e91e8c 0%, #ff00ff 100%);
+  --gradient-hero: linear-gradient(135deg, #1e3a8a 0%, #3b0764 50%, #831843 100%);
+
+  /* Semantic Colors */
+  --accent-success: #00ff88;
+  --accent-warning: #ffa500;
+  --accent-error: #ff3366;
 
   /* Text Colors */
-  --text-primary: #f9fafb;
-  --text-secondary: #d1d5db;
-  --text-tertiary: #9ca3af;
-  --text-disabled: #6b7280;
+  --text-primary: #ffffff;
+  --text-secondary: #d1d9e6;  /* Improved contrast: 4.8:1 on dark backgrounds */
+  --text-tertiary: #9ca6b8;   /* Improved contrast for small text */
+  --text-disabled: #64748b;
+
+  /* Glow Effects */
+  --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.4);
+  --glow-pink: 0 0 20px rgba(255, 0, 255, 0.4);
+  --glow-blue: 0 0 20px rgba(79, 172, 254, 0.4);
 }
 
 html, body {
@@ -40,39 +55,42 @@ body {
   padding: 0;
 }
 
-/* Panel - Clean Card Style */
+/* Panel - Glassmorphism Card Style */
 .panel {
-  background: var(--bg-secondary);
+  background: rgba(20, 24, 50, 0.7);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-/* Primary Button */
+/* Primary Button - Cyan Gradient */
 .btn-primary {
-  background: var(--accent-primary);
-  border: 1px solid var(--accent-primary);
-  border-radius: 6px;
+  background: var(--gradient-primary);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 12px;
   color: var(--text-primary);
-  font-weight: 500;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
-  border-color: var(--accent-primary-hover);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--glow-cyan);
+  transform: translateY(-2px);
+  border-color: var(--accent-cyan-hover);
 }
 
 .btn-primary:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 212, 255, 0.4);
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Secondary Button */
@@ -100,40 +118,46 @@ body {
   cursor: not-allowed;
 }
 
-/* Accent Button (for primary actions like Export) */
+/* Accent Button - Pink/Magenta Gradient */
 .btn-accent {
-  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
-  border: 1px solid var(--accent-secondary);
-  border-radius: 6px;
+  background: var(--gradient-accent);
+  border: 1px solid var(--accent-magenta);
+  border-radius: 12px;
   color: var(--text-primary);
   font-weight: 600;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(233, 30, 140, 0.4);
 }
 
 .btn-accent:hover:not(:disabled) {
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-  transform: translateY(-1px);
+  box-shadow: var(--glow-pink);
+  transform: translateY(-2px);
+  border-color: var(--accent-pink);
 }
 
 .btn-accent:active:not(:disabled) {
   transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(255, 0, 255, 0.5);
 }
 
-/* Tab Navigation */
+/* Tab Navigation - Futuristic Style */
 .tab {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   color: var(--text-tertiary);
-  font-weight: 500;
-  transition: all 0.2s ease;
-  padding: 12px 20px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  padding: 14px 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.9rem;
 }
 
 .tab-active {
-  color: var(--accent-primary);
-  border-bottom-color: var(--accent-primary);
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
 }
 
 .tab:hover:not(.tab-active):not(:disabled) {
@@ -234,4 +258,102 @@ html {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Animated Hero Gradient Background */
+.hero-gradient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 400px;
+  background: linear-gradient(135deg,
+    #1e3a8a 0%,
+    #3b0764 30%,
+    #831843 60%,
+    #1e3a8a 100%);
+  opacity: 0.6;
+  z-index: 0;
+  pointer-events: none;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+    opacity: 0.6;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 0.8;
+  }
+}
+
+/* Particle Effect Overlay */
+.hero-particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(255, 0, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(79, 172, 254, 0.1) 0%, transparent 40%);
+  animation: particleFloat 20s ease-in-out infinite;
+}
+
+@keyframes particleFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+/* Glow Text Effect */
+.glow-text-cyan {
+  color: var(--accent-cyan);
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.6),
+               0 0 40px rgba(0, 212, 255, 0.3);
+}
+
+.glow-text-pink {
+  color: var(--accent-pink);
+  text-shadow: 0 0 20px rgba(255, 0, 255, 0.6),
+               0 0 40px rgba(255, 0, 255, 0.3);
+}
+
+/* Timeline Accent Colors */
+.timeline-anchor {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+  border: 2px solid var(--accent-cyan);
+  box-shadow: var(--glow-cyan);
+  transition: all 0.25s ease;
+}
+
+.timeline-anchor:hover {
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+  transform: scale(1.05);
+}
+
+.timeline-anchor-selected {
+  background: var(--gradient-accent);
+  border-color: var(--accent-pink);
+  box-shadow: var(--glow-pink);
+}
+
+/* Smooth Loading Animation */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
+  }
+}
+
+.loading-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
 }
