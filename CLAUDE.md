@@ -214,8 +214,12 @@ GitHub MCP (Future):
 # Design validation
 Task subagent_type="design-reviewer" prompt="Review Export button for accessibility and design standards"
 
-# Smart Gen validation
+# Smart Gen validation (legacy - use timeline-validator instead)
 Task subagent_type="smart-gen-validator" prompt="Test Smart Gen with cooking video, verify timestamp distribution"
+
+# Timeline distribution validation (NEW - preferred)
+# See .claude/agents/timeline-validator.md for detailed documentation
+Task subagent_type="timeline-validator" prompt="Validate Smart Gen output for Cooking_Mushrooms.mp4"
 
 # UX friction audit
 Task subagent_type="ux-friction-auditor" prompt="Identify friction points in clip creation workflow"
@@ -764,21 +768,33 @@ ReelForge uses specialized sub-agents (inspired by Patrick Ellis's agentic workf
 Use the design-reviewer sub-agent to validate the homepage design. Check if colors, typography, and interactions match our Pocket Picks-inspired standards.
 ```
 
-**2. Smart Gen Validator** (`.claude/agents/smart-gen-validator.md`)
+**2. Timeline Validator** (`.claude/agents/timeline-validator.md`) **← NEW: Preferred for Smart Gen validation**
 - **Purpose:** Ensure Smart Gen clips distribute correctly across timeline (fix 0:00 clustering bug)
-- **Expertise:** Timestamp accuracy, zone distribution, narrative quality
+- **Expertise:** Timestamp accuracy, zone distribution (opening/middle/finale), narrative quality, frame manifest validation
 - **Tasks:**
-  - Upload test video via Playwright
-  - Trigger Smart Gen and capture console logs
-  - Screenshot timeline to verify clip distribution
-  - Programmatically check timestamps match frame manifest
-  - Iterate fixes (prompt tuning, validation logic, zone forcing) max 2-3 times
-- **Outputs:** PASS/FAIL report with screenshot evidence, console logs, root cause diagnosis, code fixes
+  - Parse Smart Gen console logs and API response
+  - Programmatically check timestamps match frame manifest (within ±2s)
+  - Calculate zone distribution (% clips in opening/early/middle/late/finale)
+  - Verify narrative quality (story coherence, clip variety, missing moments)
+  - Screenshot timeline via Playwright (if available)
+  - Generate comprehensive PASS/FAIL report with specific fixes
+  - Iterate fixes (max 3 attempts) if validation fails
+- **Pass Criteria:**
+  - ✅ Clips in at least 3 zones, no zone >40% of total
+  - ✅ At least 1 clip in finale (90-100%) for videos >5min
+  - ✅ All timestamps match frame manifest (not all at 0:00)
+  - ✅ 8-12 clips with varied lengths (3-10s) and clear narrative roles
+- **Outputs:** Structured markdown report with distribution table, timestamp validation, narrative assessment, visual evidence, recommended fixes
 
 **How to invoke:**
 ```
-Use the smart-gen-validator sub-agent to test Smart Gen with Cooking_Mushrooms.mp4. Verify clips span opening → middle → finale zones, not all at 0:00.
+Use the timeline-validator sub-agent to validate Smart Gen output for Cooking_Mushrooms.mp4. Check geographic distribution, timestamp accuracy, and narrative quality.
 ```
+
+**3. Smart Gen Validator** (`.claude/agents/smart-gen-validator.md`) **← LEGACY: Use timeline-validator instead**
+- **Purpose:** Original Smart Gen validator (less comprehensive than timeline-validator)
+- **Status:** Deprecated in favor of timeline-validator
+- **Migration:** Use timeline-validator for all new Smart Gen validation tasks
 
 ### When to Use Sub-Agents
 
@@ -788,18 +804,20 @@ Use the smart-gen-validator sub-agent to test Smart Gen with Cooking_Mushrooms.m
 - When user reports visual inconsistencies
 - For accessibility audits (before production deploy)
 
-**Smart Gen Validator:**
-- After modifying Smart Gen logic or API prompt
-- When testing new video types (cooking, tutorial, livestream)
-- To diagnose timestamp accuracy issues
-- Before releasing Smart Gen updates
+**Timeline Validator:**
+- After modifying Smart Gen logic, API prompt, or frame extraction
+- When testing new video types (cooking, tutorial, livestream, vlog)
+- To diagnose timestamp accuracy issues (clips clustering at 0:00)
+- To verify zone distribution (opening → middle → finale coverage)
+- Before releasing Smart Gen updates or claiming "Smart Gen is fixed"
+- After each iteration of Smart Gen improvements (max 3 validation cycles)
 
 ### Workflow: Iterative Validation Loop
 
 **Standard Pattern (for any feature):**
 1. **Build Context:** Read CLAUDE.md, pages/CLAUDE.md for patterns
 2. **Implement Feature:** Write code following design principles
-3. **Invoke Sub-Agent:** Validate quality (design-reviewer or smart-gen-validator)
+3. **Invoke Sub-Agent:** Validate quality (design-reviewer or timeline-validator)
 4. **Review Report:** Check PASS/FAIL, read action items
 5. **Apply Fixes:** Implement specific code changes from report
 6. **Re-validate:** Invoke sub-agent again (max 2-3 iterations)
@@ -840,6 +858,14 @@ Use the smart-gen-validator sub-agent to test Smart Gen with Cooking_Mushrooms.m
 - Defined standard iterative agentic loop (Read → Plan → Implement → Validate → Iterate → Document)
 - Clarified business objectives, constraints, tech stack, architecture patterns
 - This framework makes Claude Code 10x more effective by providing proper context
+- **NEW SUB-AGENT:** Timeline Validator (`.claude/agents/timeline-validator.md`)
+  - Comprehensive Smart Gen output validation (replaces legacy smart-gen-validator)
+  - Validates geographic distribution (clips span opening → middle → finale zones)
+  - Timestamp accuracy checking (match frame manifest, no 0:00 clustering)
+  - Narrative quality assessment (story coherence, clip variety, missing moments)
+  - Structured PASS/FAIL reports with specific code fixes
+  - Iterative validation loop (max 3 attempts before escalation)
+  - Pass criteria: 3+ zones, <40% any zone, finale coverage, 8-12 varied clips
 
 **2025-01-09:**
 - Implemented Pocket Picks-inspired redesign (futuristic dark theme, neon accents, glassmorphism)
