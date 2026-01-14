@@ -4007,10 +4007,10 @@ const exportVideo = async () => {
             ) : (
               <div className="h-full flex flex-col">
                 {/* MEDIA CENTER - Collapsible */}
-                <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full">
+                <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full border-0 sm:border">
                   <button
                     onClick={() => setMediaCenterCollapsed(!mediaCenterCollapsed)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
+                    className="w-full flex items-center justify-between p-2 sm:p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
                   >
                     <div className="flex items-center gap-2">
                       <h3 className="text-base sm:text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -4027,7 +4027,7 @@ const exportVideo = async () => {
                   </button>
 
                   {!mediaCenterCollapsed && (
-                    <div className="p-4 pt-0 space-y-3">
+                    <div className="p-2 sm:p-4 pt-0 space-y-3">
                       {/* Change Video Button */}
                       <button
                         onClick={() => {
@@ -4346,14 +4346,14 @@ const exportVideo = async () => {
 
                 {/* Video Editor - Unified Panel */}
                 <div
-                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full ${
+                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full border-0 sm:border ${
                     playbackMode === 'clips'
                       ? 'ring-0 sm:ring-2 ring-blue-500/50 shadow-none sm:shadow-[0_0_20px_rgba(59,130,246,0.3)]'
                       : 'ring-0 sm:ring-2 ring-orange-500/50 shadow-none sm:shadow-[0_0_20px_rgba(249,115,22,0.3)]'
                   }`}
                 >
                   {/* Video Player Section */}
-                  <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
+                  <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     <video
                       ref={videoRef}
@@ -4486,7 +4486,7 @@ const exportVideo = async () => {
                   )}
 
                   {/* Playback Controls + Clips Preview Section */}
-                  <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
+                  <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3 mb-1 sm:mb-4">
                     {/* Controls Row - always visible */}
                     {anchors.length > 0 ? (
                       <div className="flex items-center justify-center gap-2 mb-3">
@@ -4647,7 +4647,7 @@ const exportVideo = async () => {
                   {/* Unified Layered Timeline - Option B */}
                   <div className="mb-1 sm:mb-4">
                     {/* Unified Timeline Container - Layered Design (Option B) */}
-                    <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3">
+                    <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
                         <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)} • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
@@ -6277,7 +6277,7 @@ onMouseLeave={() => {
           {/* End Connected Timelines Box */}
 
           {/* Toolbar - Action Buttons */}
-          <div className="panel rounded-none sm:rounded-2xl p-1 sm:p-4 w-full">
+          <div className="panel rounded-none sm:rounded-2xl p-0 sm:p-4 w-full border-0 sm:border">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
               {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
               <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
