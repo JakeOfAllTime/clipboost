@@ -4007,7 +4007,7 @@ const exportVideo = async () => {
             ) : (
               <div className="h-full flex flex-col">
                 {/* MEDIA CENTER - Collapsible */}
-                <div className="panel rounded-xl mb-4">
+                <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full">
                   <button
                     onClick={() => setMediaCenterCollapsed(!mediaCenterCollapsed)}
                     className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
@@ -4346,7 +4346,7 @@ const exportVideo = async () => {
 
                 {/* Video Editor - Unified Panel */}
                 <div
-                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all ${
+                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full ${
                     playbackMode === 'clips'
                       ? 'ring-0 sm:ring-2 ring-blue-500/50 shadow-none sm:shadow-[0_0_20px_rgba(59,130,246,0.3)]'
                       : 'ring-0 sm:ring-2 ring-orange-500/50 shadow-none sm:shadow-[0_0_20px_rgba(249,115,22,0.3)]'
@@ -6277,7 +6277,7 @@ onMouseLeave={() => {
           {/* End Connected Timelines Box */}
 
           {/* Toolbar - Action Buttons */}
-          <div className="panel rounded-none sm:rounded-2xl p-1 sm:p-4">
+          <div className="panel rounded-none sm:rounded-2xl p-1 sm:p-4 w-full">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
               {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
               <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
