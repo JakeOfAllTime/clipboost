@@ -844,6 +844,307 @@ Use the timeline-validator sub-agent to validate Smart Gen output for Cooking_Mu
 
 ---
 
+## Deep Research Workflow
+
+For complex, ambiguous problems that require deep exploration before implementation (e.g., "Why does Smart Gen cluster clips at 0:00?", "How should we architect multi-track editing?"), use this multi-stage research workflow inspired by Patrick Ellis:
+
+### When to Use Deep Research
+
+**Use this workflow when:**
+- ✅ Problem is complex with unknown root cause (e.g., timestamp clustering bug)
+- ✅ Multiple solution approaches exist, unclear which is best
+- ✅ Need to understand domain deeply before designing (e.g., video codec behavior)
+- ✅ Requirements are ambiguous and need exploration to clarify
+- ✅ High stakes decision (architecture choice, major refactor)
+
+**Don't use for:**
+- ❌ Simple bugs with obvious fixes (typo, missing import)
+- ❌ Well-defined tasks with clear requirements
+- ❌ Time-sensitive hotfixes
+- ❌ Incremental feature additions to existing patterns
+
+### The Four-Stage Process
+
+```
+Stage 1: BROAD EXPLORATION (Gemini Deep Research)
+   ↓
+Stage 2: CRITICAL ANALYSIS (Claude Deep Think / Opus 4)
+   ↓
+Stage 3: PRD CREATION (Structured requirements doc)
+   ↓
+Stage 4: IMPLEMENTATION (Claude Sonnet 4.5 / Codex iterative coding)
+```
+
+---
+
+### Stage 1: Broad Exploration (Gemini Deep Research)
+
+**Tool:** Gemini 2.0 Flash Thinking Experimental (Deep Research mode)
+
+**Purpose:** Cast a wide net, gather diverse perspectives, explore solution space without commitment.
+
+**What Gemini Does Well:**
+- Broad web search across multiple sources
+- Synthesizing diverse viewpoints
+- Identifying patterns across large datasets
+- Generating comprehensive research reports
+- Finding edge cases and corner scenarios
+
+**Process:**
+1. Frame the research question broadly (not "fix this bug" but "understand this domain")
+2. Give Gemini time to research (minutes to hours for deep reports)
+3. Review generated report for:
+   - Solution approaches (pros/cons of each)
+   - Domain constraints (technical limitations)
+   - Prior art (how others solved this)
+   - Edge cases to consider
+
+**Example Research Questions:**
+- "Why do video editing tools struggle with timestamp accuracy when extracting frames from long videos?"
+- "What are the trade-offs between different video timeline architectures (layered vs linear vs magnetic)?"
+- "How do professional video editors handle frame-accurate editing at scale?"
+
+**Output:** Comprehensive research report (5-20 pages) with citations, trade-off analysis, solution landscape.
+
+---
+
+### Stage 2: Critical Analysis (Claude Deep Think / Opus 4)
+
+**Tool:** Claude Opus 4 with Extended Thinking or Deep Think mode
+
+**Purpose:** Apply critical thinking to Gemini's research, identify flaws, synthesize strategic direction.
+
+**What Claude Opus Does Well:**
+- Strategic thinking ("academic" personality)
+- Identifying logical flaws and assumptions
+- Depth-first analysis (going deep on key points)
+- Connecting dots across disparate information
+- Evaluating trade-offs with context of THIS project
+
+**Process:**
+1. Feed Gemini's research report to Claude Opus
+2. Ask Opus to critique and synthesize:
+   - "Which solution approaches are most viable for ReelForge's constraints?"
+   - "What are the hidden assumptions in these solutions?"
+   - "What could go wrong with each approach?"
+   - "Which approach aligns with our tech stack (Next.js, FFmpeg.wasm, client-side only)?"
+3. Review Opus's analysis for strategic direction
+
+**Example Prompts for Opus:**
+```
+Given this research on video timeline architectures, and knowing that:
+- ReelForge is client-side only (no server processing)
+- Uses FFmpeg.wasm (WebAssembly, limited to browser capabilities)
+- Targets social media creators (not professional editors)
+- Must work on mobile (touch interactions, limited RAM)
+
+Which architecture should we choose and why? What are the risks?
+```
+
+**Output:** Strategic analysis (2-5 pages) with recommended approach, risk assessment, decision rationale.
+
+---
+
+### Stage 3: PRD Creation (Product Requirements Document)
+
+**Tool:** Claude Sonnet 4.5 (tactical executor)
+
+**Purpose:** Translate strategic direction into concrete, actionable requirements.
+
+**What Goes in the PRD:**
+1. **Problem Statement:** What we're solving and why it matters
+2. **Goals:** Success criteria (measurable outcomes)
+3. **Non-Goals:** What we're explicitly NOT doing (scope control)
+4. **User Stories:** Who benefits and how ("As a cooking video creator, I want...")
+5. **Technical Approach:** High-level architecture (which solution from research)
+6. **Implementation Steps:** Ordered task list (what to build first)
+7. **Acceptance Criteria:** How we'll know it's done (testable conditions)
+8. **Risks & Mitigations:** What could go wrong and backup plans
+9. **Open Questions:** Unresolved decisions that need user input
+
+**Process:**
+1. Sonnet reads Gemini's research + Opus's analysis
+2. Generate PRD following template
+3. Save as `.claude/docs/prd-[feature-name].md` (persisted for context)
+4. Review with user for approval before implementation
+
+**Example PRD Structure:**
+```markdown
+# PRD: Smart Gen Timestamp Accuracy Fix
+
+## Problem Statement
+Smart Gen clips cluster at 0:00 instead of spanning timeline (opening → finale).
+This breaks narrative flow and makes clips unusable for social media.
+
+## Goals
+- ✅ Clips distributed across at least 3 zones (opening, middle, finale)
+- ✅ No zone contains >40% of total clips
+- ✅ Timestamps match frame manifest (within ±2s)
+- ✅ Works for videos 5min to 90min duration
+
+## Non-Goals
+- ❌ Sub-second timestamp precision (30fps = 33ms, ±2s is acceptable)
+- ❌ Supporting multi-track timelines (single track only)
+- ❌ Custom zone definitions (use standard 5 zones)
+
+## User Stories
+- As a cooking video creator, I want clips from setup AND finished dish, not just the opening
+- As a livestream highlighter, I want clips from exciting moments throughout, not clustered at start
+
+## Technical Approach
+(Chosen from Opus's analysis)
+- Use explicit zone forcing: require at least 1 clip per zone
+- Validate frame manifest match BEFORE creating anchors
+- Add programmatic check: if >60% clips in one zone, re-sample finale frames
+
+## Implementation Steps
+1. Read pages/index.js analyzeNarrativeComprehensive() (lines 2000-2100)
+2. Add zone distribution validation after Claude API response
+3. If distribution fails, force-select clips from under-represented zones
+4. Update Smart Gen prompt to emphasize "span full video timeline"
+5. Test with timeline-validator sub-agent (3 video types)
+
+## Acceptance Criteria
+- [ ] timeline-validator reports PASS on cooking video (28min)
+- [ ] timeline-validator reports PASS on livestream (85min)
+- [ ] timeline-validator reports PASS on short tutorial (5min)
+- [ ] Console logs show clips in opening, middle, AND finale zones
+- [ ] Visual timeline screenshot confirms horizontal distribution
+
+## Risks & Mitigations
+- Risk: Over-forcing distribution creates bad clips (boring moments just to fill zones)
+  - Mitigation: Only force if Claude's importance scores are close (within 0.2)
+- Risk: Frame manifest mismatch (timestamp drift in long videos)
+  - Mitigation: Use ±2s tolerance, log warnings for drift >1s
+
+## Open Questions
+- Should we prefer finale clips MORE than opening clips? (transformation videos)
+- What if video truly has no interesting finale content? (unfinished video)
+```
+
+**Output:** Detailed PRD saved in `.claude/docs/` for persistence and future reference.
+
+---
+
+### Stage 4: Implementation (Iterative Coding)
+
+**Tool:** Claude Sonnet 4.5 (or Codex for systematic depth-first)
+
+**Purpose:** Execute the PRD with code, using sub-agents for validation.
+
+**Process:**
+1. **Read Context:** PRD + CLAUDE.md + pages/CLAUDE.md
+2. **Plan Tasks:** Break PRD implementation steps into todos (use TodoWrite)
+3. **Implement Incrementally:**
+   - Write code for step 1
+   - Validate with sub-agent (e.g., timeline-validator)
+   - If PASS → move to step 2
+   - If FAIL → iterate on step 1 (max 3 attempts)
+4. **Document Changes:** Update CLAUDE.md changelog, commit with detailed message
+5. **Final Validation:** Full acceptance criteria check
+
+**Example Implementation Flow:**
+```
+1. Read PRD: prd-smart-gen-timestamp-fix.md
+2. TodoWrite: 5 tasks from Implementation Steps
+3. Mark "Read analyzeNarrativeComprehensive()" as in_progress
+4. Read pages/index.js lines 2000-2100
+5. Mark complete, start "Add zone distribution validation"
+6. Write validation code (lines 2050-2080)
+7. Invoke timeline-validator: "Test with Cooking_Mushrooms.mp4"
+8. Receive FAIL report: "Still 80% clips in opening zone"
+9. Iterate: Strengthen zone forcing logic
+10. Re-invoke timeline-validator
+11. Receive PASS report
+12. Mark task complete, move to next
+... repeat for all 5 tasks
+13. Final validation: All acceptance criteria ✅
+14. Commit: "Fix Smart Gen timestamp clustering (PRD-compliant)"
+15. Update CLAUDE.md changelog
+```
+
+**Key Practices:**
+- **Small commits:** One logical change per commit (easier to revert)
+- **Sub-agent validation:** Use timeline-validator, design-reviewer after each major change
+- **Console logging:** Add detailed logs for debugging (timestamps, zone distribution)
+- **User checkpoints:** For ambiguous PRD points, use AskUserQuestion before proceeding
+
+---
+
+### Benefits of This Workflow
+
+**Compared to "just start coding":**
+- ✅ **Reduces wasted effort:** Research + planning prevents dead-end implementations
+- ✅ **Better solutions:** Explores solution space before committing
+- ✅ **Shared understanding:** PRD aligns AI and user on goals/scope
+- ✅ **Easier debugging:** Clear acceptance criteria and validation gates
+- ✅ **Knowledge capture:** PRDs persist in `.claude/docs/` for future reference
+
+**When to skip stages:**
+- Simple bugs: Jump to Stage 4 (implementation) directly
+- Well-understood features: Skip Stage 1 (research), start with Stage 3 (PRD)
+- Time-sensitive: Use condensed version (quick research → PRD → implement)
+
+---
+
+### Cross-Model Collaboration
+
+**Personality Traits:**
+- **Gemini Deep Research:** The Explorer (broad, curious, gathers diverse info)
+- **Claude Opus 4:** The Strategist (critical, depth-first, evaluates trade-offs)
+- **Claude Sonnet 4.5:** The Executor (tactical, iterative, ships code)
+- **Codex:** The Architect (systematic, methodical, depth-first implementation)
+
+**When to use each:**
+- Gemini: Unknown problem domain, need to explore solution space
+- Opus: Strategic decisions, architecture choices, risk evaluation
+- Sonnet: Fast iteration, user-facing features, most coding tasks
+- Codex: Complex refactors, systematic exploration, depth-first debugging
+
+**Example Multi-Model Flow:**
+```
+User: "Why does Smart Gen fail on livestream videos but work on cooking videos?"
+
+1. Gemini Deep Research: "Research video codec differences, frame extraction patterns, memory constraints"
+2. Claude Opus: "Given research, cooking videos = stable scenes (easy keyframes), livestreams = rapid changes (more I-frames, harder to sample). Recommend adaptive sampling based on scene change detection."
+3. Claude Sonnet: "Write PRD for adaptive sampling feature"
+4. User approves PRD
+5. Claude Sonnet: "Implement adaptive sampling with scene change detection"
+6. Invoke timeline-validator: "Test with livestream video"
+7. PASS → Done
+```
+
+---
+
+### PRD Storage & Versioning
+
+**Location:** `.claude/docs/prd-[feature-name].md`
+
+**Why persist PRDs:**
+- Future Claude sessions can read them (context for "why we built it this way")
+- User can reference them (refresh memory on goals/decisions)
+- Sub-agents can validate against them ("Does this implementation match PRD acceptance criteria?")
+
+**Versioning:**
+- Use git for PRD history (track requirement changes over time)
+- Include PRD filename in commit messages for traceability
+- Update PRD if scope changes during implementation (living document)
+
+**Example:**
+```bash
+# Initial PRD
+git add .claude/docs/prd-smart-gen-timestamp-fix.md
+git commit -m "Add PRD for Smart Gen timestamp accuracy fix"
+
+# After implementation
+git commit -m "Implement Smart Gen timestamp fix (per PRD prd-smart-gen-timestamp-fix.md)"
+
+# If scope changes mid-implementation
+git commit -m "Update PRD: Remove sub-second precision requirement (out of scope)"
+```
+
+---
+
 ## Changelog
 
 **2025-01-14:**
@@ -866,6 +1167,16 @@ Use the timeline-validator sub-agent to validate Smart Gen output for Cooking_Mu
   - Structured PASS/FAIL reports with specific code fixes
   - Iterative validation loop (max 3 attempts before escalation)
   - Pass criteria: 3+ zones, <40% any zone, finale coverage, 8-12 varied clips
+- **MAJOR:** Added Deep Research Workflow section (4-stage process for complex problems)
+  - Stage 1: Broad Exploration (Gemini Deep Research for diverse perspectives)
+  - Stage 2: Critical Analysis (Claude Opus 4 for strategic thinking and trade-off evaluation)
+  - Stage 3: PRD Creation (structured requirements docs in `.claude/docs/`)
+  - Stage 4: Implementation (iterative coding with sub-agent validation)
+  - Cross-model collaboration patterns (Gemini → Opus → Sonnet workflow)
+  - PRD storage & versioning (persist for future context, track with git)
+  - Benefits: Reduces wasted effort, better solutions, shared understanding, easier debugging
+  - When to use: Complex problems, ambiguous requirements, architecture decisions
+  - When to skip: Simple bugs, well-defined tasks, time-sensitive hotfixes
 
 **2025-01-09:**
 - Implemented Pocket Picks-inspired redesign (futuristic dark theme, neon accents, glassmorphism)
