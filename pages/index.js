@@ -3988,7 +3988,7 @@ const exportVideo = async () => {
 
         {/* EDIT SECTION (combines Materials + Forge) */}
         {currentSection === 'edit' && (
-          <div className="panel rounded-2xl p-12">
+          <div className="panel rounded-2xl p-2 sm:p-12">
             {!video ? (
               <div className="text-center">
                 <Upload className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--accent-warm)' }} />
@@ -4353,7 +4353,7 @@ const exportVideo = async () => {
                   }`}
                 >
                   {/* Video Player Section */}
-                  <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3 mb-1 sm:mb-4">
+                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     <video
                       ref={videoRef}
@@ -4486,7 +4486,7 @@ const exportVideo = async () => {
                   )}
 
                   {/* Playback Controls + Clips Preview Section */}
-                  <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3 mb-1 sm:mb-4">
+                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     {/* Controls Row - always visible */}
                     {anchors.length > 0 ? (
                       <div className="flex items-center justify-center gap-2 mb-3">
@@ -4647,7 +4647,7 @@ const exportVideo = async () => {
                   {/* Unified Layered Timeline - Option B */}
                   <div className="mb-1 sm:mb-4">
                     {/* Unified Timeline Container - Layered Design (Option B) */}
-                    <div className="bg-transparent sm:bg-slate-900/30 rounded-none sm:rounded-lg p-0 sm:p-3">
+                    <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
                         <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)} • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
@@ -6277,7 +6277,7 @@ onMouseLeave={() => {
           {/* End Connected Timelines Box */}
 
           {/* Toolbar - Action Buttons */}
-          <div className="panel rounded-none sm:rounded-2xl p-0 sm:p-4 w-full border-0 sm:border">
+          <div className="panel rounded-lg sm:rounded-2xl p-1 sm:p-4 w-full">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
               {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
               <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
