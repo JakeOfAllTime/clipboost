@@ -3939,9 +3939,9 @@ const exportVideo = async () => {
 
   {/* Main Content Area */}
   <div className="flex-1 overflow-y-auto pb-20 sm:pb-0 relative z-10">
-    <div className="px-1 py-2 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
+    <div className="px-0 py-1 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
       {/* Header */}
-      <div className="mb-3 sm:mb-6 px-2 sm:px-0">
+      <div className="mb-2 sm:mb-6 px-2 sm:px-0">
         <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
           {currentSection === 'edit' ? 'EDIT VIDEO' : 'EXPORT VIDEO'}
         </h2>
@@ -4346,14 +4346,14 @@ const exportVideo = async () => {
 
                 {/* Video Editor - Unified Panel */}
                 <div
-                  className={`panel rounded-xl p-1 sm:p-6 transition-all ${
+                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all ${
                     playbackMode === 'clips'
-                      ? 'ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
-                      : 'ring-2 ring-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.3)]'
+                      ? 'ring-0 sm:ring-2 ring-blue-500/50 shadow-none sm:shadow-[0_0_20px_rgba(59,130,246,0.3)]'
+                      : 'ring-0 sm:ring-2 ring-orange-500/50 shadow-none sm:shadow-[0_0_20px_rgba(249,115,22,0.3)]'
                   }`}
                 >
                   {/* Video Player Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-2 sm:mb-4">
+                  <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     <video
                       ref={videoRef}
@@ -4486,7 +4486,7 @@ const exportVideo = async () => {
                   )}
 
                   {/* Playback Controls + Clips Preview Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-2 sm:mb-4">
+                  <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     {/* Controls Row - always visible */}
                     {anchors.length > 0 ? (
                       <div className="flex items-center justify-center gap-2 mb-3">
@@ -4645,9 +4645,9 @@ const exportVideo = async () => {
                   {/* End Playback Controls + Clips Preview Section */}
 
                   {/* Unified Layered Timeline - Option B */}
-                  <div className="mb-2 sm:mb-4">
+                  <div className="mb-1 sm:mb-4">
                     {/* Unified Timeline Container - Layered Design (Option B) */}
-                    <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3">
+                    <div className="bg-slate-900/30 rounded-none sm:rounded-lg p-1 sm:p-3">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
                         <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)} • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
@@ -6277,7 +6277,7 @@ onMouseLeave={() => {
           {/* End Connected Timelines Box */}
 
           {/* Toolbar - Action Buttons */}
-          <div className="panel rounded-2xl p-2 sm:p-4">
+          <div className="panel rounded-none sm:rounded-2xl p-1 sm:p-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
               {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
               <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
