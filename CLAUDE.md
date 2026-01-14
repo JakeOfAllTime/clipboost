@@ -61,6 +61,344 @@
 
 ---
 
+## Orchestration Framework: Context + Tools + Validators
+
+**Philosophy:** You (Claude) are not just a code generator. You are an intelligent agent operating within a carefully designed environment. Your success depends on three pillars:
+
+```
+┌─────────────────────────────────────────┐
+│   CONTEXT: What you need to know        │
+│   - Business objectives, constraints    │
+│   - Architecture, tech stack, patterns  │
+│   - User workflows, design principles   │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   TOOLS: What you can use               │
+│   - MCPs (Playwright, GitHub, etc.)     │
+│   - Bash commands (git, npm, grep)      │
+│   - File operations (Read, Edit, Glob)  │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   VALIDATORS: How you know success      │
+│   - Screenshots, console logs, tests    │
+│   - Sub-agents, acceptance criteria     │
+│   - User feedback, quality gates        │
+└─────────────────────────────────────────┘
+```
+
+### The LLM Empathy Test (Patrick Ellis)
+
+**Before starting ANY task, close your eyes (metaphorically) and ask:**
+
+> "If I were an AI with ONLY what I've been given, could I complete this task competently?"
+
+**What you DON'T have by default:**
+- ❌ The current UI state (what's on screen)
+- ❌ Recent user interactions (what buttons they clicked)
+- ❌ Business context (why this feature matters)
+- ❌ Style preferences (what "good design" means here)
+- ❌ Architecture constraints (what libraries we can use)
+- ❌ Success criteria (what "done" looks like)
+
+**What you NEED to ask for:**
+- ✅ Screenshots (use Playwright MCP when available)
+- ✅ Console logs (what errors are happening?)
+- ✅ Specific examples ("show me a good vs bad output")
+- ✅ Acceptance criteria ("what does success look like?")
+- ✅ Related code context (read files, grep patterns)
+
+### Context Layer: What You Need to Know
+
+**Business Objectives:**
+- **Mission:** Transform 30-min raw footage → polished 40s social clips in 2 minutes
+- **Target Users:** Content creators (barbershops, cooking, digital art)
+- **Key Metric:** Time to export - must be <2 minutes total (not including upload)
+- **Competitive Edge:** Client-side processing (privacy + speed), frame-accurate precision
+
+**Critical Constraints:**
+- ✅ Client-side ONLY (FFmpeg.wasm, no server uploads)
+- ✅ Vercel-friendly (static export, edge functions for API routes)
+- ✅ Mobile-responsive (50% of users edit on mobile)
+- ✅ Frame-accurate (1/30s precision for anchors)
+- ✅ No localStorage for artifacts (Claude.ai artifact restriction)
+
+**Tech Stack (What You Can Use):**
+```javascript
+// Frontend
+Next.js 13 (Pages router) - NOT App router
+React 18 - Functional components + hooks only
+Tailwind CSS - Utility classes ONLY (no custom CSS unless critical)
+
+// Video Processing
+FFmpeg.wasm - All video ops (client-side, no server)
+Canvas API - Frame extraction, thumbnail generation
+Web Audio API - Music analysis, beat detection (optional)
+
+// AI Integration
+Claude Sonnet 4.5 API - Smart Gen narrative analysis
+Anthropic SDK - For API calls in pages/api/analyze-narrative.js
+
+// Deployment
+Vercel - Hosting, edge functions, preview deployments
+```
+
+**Architecture Patterns (What You Should Follow):**
+- **State management:** `useState`, `useRef`, `useEffect` (no Redux/Zustand)
+- **Memoization:** `useCallback`, `useMemo` for expensive operations
+- **Animations:** `transform` and `opacity` ONLY (GPU-accelerated, 60fps)
+- **File structure:** Single-file components in pages/index.js (~7000 lines)
+- **Styling:** Tailwind utilities → CSS variables → inline styles (in that order)
+
+**Design System (Pocket Picks Aesthetic):**
+- **Colors:** Deep navy bg (#0a0e27), cyan primary (#00d4ff), pink accent (#ff00ff)
+- **Glassmorphism:** `backdrop-filter: blur(10px)` + semi-transparent bg
+- **Neon glow:** `box-shadow: 0 0 20px rgba(0,212,255,0.6)` on hover
+- **Animations:** 0.25s ease transitions, GPU-accelerated only
+- **Typography:** Bold uppercase headers, clear hierarchy, 14px min body text
+
+### Tools Layer: What You Can Use
+
+**File Operations (Preferred):**
+```bash
+# Search for files by pattern
+Glob pattern="**/*.js"
+
+# Search code content
+Grep pattern="analyzeNarrative" output_mode="content" -C=5
+
+# Read any file (supports images, PDFs)
+Read file_path="pages/index.js" offset=2560 limit=80
+
+# Edit existing files (exact string replacement)
+Edit file_path="pages/index.js" old_string="..." new_string="..."
+
+# Create new files (prefer Edit for existing)
+Write file_path="pages/new-component.js" content="..."
+```
+
+**Bash Commands (For System Ops):**
+```bash
+# Git operations
+git status
+git add pages/index.js
+git commit -m "Fix Play Clips stuttering"
+git push origin main
+
+# NPM operations
+npm run dev          # Start dev server
+npm run build        # Production build
+npm install [package] # Add dependency
+
+# Testing
+npm test             # Run tests (when we add them)
+```
+
+**MCPs (Model Context Protocol - When Available):**
+```
+Playwright MCP:
+- Screenshot pages: playwright_screenshot url="http://localhost:3000"
+- Navigate & interact: playwright_navigate, playwright_click
+- Read console logs: playwright_console_logs
+- Emulate devices: playwright_emulate device="iPhone 15"
+
+GitHub MCP (Future):
+- Read issues: github_get_issue number=123
+- Create PRs: github_create_pr title="Fix Smart Gen"
+- Comment on PRs: github_comment pr=456 body="LGTM"
+```
+
+**Sub-Agents (Delegate to Specialists):**
+```bash
+# Design validation
+Task subagent_type="design-reviewer" prompt="Review Export button for accessibility and design standards"
+
+# Smart Gen validation
+Task subagent_type="smart-gen-validator" prompt="Test Smart Gen with cooking video, verify timestamp distribution"
+
+# UX friction audit
+Task subagent_type="ux-friction-auditor" prompt="Identify friction points in clip creation workflow"
+```
+
+### Validators Layer: How You Know Success
+
+**Functional Validation (Does It Work?):**
+- ✅ Play Clips: Transitions smoothly between anchors (no stuttering/hanging)
+- ✅ Smart Gen: Clips distributed across timeline (not all at 0:00)
+- ✅ Export: Video plays correctly in target aspect ratio
+- ✅ Precision Edit: Frame-accurate adjustments (1/30s precision)
+- ✅ Mobile: Touch events work (double-tap, drag, resize)
+
+**Visual Validation (Does It Look Right?):**
+- ✅ Colors match palette (DevTools → Computed → verify hex values)
+- ✅ Animations smooth (60fps, no jank - use Performance tab)
+- ✅ Glassmorphism visible (backdrop-filter blur on panels)
+- ✅ Glow effects present (box-shadow on interactive elements)
+- ✅ Typography consistent (weights, spacing, casing)
+
+**Performance Validation (Is It Fast?):**
+- ✅ Lighthouse score >90 (performance, accessibility, best practices)
+- ✅ No layout thrashing (animations use transform/opacity only)
+- ✅ Minimal re-renders (check React DevTools Profiler)
+- ✅ Bundle size <500kb gzipped (check Vercel build output)
+
+**Accessibility Validation (Is It Usable?):**
+- ✅ ARIA labels on all interactive elements
+- ✅ Keyboard navigation works (Tab, Enter, Escape)
+- ✅ Focus indicators visible (outline or glow)
+- ✅ Color contrast ≥4.5:1 (use WebAIM contrast checker)
+- ✅ Touch targets ≥44px on mobile
+
+**Console Validation (What's Happening?):**
+```javascript
+// Smart Gen validation (check after generation)
+console.log('✅ Phase 1 complete: 100 total frames gathered')
+console.log('🧠 PHASE 2: Analyzing 100 frames with complete context...')
+console.log('✂️ Selected Clips:', clipSelection.selectedClips.length)
+console.log('📍 Zone Distribution:', selectedZoneDistribution)
+
+// Timeline validation (check clip positions)
+anchors.forEach((a, i) => {
+  console.log(`Clip ${i+1}: ${formatTime(a.start)} - ${formatTime(a.end)}`)
+})
+// ✅ GOOD: Clips span 0:00, 5:30, 12:45, 25:30 (distributed)
+// ❌ BAD: All clips at 0:00, 0:02, 0:05 (clustered)
+```
+
+**Sub-Agent Validation (Quality Gates):**
+- ✅ Design reviewer PASS (colors, typography, accessibility)
+- ✅ Smart Gen validator PASS (timestamp distribution, zone coverage)
+- ✅ UX friction auditor PASS (friction score <5/10)
+
+### Iterative Agentic Loop (How to Work)
+
+**Standard Pattern for ANY Task:**
+```
+1. READ CONTEXT
+   ↓ Read CLAUDE.md, pages/CLAUDE.md
+   ↓ Grep for relevant code patterns
+   ↓ Understand existing architecture
+
+2. PLAN APPROACH
+   ↓ Break into sub-tasks (use TodoWrite)
+   ↓ Identify validation criteria
+   ↓ Choose tools needed (Playwright? Sub-agent?)
+
+3. IMPLEMENT
+   ↓ Write code following patterns
+   ↓ Use existing utilities (don't reinvent)
+   ↓ Add console logs for debugging
+
+4. VALIDATE
+   ↓ Test functionality (does it work?)
+   ↓ Check console (any errors?)
+   ↓ Screenshot UI (does it look right?)
+   ↓ Run sub-agent if available
+
+5. ITERATE
+   ↓ If validation fails → fix and re-validate
+   ↓ Max 2-3 iterations
+   ↓ If stuck → ask user for guidance
+
+6. DOCUMENT
+   ↓ Update changelog in CLAUDE.md
+   ↓ Commit with clear message
+   ↓ Mark todos complete
+```
+
+**Example: Fixing Play Clips Stuttering**
+```
+1. READ CONTEXT
+   ✓ Read pages/index.js lines 2560-2630 (RAF loop)
+   ✓ Grep "previewAnchorIndex" to find related state
+   ✓ Understand: RAF updates time, transitions between clips
+
+2. PLAN APPROACH
+   ✓ Todo 1: Identify race condition in seek events
+   ✓ Todo 2: Add isTransitioning flag to pause RAF
+   ✓ Todo 3: Test with 3-clip sequence
+   ✓ Validation: Play Clips should transition smoothly (no frame-by-frame)
+
+3. IMPLEMENT
+   ✓ Add isTransitioning flag in RAF closure
+   ✓ Pause updates during seek, resume after 50ms
+   ✓ Add console log: "Transitioning to clip X"
+
+4. VALIDATE
+   ✓ Test: Upload video → create 3 clips → Play Clips
+   ✓ Check console: "Transitioning to clip 2", "Transitioning to clip 3"
+   ✓ Visual: Smooth playback, no stuttering ✅
+
+5. ITERATE
+   ✓ First attempt worked! No iteration needed.
+
+6. DOCUMENT
+   ✓ Commit: "Fix Play Clips stuttering with simpler transition logic"
+   ✓ Update changelog: "Fixed RAF race condition"
+   ✓ Mark todo complete
+```
+
+### Reducing Friction (Patrick Ellis Principle)
+
+**Friction = Any manual step that slows down iteration**
+
+**High Friction (Avoid):**
+- ❌ Asking user to copy/paste console output
+- ❌ Requiring user to describe UI state
+- ❌ Manual testing of every change
+- ❌ Writing code → commit → push → wait for user feedback loop
+
+**Low Friction (Embrace):**
+- ✅ Use Playwright to screenshot UI automatically
+- ✅ Read console logs programmatically (when MCP available)
+- ✅ Use sub-agents for validation (async, no user needed)
+- ✅ Create validation scripts that run automatically
+
+**Voice-to-Code (Future):**
+- Use Super Whisper or similar for dictation
+- Hotkey → speak → auto-formatted for context
+- Useful for: Quick bug reports, PRD dictation, commit messages
+
+### Always-Visible UI Philosophy
+
+**From ReelForge's Clips Preview Implementation:**
+
+> "If it pops up suddenly after the first action, it should have been
+> visible all along with an empty state." - Patrick Ellis
+
+**Why:**
+- ✅ Reduces surprise (UI structure predictable from start)
+- ✅ Teaches workflow (shows WHERE things will appear)
+- ✅ No layout shift (smooth, professional feel)
+- ✅ Guides next action ("Create clips below to see them here")
+
+**Examples in ReelForge:**
+- ✅ Clips Preview bar: Always visible, shows "Create clips below" when empty
+- ✅ Timeline: Always visible, double-click hint when no clips
+- 🔄 Smart Gen progress: Should show "Ready to analyze" even before starting
+- 🔄 Export options: Should show greyed-out until clips exist
+
+### Cross-Model Review (Advanced)
+
+**From Patrick Ellis Codex vs Claude Code Comparison:**
+
+> "Have Codex review Claude's work and vice versa. Different model
+> personalities catch different issues." - Patrick Ellis
+
+**Model Personalities:**
+- **Sonnet 4.5** = "Entrepreneur" (tactical, iterative, learns by doing)
+- **Opus 4** = "Academic" (strategic, thoughtful, measures twice)
+- **Codex** = "Architect" (systematic, depth-first reasoning)
+
+**Workflow (Future):**
+1. Implementation: Sonnet 4.5 (fast iteration)
+2. Security review: Opus 4 (deep analysis)
+3. Architecture review: Codex (systematic thinking)
+4. Final validation: Sub-agent (acceptance criteria)
+
+---
+
 ## Design Principles & Visual Language
 
 **Aesthetic:** Pocket Picks-inspired futuristic dark theme with neon accents, particle effects, and glassmorphism.
@@ -489,6 +827,19 @@ Use the smart-gen-validator sub-agent to test Smart Gen with Cooking_Mushrooms.m
 ---
 
 ## Changelog
+
+**2025-01-14:**
+- **MAJOR:** Added comprehensive Orchestration Framework section (Context + Tools + Validators)
+- Integrated Patrick Ellis's methodologies from 3 video transcripts:
+  - The LLM Empathy Test (close your eyes, imagine you're the AI)
+  - Reducing friction (eliminate manual steps, use automation)
+  - Always-visible UI philosophy (reduce surprise, teach workflow)
+  - Cross-model review patterns (different personalities catch different issues)
+- Documented all available tools (File ops, Bash, MCPs, Sub-agents)
+- Added validation checklists (Functional, Visual, Performance, Accessibility, Console)
+- Defined standard iterative agentic loop (Read → Plan → Implement → Validate → Iterate → Document)
+- Clarified business objectives, constraints, tech stack, architecture patterns
+- This framework makes Claude Code 10x more effective by providing proper context
 
 **2025-01-09:**
 - Implemented Pocket Picks-inspired redesign (futuristic dark theme, neon accents, glassmorphism)
