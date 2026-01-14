@@ -3939,7 +3939,7 @@ const exportVideo = async () => {
 
   {/* Main Content Area */}
   <div className="flex-1 overflow-y-auto pb-20 sm:pb-0 relative z-10">
-    <div className="p-2 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
+    <div className="px-1 py-2 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
       {/* Header */}
       <div className="mb-3 sm:mb-6 px-2 sm:px-0">
         <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
@@ -6555,7 +6555,7 @@ onMouseLeave={() => {
     }}
   >
     <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-3 mb-6">
   {/* Top Row: Prev/Next Navigation */}
   <div className="flex items-center justify-center gap-4">
     <button
@@ -6578,45 +6578,6 @@ onMouseLeave={() => {
       title="Next Anchor"
     >
       Next →
-    </button>
-  </div>
-
-  {/* Start/End Time Buttons */}
-  <div className="flex items-center justify-center gap-6">
-    <button
-      onClick={() => {
-        setSelectedHandle('start');
-        setPrecisionTime(precisionAnchor.start);
-        if (precisionVideoRef.current) {
-          precisionVideoRef.current.currentTime = precisionAnchor.start;
-        }
-      }}
-      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
-        selectedHandle === 'start'
-          ? 'bg-green-500 text-white shadow-lg shadow-green-500/50 scale-105'
-          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-      }`}
-    >
-      <div className="text-xs opacity-80 mb-1">START</div>
-      <div>{formatTime(precisionAnchor.start)}</div>
-    </button>
-
-    <button
-      onClick={() => {
-        setSelectedHandle('end');
-        setPrecisionTime(precisionAnchor.end);
-        if (precisionVideoRef.current) {
-          precisionVideoRef.current.currentTime = precisionAnchor.end;
-        }
-      }}
-      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
-        selectedHandle === 'end'
-          ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 scale-105'
-          : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-      }`}
-    >
-      <div className="text-xs opacity-80 mb-1">END</div>
-      <div>{formatTime(precisionAnchor.end)}</div>
     </button>
   </div>
 </div>
@@ -6767,19 +6728,46 @@ onMouseLeave={() => {
   </button>
 </div>
 
-<p className="text-xs text-gray-400 text-center mb-4">
-  Click START or END to switch • Hold frame buttons to scrub quickly
-</p>
+{/* START/END Buttons with Current Time Display */}
+<div className="flex items-center justify-center gap-3 mb-3">
+  <button
+    onClick={() => {
+      setSelectedHandle('start');
+      setPrecisionTime(precisionAnchor.start);
+      if (precisionVideoRef.current) {
+        precisionVideoRef.current.currentTime = precisionAnchor.start;
+      }
+    }}
+    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+      selectedHandle === 'start'
+        ? 'bg-green-500 text-white shadow-lg shadow-green-500/50'
+        : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+    }`}
+  >
+    START {formatTime(precisionAnchor.start)}
+  </button>
 
-              {/* Time Display */}
-              <div className="text-center mb-4">
-                <div className="text-2xl font-mono bg-slate-900 rounded-lg px-4 py-2 inline-block">
-                  {formatTime(precisionTime)}
-                </div>
-                <div className="text-sm text-gray-400 mt-1">
-                  Dynamic viewport based on anchor length
-                </div>
-              </div>
+  <div className="text-base font-mono bg-slate-900 rounded-lg px-3 py-2">
+    {formatTime(precisionTime)}
+  </div>
+
+  <button
+    onClick={() => {
+      setSelectedHandle('end');
+      setPrecisionTime(precisionAnchor.end);
+      if (precisionVideoRef.current) {
+        precisionVideoRef.current.currentTime = precisionAnchor.end;
+      }
+    }}
+    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+      selectedHandle === 'end'
+        ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
+        : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+    }`}
+  >
+    END {formatTime(precisionAnchor.end)}
+  </button>
+</div>
 
 {/* Precision Timeline */}
 <div className="relative mb-3 flex-shrink-0">
@@ -6868,18 +6856,6 @@ onMouseLeave={() => {
                   <span>{formatTime(getPrecisionRange(precisionAnchor).start)}</span>
                   <span>{formatTime((getPrecisionRange(precisionAnchor).start + getPrecisionRange(precisionAnchor).end) / 2)}</span>
                   <span>{formatTime(getPrecisionRange(precisionAnchor).end)}</span>
-                </div>
-              </div>
-
-              {/* Anchor Details */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-sm text-gray-400 mb-1">Start Time</div>
-                  <div className="text-lg font-mono text-green-400">{formatTime(precisionAnchor.start)}</div>
-                </div>
-                <div className="bg-slate-900/50 p-4 rounded-lg">
-                  <div className="text-sm text-gray-400 mb-1">End Time</div>
-                  <div className="text-lg font-mono text-red-400">{formatTime(precisionAnchor.end)}</div>
                 </div>
               </div>
 
