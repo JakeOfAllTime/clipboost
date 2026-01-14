@@ -2585,7 +2585,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       setPreviewCurrentTime(newPreviewTime);
 
       // Check if we've reached the end of current segment
-      if (sourceTime >= currentSegment.sourceEnd - 0.1) { // 100ms tolerance
+      if (sourceTime >= currentSegment.sourceEnd - 0.05) { // 50ms tolerance for tighter transitions
         const nextIndex = previewAnchorIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
@@ -2593,15 +2593,20 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           isTransitioning = true;
           const nextSegment = previewTimeline[nextIndex];
 
-          // Simple direct seek without waiting
+          // Seek to next segment and ensure playback continues
           videoRef.current.currentTime = nextSegment.sourceStart;
           setPreviewAnchorIndex(nextIndex);
           setPreviewCurrentTime(nextSegment.previewStart);
 
-          // Small delay to let seek settle
+          // Ensure video continues playing after seek
+          if (videoRef.current.paused) {
+            videoRef.current.play().catch(err => console.error('Play failed:', err));
+          }
+
+          // Minimal delay to let seek settle (reduced from 50ms to 30ms)
           setTimeout(() => {
             isTransitioning = false;
-          }, 50);
+          }, 30);
 
         } else {
           // End of preview - loop or stop
@@ -3908,7 +3913,7 @@ const exportVideo = async () => {
   </div>
 
   {/* Mobile Bottom Navigation */}
-  <div className="sm:hidden fixed bottom-0 left-0 right-0 panel border-t z-50" style={{ borderRadius: 0 }}>
+  <div className={`sm:hidden fixed bottom-0 left-0 right-0 panel border-t z-50 ${showPrecisionModal ? 'hidden' : ''}`} style={{ borderRadius: 0 }}>
     <div className="flex">
       <button
         onClick={() => setCurrentSection('edit')}
@@ -3934,7 +3939,7 @@ const exportVideo = async () => {
 
   {/* Main Content Area */}
   <div className="flex-1 overflow-y-auto pb-20 sm:pb-0 relative z-10">
-    <div className="p-2 sm:p-8 max-w-7xl mx-auto">
+    <div className="p-2 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
       {/* Header */}
       <div className="mb-3 sm:mb-6 px-2 sm:px-0">
         <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
@@ -4468,6 +4473,18 @@ const exportVideo = async () => {
                   </div>
                   {/* End Video Player Section */}
 
+                  {/* Contextual Hints - Progressive Disclosure */}
+                  {!hasCreatedFirstClip && anchors.length === 0 && (
+                    <div className="hint-toast mb-2">
+                      💡 <strong>Get started:</strong> Double-click the clips lane below to mark moments you want to keep
+                    </div>
+                  )}
+                  {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && (
+                    <div className="hint-toast mb-2">
+                      ✨ <strong>Pro tip:</strong> Use Precision Edit (above) for frame-perfect trimming
+                    </div>
+                  )}
+
                   {/* Playback Controls + Clips Preview Section */}
                   <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3 mb-2 sm:mb-4">
                     {/* Controls Row - always visible */}
@@ -4629,18 +4646,6 @@ const exportVideo = async () => {
 
                   {/* Unified Layered Timeline - Option B */}
                   <div className="mb-2 sm:mb-4">
-                    {/* Contextual Hints - Progressive Disclosure */}
-                    {!hasCreatedFirstClip && anchors.length === 0 && (
-                      <div className="hint-toast">
-                        💡 <strong>Get started:</strong> Double-click the clips lane below to mark moments you want to keep
-                      </div>
-                    )}
-                    {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && (
-                      <div className="hint-toast">
-                        ✨ <strong>Pro tip:</strong> Use Precision Edit (below) for frame-perfect trimming
-                      </div>
-                    )}
-
                     {/* Unified Timeline Container - Layered Design (Option B) */}
                     <div className="bg-slate-900/30 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-3">
@@ -4724,8 +4729,7 @@ const exportVideo = async () => {
                           onDoubleClick={(e) => {
                             // Double-click clips lane to create anchor
                             if (!duration) return;
-                            const container = e.currentTarget.parentElement;
-                            const rect = container.getBoundingClientRect();
+                            const rect = e.currentTarget.getBoundingClientRect();
                             const x = e.clientX - rect.left;
                             const percent = Math.max(0, Math.min(1, x / rect.width));
                             const time = percent * duration;
@@ -4766,9 +4770,9 @@ const exportVideo = async () => {
                             );
 
                             if (timeSinceLastTap < 300 && distance < 30) {
-                              const container = e.currentTarget.parentElement;
-                              const rect = container.getBoundingClientRect();
-                              const percent = Math.max(0, Math.min(1, tapPosition.x / rect.width));
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const x = tapPosition.x - rect.left;
+                              const percent = Math.max(0, Math.min(1, x / rect.width));
                               const time = percent * duration;
 
                               const newAnchor = {
