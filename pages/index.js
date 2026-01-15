@@ -5090,10 +5090,25 @@ const exportVideo = async () => {
                               }
 
                               // Step 2: Find high-motion moments
+                              // Debug: log motion score distribution
+                              if (videoAnalysisResult.length > 0) {
+                                const scores = videoAnalysisResult.map(m => m.motionScore);
+                                const maxScore = Math.max(...scores);
+                                const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+                                const sceneChanges = videoAnalysisResult.filter(m => m.sceneChange).length;
+                                console.log('📊 Motion analysis stats:', {
+                                  totalFrames: videoAnalysisResult.length,
+                                  maxScore: maxScore.toFixed(3),
+                                  avgScore: avgScore.toFixed(3),
+                                  sceneChanges
+                                });
+                              }
+
+                              // Use adaptive threshold - take top moments by score rather than fixed threshold
                               const motionCuts = videoAnalysisResult
-                                .filter(m => m.motionScore > 0.6 || m.sceneChange)
+                                .filter(m => m.motionScore > 0.15 || m.sceneChange) // Lowered from 0.6 to 0.15
                                 .sort((a, b) => b.motionScore - a.motionScore)
-                                .slice(0, 8)
+                                .slice(0, 12) // Get more candidates, then filter
                                 .map((m, index) => ({
                                   start: Math.max(0, m.time - 1),
                                   end: Math.min(duration, m.time + 3),
@@ -5184,9 +5199,23 @@ const exportVideo = async () => {
                                 );
 
                                 if (newFrames && newFrames.length > 0) {
-                                  const seekAnalysis = await analyzeSeekResults(newFrames, initialAnalysis.missingMoments);
-                                  if (seekAnalysis && seekAnalysis.foundMoments) {
-                                    allMoments = allMoments.concat(enrichMomentsWithZones(seekAnalysis.foundMoments, zones));
+                                  const seekAnalysis = await analyzeNewFrames(
+                                    allFrames,
+                                    newFrames,
+                                    targetDuration,
+                                    zones,
+                                    initialAnalysis.missingMoments,
+                                    initialAnalysis.suggestedCuts || []
+                                  );
+                                  if (seekAnalysis && seekAnalysis.suggestedCuts) {
+                                    // Convert suggestedCuts to moment format and add to allMoments
+                                    const newMoments = seekAnalysis.suggestedCuts.map(cut => ({
+                                      timestamp: cut.startTime,
+                                      importance: cut.importance || 0.7,
+                                      description: cut.reason,
+                                      source: 'seek'
+                                    }));
+                                    allMoments = allMoments.concat(enrichMomentsWithZones(newMoments, zones));
                                   }
                                 }
                               }
@@ -5286,9 +5315,22 @@ const exportVideo = async () => {
                                 );
 
                                 if (newFrames && newFrames.length > 0) {
-                                  const seekAnalysis = await analyzeSeekResults(newFrames, narrativeResult.missingMoments);
-                                  if (seekAnalysis && seekAnalysis.foundMoments) {
-                                    allMoments = allMoments.concat(enrichMomentsWithZones(seekAnalysis.foundMoments, zones));
+                                  const seekAnalysis = await analyzeNewFrames(
+                                    allFrames,
+                                    newFrames,
+                                    targetDuration,
+                                    zones,
+                                    narrativeResult.missingMoments,
+                                    narrativeResult.suggestedCuts || []
+                                  );
+                                  if (seekAnalysis && seekAnalysis.suggestedCuts) {
+                                    const newMoments = seekAnalysis.suggestedCuts.map(cut => ({
+                                      timestamp: cut.startTime,
+                                      importance: cut.importance || 0.7,
+                                      description: cut.reason,
+                                      source: 'seek'
+                                    }));
+                                    allMoments = allMoments.concat(enrichMomentsWithZones(newMoments, zones));
                                   }
                                 }
                               }
