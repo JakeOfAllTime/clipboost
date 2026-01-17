@@ -5321,11 +5321,11 @@ const exportVideo = async () => {
                                 selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
                               }
 
-                              // Create anchors
+                              // Create anchors (Claude returns startTime/endTime, not start/end)
                               const newAnchors = selectedClips.map((clip, index) => ({
                                 id: Date.now() + index,
-                                start: Math.max(0, clip.start),
-                                end: Math.min(duration, clip.end),
+                                start: Math.max(0, clip.startTime ?? clip.start ?? 0),
+                                end: Math.min(duration, clip.endTime ?? clip.end ?? 0),
                                 _narrativeReason: clip.description || clip.reason || 'Selected moment',
                                 _importance: clip.importance || 0.5
                               }));
@@ -5418,8 +5418,8 @@ const exportVideo = async () => {
 
                               const newAnchors = selectedClips.map((clip, index) => ({
                                 id: Date.now() + index,
-                                start: Math.max(0, clip.start),
-                                end: Math.min(duration, clip.end),
+                                start: Math.max(0, clip.startTime ?? clip.start ?? 0),
+                                end: Math.min(duration, clip.endTime ?? clip.end ?? 0),
                                 _narrativeReason: clip.description || clip.reason || 'Selected moment',
                                 _importance: clip.importance || 0.5
                               }));
