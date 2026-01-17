@@ -98,7 +98,11 @@ const ReelForge = () => {
   const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
 
   // Double-tap tracking for anchor deletion on mobile
-  const anchorTapRef = useRef({ anchorId: null, time: 0 });
+  const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
+
+  // Throttle video seeking during drag for smoother performance
+  const lastSeekTimeRef = useRef(0);
+  const SEEK_THROTTLE_MS = 100; // Only seek every 100ms max
 
   // Mobile edit mode state
   const [previewMuted, setPreviewMuted] = useState(false);
@@ -2430,9 +2434,14 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       musicRef.current.play();
     }
 
-    // Start video
+    // Start video (handle autoplay restrictions)
     if (videoRef.current) {
-      videoRef.current.play();
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn('Autoplay blocked, user interaction required:', err);
+        });
+      }
     }
   }, [anchors, buildPreviewTimeline, seekPreviewTime, music, audioBalance]);
 
@@ -2989,8 +2998,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         ).sort((a, b) => a.start - b.start);
         setAnchors(updated);
 
-        // Sync video to the frame being adjusted (so users can see what they're editing)
-        if (videoRef.current) {
+        // Sync video to the frame being adjusted (throttled for smooth performance)
+        const now = Date.now();
+        if (videoRef.current && now - lastSeekTimeRef.current >= SEEK_THROTTLE_MS) {
+          lastSeekTimeRef.current = now;
           if (dragState.type === 'anchor-left') {
             videoRef.current.currentTime = newStart;
             setCurrentTime(newStart);
@@ -4407,6 +4418,8 @@ const exportVideo = async () => {
                       ref={videoRef}
                       src={videoUrl}
                       className="w-full h-full object-contain"
+                      preload="auto"
+                      playsInline
                       onTimeUpdate={handleTimeUpdate}
                       onLoadedMetadata={handleLoadedMetadata}
                       onEnded={() => setIsPlaying(false)}
@@ -4527,14 +4540,11 @@ const exportVideo = async () => {
                       💡 <strong>Get started:</strong> Double-tap the timeline below to mark moments you want to keep
                     </div>
                   )}
-                  {!hasSeenDeleteHint && anchors.length > 0 && anchors.length <= 3 && (
+                  {anchors.length > 0 && anchors.length <= 3 && (!hasSeenDeleteHint || !hasSeenPrecisionHint) && (
                     <div className="hint-toast mb-2">
-                      🗑️ <strong>Remove clips:</strong> Double-tap any clip to delete it
-                    </div>
-                  )}
-                  {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && hasSeenDeleteHint && (
-                    <div className="hint-toast mb-2">
-                      ✨ <strong>Pro tip:</strong> Use Precision Edit for frame-perfect trimming
+                      {!hasSeenDeleteHint && <span>🗑️ Double-tap clips to delete</span>}
+                      {!hasSeenDeleteHint && !hasSeenPrecisionHint && <span className="mx-2">•</span>}
+                      {!hasSeenPrecisionHint && selectedAnchor && <span>✨ Try <strong>Precision Edit</strong> for frame-perfect trimming</span>}
                     </div>
                   )}
 
@@ -6168,19 +6178,43 @@ const exportVideo = async () => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Double-tap detection for deletion on mobile
-    const now = Date.now();
-    if (anchorTapRef.current.anchorId === anchor.id && now - anchorTapRef.current.time < 300) {
-      // Double-tap detected - delete anchor
-      deleteAnchor(anchor.id);
-      anchorTapRef.current = { anchorId: null, time: 0 };
-      setHasSeenDeleteHint(true);
-      return; // Don't start drag
-    }
-    anchorTapRef.current = { anchorId: anchor.id, time: now };
+    // Record start position for detecting taps vs drags
+    const touch = e.touches[0];
+    anchorTapRef.current.startX = touch.clientX;
+    anchorTapRef.current.startY = touch.clientY;
+    anchorTapRef.current.hasMoved = false;
 
     setSelectedAnchor(anchor.id);
     handleAnchorTouchStart(e, anchor, 'anchor-move');
+  }}
+  onTouchMove={(e) => {
+    // Check if finger moved significantly (indicates drag, not tap)
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - (anchorTapRef.current.startX || 0));
+    const dy = Math.abs(touch.clientY - (anchorTapRef.current.startY || 0));
+    if (dx > 10 || dy > 10) {
+      anchorTapRef.current.hasMoved = true;
+    }
+  }}
+  onTouchEnd={(e) => {
+    e.stopPropagation();
+
+    // Only count as tap if finger didn't move much
+    if (anchorTapRef.current.hasMoved) {
+      anchorTapRef.current = { anchorId: null, time: 0, hasMoved: false };
+      return;
+    }
+
+    // Double-tap detection for deletion
+    const now = Date.now();
+    if (anchorTapRef.current.anchorId === anchor.id && now - anchorTapRef.current.time < 400) {
+      // Double-tap detected - delete anchor
+      deleteAnchor(anchor.id);
+      anchorTapRef.current = { anchorId: null, time: 0, hasMoved: false };
+      setHasSeenDeleteHint(true);
+      return;
+    }
+    anchorTapRef.current = { anchorId: anchor.id, time: now, hasMoved: false };
   }}
 onMouseEnter={() => {
   if (!previewAnchor) {
