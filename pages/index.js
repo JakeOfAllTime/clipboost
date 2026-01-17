@@ -95,6 +95,10 @@ const ReelForge = () => {
   const [hoverTime, setHoverTime] = useState(null); // Hover position on clips timeline
   const [hasSeenPrecisionHint, setHasSeenPrecisionHint] = useState(false);
   const [hasCreatedFirstClip, setHasCreatedFirstClip] = useState(false);
+  const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
+
+  // Double-tap tracking for anchor deletion on mobile
+  const anchorTapRef = useRef({ anchorId: null, time: 0 });
 
   // Mobile edit mode state
   const [previewMuted, setPreviewMuted] = useState(false);
@@ -2845,6 +2849,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (previewAnchor?.id === anchorId) {
       setPreviewAnchor(null);
     }
+    // Mark delete hint as seen
+    setHasSeenDeleteHint(true);
   }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
 
   const handleAnchorClick = useCallback((e, anchor) => {
@@ -2982,6 +2988,21 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           a.id === selectedAnchor ? { ...a, start: newStart, end: newEnd } : a
         ).sort((a, b) => a.start - b.start);
         setAnchors(updated);
+
+        // Sync video to the frame being adjusted (so users can see what they're editing)
+        if (videoRef.current) {
+          if (dragState.type === 'anchor-left') {
+            videoRef.current.currentTime = newStart;
+            setCurrentTime(newStart);
+          } else if (dragState.type === 'anchor-right') {
+            videoRef.current.currentTime = newEnd;
+            setCurrentTime(newEnd);
+          } else if (dragState.type === 'anchor-move') {
+            // When moving whole anchor, show start frame
+            videoRef.current.currentTime = newStart;
+            setCurrentTime(newStart);
+          }
+        }
 
         // Update preview handle state when dragging
         if (previewAnchor?.id === selectedAnchor) {
@@ -3962,7 +3983,7 @@ const exportVideo = async () => {
       </div>
 {/* Restore Toast Notification */}
         {showRestoreToast && (
-          <div className="fixed top-4 right-4 bg-slate-800 border-2 border-amber-600/60 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
+          <div className="fixed top-4 right-4 bg-slate-800 border-2 border-cyan-500/40 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <div className="font-semibold mb-1">Previous Work Found</div>
@@ -3972,7 +3993,7 @@ const exportVideo = async () => {
                 <div className="flex gap-2">
                   <button
                     onClick={restoreAutoSave}
-                    className="px-3 py-1.5 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border border-amber-600/40 hover:border-amber-600/60 rounded text-sm font-semibold transition"
+                    className="px-3 py-1.5 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border border-cyan-500/30 hover:border-cyan-500/40 rounded text-sm font-semibold transition"
                   >
                     Restore
                   </button>
@@ -4376,7 +4397,7 @@ const exportVideo = async () => {
                   className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full border-0 sm:border ${
                     playbackMode === 'clips'
                       ? 'ring-0 sm:ring-2 ring-blue-500/50 shadow-none sm:shadow-[0_0_20px_rgba(59,130,246,0.3)]'
-                      : 'ring-0 sm:ring-2 ring-orange-500/50 shadow-none sm:shadow-[0_0_20px_rgba(249,115,22,0.3)]'
+                      : 'ring-0 sm:ring-2 ring-cyan-500/50 shadow-none sm:shadow-[0_0_20px_rgba(0,212,255,0.3)]'
                   }`}
                 >
                   {/* Video Player Section */}
@@ -4478,7 +4499,7 @@ const exportVideo = async () => {
                         }}
                       >
                         <div
-                          className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 transition-all relative pointer-events-none border-r-2 border-amber-500/60"
+                          className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 transition-all relative pointer-events-none border-r-2 border-cyan-500/50"
                           style={{ width: `${(currentTime / duration) * 100}%` }}
                         >
                           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -4503,12 +4524,17 @@ const exportVideo = async () => {
                   {/* Contextual Hints - Progressive Disclosure */}
                   {!hasCreatedFirstClip && anchors.length === 0 && (
                     <div className="hint-toast mb-2">
-                      💡 <strong>Get started:</strong> Double-click the clips lane below to mark moments you want to keep
+                      💡 <strong>Get started:</strong> Double-tap the timeline below to mark moments you want to keep
                     </div>
                   )}
-                  {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && (
+                  {!hasSeenDeleteHint && anchors.length > 0 && anchors.length <= 3 && (
                     <div className="hint-toast mb-2">
-                      ✨ <strong>Pro tip:</strong> Use Precision Edit (above) for frame-perfect trimming
+                      🗑️ <strong>Remove clips:</strong> Double-tap any clip to delete it
+                    </div>
+                  )}
+                  {!hasSeenPrecisionHint && selectedAnchor && anchors.length > 0 && hasSeenDeleteHint && (
+                    <div className="hint-toast mb-2">
+                      ✨ <strong>Pro tip:</strong> Use Precision Edit for frame-perfect trimming
                     </div>
                   )}
 
@@ -6104,7 +6130,7 @@ const exportVideo = async () => {
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
   }}
-  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-orange-600/40 transition-all select-none"
+  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-cyan-500/40 transition-all select-none"
   style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
   title="Double-click to add anchor"
 >
@@ -6141,6 +6167,18 @@ const exportVideo = async () => {
   onTouchStart={(e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Double-tap detection for deletion on mobile
+    const now = Date.now();
+    if (anchorTapRef.current.anchorId === anchor.id && now - anchorTapRef.current.time < 300) {
+      // Double-tap detected - delete anchor
+      deleteAnchor(anchor.id);
+      anchorTapRef.current = { anchorId: null, time: 0 };
+      setHasSeenDeleteHint(true);
+      return; // Don't start drag
+    }
+    anchorTapRef.current = { anchorId: anchor.id, time: now };
+
     setSelectedAnchor(anchor.id);
     handleAnchorTouchStart(e, anchor, 'anchor-move');
   }}
@@ -6163,7 +6201,7 @@ onMouseLeave={() => {
 
                         {isSelected && (
                           <>
-                            {/* Left handle - Green (Start) - Centered on left edge */}
+                            {/* Left handle - Green (Start) - Expanded touch target with visual handle */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -6185,14 +6223,16 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.start;
                                 }
                               }}
-                              className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 cursor-ew-resize hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/50 transition-all rounded-full touch-none -translate-x-1/2"
+                              className="absolute left-0 top-0 bottom-0 w-8 cursor-ew-resize touch-none -translate-x-1/2 flex items-center justify-center"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust start time"
                             >
-                              {/* Pill-shaped grab handle */}
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
+                              {/* Visible pill-shaped grab handle */}
+                              <div className="w-1 h-full bg-green-500 hover:bg-green-400 transition-all rounded-full relative">
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-8 bg-green-400 rounded-full shadow-lg shadow-green-500/50 border-2 border-white/30" />
+                              </div>
                             </div>
-                            {/* Right handle - Red (End) - Centered on right edge */}
+                            {/* Right handle - Red (End) - Expanded touch target with visual handle */}
                             <div
                               onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -6214,12 +6254,14 @@ onMouseLeave={() => {
                                   previewVideoRef.current.currentTime = anchor.end;
                                 }
                               }}
-                              className="absolute right-0 top-0 bottom-0 w-1 bg-red-500 cursor-ew-resize hover:bg-red-400 hover:shadow-lg hover:shadow-red-500/50 transition-all rounded-full touch-none translate-x-1/2"
+                              className="absolute right-0 top-0 bottom-0 w-8 cursor-ew-resize touch-none translate-x-1/2 flex items-center justify-center"
                               style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
                               title="Drag to adjust end time"
                             >
-                              {/* Pill-shaped grab handle */}
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
+                              {/* Visible pill-shaped grab handle */}
+                              <div className="w-1 h-full bg-red-500 hover:bg-red-400 transition-all rounded-full relative">
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-8 bg-red-400 rounded-full shadow-lg shadow-red-500/50 border-2 border-white/30" />
+                              </div>
                             </div>
                             {/* Precision button */}
                             
@@ -6239,7 +6281,7 @@ onMouseLeave={() => {
     }}
     title=""
     className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
-      previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-amber-600/60'
+      previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-cyan-500/40'
     } p-2 w-80 sm:w-64 sm:p-3 ${
       (anchor.start / duration) < 0.3
         ? 'left-0'
@@ -6278,7 +6320,7 @@ onMouseLeave={() => {
   <div className="flex items-center gap-2">
     <button
       onClick={togglePreviewPlay}
-      className="p-2 bg-gradient-to-br from-gray-700 to-gray-800 border border-amber-600/40 rounded hover:border-amber-600/60"
+      className="p-2 bg-gradient-to-br from-gray-700 to-gray-800 border border-cyan-500/30 rounded hover:border-cyan-500/40"
     >
       {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
     </button>
@@ -6429,7 +6471,7 @@ onMouseLeave={() => {
                 <button
                   onClick={saveConfiguration}
                   disabled={anchors.length === 0}
-                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-amber-600/30 hover:border-amber-600/60 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-cyan-500/30 hover:border-cyan-500/40 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
                 >
                   <Save size={16} />
                   <span className="hidden sm:inline">Save Anchor Config</span>
@@ -6437,7 +6479,7 @@ onMouseLeave={() => {
                 </button>
                 <button
                   onClick={() => loadConfigInputRef.current?.click()}
-                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-amber-600/30 hover:border-amber-600/60 rounded-lg transition flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-cyan-500/30 hover:border-cyan-500/40 rounded-lg transition flex items-center justify-center gap-2 text-sm"
                 >
                   <FolderOpen size={16} />
                   <span className="hidden sm:inline">Load Anchor Config</span>
@@ -6589,7 +6631,7 @@ onMouseLeave={() => {
                     <div className="text-sm text-gray-300 mb-2">Processing... {progress}%</div>
                     <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 border-r-2 border-amber-500/60 transition-all"
+                        className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 border-r-2 border-cyan-500/50 transition-all"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -6868,7 +6910,7 @@ onMouseLeave={() => {
 
                   {/* Anchor visualization */}
                   <div
-                    className="absolute top-0 bottom-0 bg-amber-500/20 border-2 border-amber-500/60 rounded z-10"
+                    className="absolute top-0 bottom-0 bg-cyan-500/20 border-2 border-cyan-500/50 rounded z-10"
                     style={{
                       left: `${((precisionAnchor.start - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`,
                       width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
@@ -6980,7 +7022,7 @@ onMouseLeave={() => {
                         setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
                       }
                     }}
-                    className="w-5 h-5 rounded border-2 border-amber-600/60"
+                    className="w-5 h-5 rounded border-2 border-cyan-500/40"
                   />
                   <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
                     {platform.name}
@@ -7037,7 +7079,7 @@ onMouseLeave={() => {
                   setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
                 }
               }}
-            className="w-5 h-5 rounded border-2 border-amber-600/60 bg-slate-800 checked:bg-white checked:border-amber-600 focus:ring-2 focus:ring-amber-500 cursor-pointer"/>
+            className="w-5 h-5 rounded border-2 border-cyan-500/40 bg-slate-800 checked:bg-white checked:border-amber-600 focus:ring-2 focus:ring-amber-500 cursor-pointer"/>
             <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
               <div className="text-lg">{platform.name}</div>
               {platform.subtitle && (
@@ -7058,7 +7100,7 @@ onMouseLeave={() => {
         <button
           onClick={exportVideo}
           disabled={selectedPlatforms.length === 0}
-          className="flex-1 px-6 py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-amber-600/40 hover:border-amber-600/60 hover:scale-105 hover:shadow-[0_0_16px_rgba(251,146,60,0.5)] rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
+          className="flex-1 px-6 py-3 bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900 border-2 border-cyan-500/30 hover:border-cyan-500/40 hover:scale-105 hover:shadow-[0_0_16px_rgba(0,212,255,0.5)] rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
         >
           Export {selectedPlatforms.length > 1 ? `(${selectedPlatforms.length})` : ''}
         </button>
