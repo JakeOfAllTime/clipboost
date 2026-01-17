@@ -80,6 +80,8 @@ const ReelForge = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState(['vertical']);
   const [videoAnalysis, setVideoAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisPhase, setAnalysisPhase] = useState('');
   const [targetDuration, setTargetDuration] = useState(60);
   const [musicAnalysis, setMusicAnalysis] = useState(null);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
@@ -632,7 +634,7 @@ for (let musicTime = startTime; musicTime < endTime; musicTime += beatInterval) 
 };
 
 // Motion Detection / Video Analysis System (Enhanced)
-const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
+const analyzeVideo = async (videoFile, sensitivity = 0.5, onProgress = null) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     const canvas = document.createElement("canvas");
@@ -652,19 +654,20 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
       canvas.height = 180;
       const videoDuration = video.duration;
 
+      // Target ~80 frames max for performance
+      const TARGET_FRAMES = 80;
+
+      // Calculate interval to achieve target frame count
+      let sampleInterval = Math.max(1, videoDuration / TARGET_FRAMES);
+      const totalSamples = Math.min(TARGET_FRAMES, Math.floor(videoDuration / sampleInterval));
+
       console.log('📹 Video analysis starting:', {
         duration: videoDuration.toFixed(2),
-        durationMinutes: (videoDuration / 60).toFixed(2)
+        durationMinutes: (videoDuration / 60).toFixed(2),
+        sampleInterval: sampleInterval.toFixed(2),
+        totalSamples
       });
 
-      // Adaptive sampling
-      let sampleInterval;
-      if (videoDuration < 300) sampleInterval = 0.5;
-      else if (videoDuration < 1800) sampleInterval = 2;
-      else if (videoDuration < 3600) sampleInterval = 5;
-      else sampleInterval = 10;
-
-      const totalSamples = Math.floor(videoDuration / sampleInterval);
       let currentSample = 0;
 
       // Helper: Calculate histogram (RGB channels)
@@ -845,6 +848,11 @@ const analyzeVideo = async (videoFile, sensitivity = 0.5) => {
 
           previousFrame = currentFrame;
           currentSample++;
+
+          // Report progress
+          if (onProgress) {
+            onProgress(Math.round((currentSample / totalSamples) * 100));
+          }
 
           // Yield to UI
           if (currentSample % 5 === 0) {
@@ -3986,6 +3994,25 @@ const exportVideo = async () => {
           </div>
         )}
 
+        {/* Analysis Progress Indicator */}
+        {isAnalyzing && (
+          <div className="fixed top-4 right-4 bg-slate-800 border border-cyan-500/50 rounded-lg p-4 shadow-xl z-50 min-w-[200px]">
+            <div className="flex items-center gap-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-500 border-t-transparent"></div>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-cyan-400">{analysisPhase || 'Analyzing...'}</div>
+                <div className="text-xs text-gray-400">{analysisProgress}% complete</div>
+              </div>
+            </div>
+            <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
+                style={{ width: `${analysisProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* EDIT SECTION (combines Materials + Forge) */}
         {currentSection === 'edit' && (
           <div className="panel rounded-2xl p-2 sm:p-12">
@@ -5078,15 +5105,20 @@ const exportVideo = async () => {
                             // === MODE 1: QUICK GEN (FREE - Motion Only) ===
                             if (autoGenMode === 'quick') {
                               console.log('⚡ Quick Gen: Motion detection only (FREE)');
+                              setAnalysisPhase('Detecting motion...');
+                              setAnalysisProgress(0);
 
                               // Step 1: Motion detection
                               let videoAnalysisResult = videoAnalysis;
                               if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
                                 console.log('🎬 Running motion detection...');
-                                videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+                                videoAnalysisResult = await analyzeVideo(video, motionSensitivity, (progress) => {
+                                  setAnalysisProgress(progress);
+                                });
                                 setVideoAnalysis(videoAnalysisResult);
                               } else {
                                 console.log('✅ Using cached motion analysis');
+                                setAnalysisProgress(100);
                               }
 
                               // Step 2: Find high-motion moments
@@ -5370,13 +5402,15 @@ const exportVideo = async () => {
                             alert(`Auto-generate failed: ${error.message}`);
                           } finally {
                             setIsAnalyzing(false);
+                            setAnalysisProgress(0);
+                            setAnalysisPhase('');
                           }
                         }}
                         disabled={!duration || isAnalyzing}
                         className="w-full px-4 py-2 bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500 hover:shadow-[0_0_25px_rgba(255,0,255,0.5)] rounded-xl flex items-center justify-center gap-2 font-bold uppercase shadow-lg transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
                       >
                         <Sparkles size={18} className="animate-pulse" />
-                        <span>{isAnalyzing ? 'ANALYZING STORY...' : 'SMART GEN ✨'}</span>
+                        <span>{isAnalyzing ? 'ANALYZING...' : 'AUTO-GEN ✨'}</span>
                       </button>
                     </div>
                   </div>
