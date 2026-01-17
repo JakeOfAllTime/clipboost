@@ -1,1 +1,1 @@
-# ReelForge - Tab-Based Video Editor
+# ReelForge - Quick Cut Video Editor
