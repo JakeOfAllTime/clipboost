@@ -1446,22 +1446,28 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 }
 `;
 
+    // Calculate payload size for debugging
+    const imagePayload = allFrames.map(f => ({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
+    }));
+    const fullPayload = {
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: promptText },
+          ...imagePayload
+        ]
+      }],
+      videoType: 'visual-only'
+    };
+    const payloadSize = JSON.stringify(fullPayload).length;
+    console.log(`📦 API payload: ${(payloadSize / (1024 * 1024)).toFixed(2)}MB (${allFrames.length} frames)`);
+
     const response = await fetch('/api/analyze-narrative', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: promptText },
-            ...allFrames.map(f => ({
-              type: "image",
-              source: { type: "base64", media_type: "image/jpeg", data: f.base64 }
-            }))
-          ]
-        }],
-        videoType: 'visual-only'
-      })
+      body: JSON.stringify(fullPayload)
     });
 
     if (!response.ok) {
@@ -1509,7 +1515,9 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 
   } catch (error) {
     console.error('❌ Comprehensive analysis failed:', error);
-    throw error;
+    console.error('❌ Error details:', error.message);
+    // Don't throw - return null so caller can handle gracefully
+    return null;
   }
 };
 
@@ -5243,9 +5251,12 @@ const exportVideo = async () => {
                             // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
                             else if (autoGenMode === 'smart') {
                               console.log('🧠 Smart Gen: Five-Phase Editorial Workflow (~$0.60-$1.50)');
+                              setAnalysisProgress(0);
+                              setAnalysisPhase('Extracting frames...');
 
                               // PHASE 1: Gather comprehensive frames
                               const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
+                              setAnalysisProgress(20);
 
                               if (allFrames.length === 0) {
                                 alert('Failed to extract any frames from video. Please try again.');
@@ -5253,7 +5264,10 @@ const exportVideo = async () => {
                               }
 
                               // PHASE 2: Identify moments (no clip lengths yet)
+                              setAnalysisPhase('AI analyzing frames...');
+                              console.log('📤 Sending', allFrames.length, 'frames to Claude API...');
                               const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
+                              setAnalysisProgress(50);
 
                               if (!initialAnalysis) {
                                 alert('Narrative analysis failed. Please try again.');
@@ -5276,6 +5290,7 @@ const exportVideo = async () => {
                               let allMoments = enrichMomentsWithZones(initialAnalysis.keyMoments || [], zones);
 
                               // PHASE 3: Agentic seeking for missing moments
+                              setAnalysisPhase('Seeking missing moments...');
                               if (initialAnalysis.missingMoments && initialAnalysis.missingMoments.length > 0) {
                                 const { newFrames, searches } = await seekMissingMoments(
                                   video,
@@ -5308,6 +5323,8 @@ const exportVideo = async () => {
                               }
 
                               // PHASE 4: Supplement with motion detection
+                              setAnalysisProgress(70);
+                              setAnalysisPhase('Detecting motion...');
                               let videoAnalysisResult = videoAnalysis;
                               if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
                                 videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
@@ -5327,6 +5344,8 @@ const exportVideo = async () => {
                               allMoments = allMoments.concat(motionMoments);
 
                               // PHASE 5: Final selection
+                              setAnalysisProgress(85);
+                              setAnalysisPhase('Selecting best clips...');
                               const finalSelection = await selectFinalClips(allMoments, targetDuration, zones);
 
                               if (!finalSelection || !finalSelection.selectedClips) {
@@ -5349,6 +5368,8 @@ const exportVideo = async () => {
                                 _importance: clip.importance || 0.5
                               }));
 
+                              setAnalysisProgress(100);
+                              setAnalysisPhase('Complete!');
                               console.log('✅ SMART GEN COMPLETE:', {
                                 anchorsCreated: newAnchors.length,
                                 totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
