@@ -1015,7 +1015,7 @@ const extractFramesForNarrative = async (videoFile, motionAnalysis = null, frame
 };
 
 // Extract frames from a specific time range (for autonomous frame requests)
-const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount = 6) => {
+const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount = 6, resolution = 320) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     const canvas = document.createElement('canvas');
@@ -1023,13 +1023,15 @@ const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount 
 
     video.src = URL.createObjectURL(videoFile);
     video.muted = true;
+    video.preload = 'auto';
 
     video.onloadedmetadata = async () => {
-      canvas.width = 320;  // Smaller size for additional frames
-      canvas.height = 180;
+      // Adaptive resolution: 320x180 for analysis, can be adjusted
+      canvas.width = resolution;
+      canvas.height = Math.round(resolution * 9 / 16); // Maintain 16:9 aspect ratio
 
       const duration = endTime - startTime;
-      const interval = duration / (frameCount - 1);
+      const interval = frameCount > 1 ? duration / (frameCount - 1) : 0;
       const frames = [];
 
       for (let i = 0; i < frameCount; i++) {
@@ -1038,13 +1040,13 @@ const extractFramesFromRange = async (videoFile, startTime, endTime, frameCount 
         await new Promise((seekResolve) => {
           video.onseeked = () => {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7); // Slightly lower quality for speed
             const base64Data = dataUrl.split(',')[1];
 
             frames.push({
               timestamp: timestamp,
               base64: base64Data,
-              reason: 'requested_by_claude'
+              reason: 'zone_extraction'
             });
 
             seekResolve();
@@ -1147,74 +1149,91 @@ const getTypeSpecificInstructions = (storyType) => {
   return instructions[storyType] || instructions.tutorial; // Default fallback
 };
 
-// PHASE 1: Gather comprehensive frames from strategic zones
+// PHASE 1: Gather comprehensive frames from strategic zones (PARALLEL extraction)
 const gatherComprehensiveFrames = async (videoFile, videoDuration) => {
-  console.log('📊 PHASE 1: Gathering comprehensive video coverage...');
+  console.log('📊 PHASE 1: Gathering comprehensive video coverage (parallel extraction)...');
 
-  // Adaptive zone sizing based on video length - NO GAPS for comprehensive coverage
+  // Optimized zone sizing - fewer zones, fewer frames, faster extraction
+  // Target: ~40-50 frames total (down from 80-100) while maintaining coverage
   const getZones = (duration) => {
-    if (duration < 300) {
-      // Short video (< 5 min): Dense sampling, ~60 frames
+    if (duration < 180) {
+      // Very short video (< 3 min): 5 zones, ~35 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.20, frames: 14 },
-        { name: 'early', start: duration * 0.20, end: duration * 0.40, frames: 12 },
-        { name: 'middle', start: duration * 0.40, end: duration * 0.65, frames: 14 },
-        { name: 'late', start: duration * 0.65, end: duration * 0.85, frames: 12 },
-        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 18 }
+        { name: 'opening', start: 0, end: duration * 0.20, frames: 7 },
+        { name: 'early', start: duration * 0.20, end: duration * 0.40, frames: 7 },
+        { name: 'middle', start: duration * 0.40, end: duration * 0.65, frames: 8 },
+        { name: 'late', start: duration * 0.65, end: duration * 0.85, frames: 6 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 8 }
       ];
-    } else if (duration < 1200) {
-      // Medium video (5-20 min): Balanced coverage, ~80 frames
+    } else if (duration < 600) {
+      // Short video (3-10 min): 5 zones, ~40 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.15, frames: 12 },
-        { name: 'early', start: duration * 0.15, end: duration * 0.30, frames: 12 },
-        { name: 'early_middle', start: duration * 0.30, end: duration * 0.45, frames: 12 },
-        { name: 'middle', start: duration * 0.45, end: duration * 0.60, frames: 12 },
-        { name: 'late_middle', start: duration * 0.60, end: duration * 0.75, frames: 12 },
-        { name: 'late', start: duration * 0.75, end: duration * 0.88, frames: 10 },
-        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 14 }
+        { name: 'opening', start: 0, end: duration * 0.18, frames: 8 },
+        { name: 'early', start: duration * 0.18, end: duration * 0.38, frames: 8 },
+        { name: 'middle', start: duration * 0.38, end: duration * 0.62, frames: 10 },
+        { name: 'late', start: duration * 0.62, end: duration * 0.85, frames: 7 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 9 }
+      ];
+    } else if (duration < 1800) {
+      // Medium video (10-30 min): 5 zones, ~50 frames
+      return [
+        { name: 'opening', start: 0, end: duration * 0.15, frames: 9 },
+        { name: 'early', start: duration * 0.15, end: duration * 0.35, frames: 10 },
+        { name: 'middle', start: duration * 0.35, end: duration * 0.60, frames: 12 },
+        { name: 'late', start: duration * 0.60, end: duration * 0.85, frames: 9 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 10 }
       ];
     } else {
-      // Long video (20+ min): Continuous coverage, ~100 frames
+      // Long video (30+ min): 5 zones, ~55 frames
       return [
-        { name: 'opening', start: 0, end: duration * 0.10, frames: 12 },
-        { name: 'early', start: duration * 0.10, end: duration * 0.22, frames: 12 },
-        { name: 'early_middle', start: duration * 0.22, end: duration * 0.35, frames: 12 },
-        { name: 'middle', start: duration * 0.35, end: duration * 0.50, frames: 14 },
-        { name: 'middle_late', start: duration * 0.50, end: duration * 0.65, frames: 14 },
-        { name: 'late_middle', start: duration * 0.65, end: duration * 0.78, frames: 12 },
-        { name: 'late', start: duration * 0.78, end: duration * 0.88, frames: 10 },
-        { name: 'finale', start: duration * 0.88, end: duration * 0.995, frames: 14 }
+        { name: 'opening', start: 0, end: duration * 0.12, frames: 10 },
+        { name: 'early', start: duration * 0.12, end: duration * 0.32, frames: 11 },
+        { name: 'middle', start: duration * 0.32, end: duration * 0.58, frames: 14 },
+        { name: 'late', start: duration * 0.58, end: duration * 0.85, frames: 10 },
+        { name: 'finale', start: duration * 0.85, end: duration * 0.995, frames: 11 }
       ];
     }
   };
 
   const zones = getZones(videoDuration);
-  const allFrames = [];
+  const totalFrames = zones.reduce((sum, z) => sum + z.frames, 0);
 
-  for (let i = 0; i < zones.length; i++) {
-    const zone = zones[i];
-    console.log(`📸 Zone ${i + 1}/${zones.length}: ${zone.name} (${formatTime(zone.start)}-${formatTime(zone.end)}) - extracting ${zone.frames} frames`);
+  console.log(`⚡ Extracting ${totalFrames} frames from ${zones.length} zones in PARALLEL...`);
 
-    try {
-      const zoneFrames = await extractFramesFromRange(
-        videoFile,
-        zone.start,
-        zone.end,
-        zone.frames
-      );
+  // PARALLEL extraction - kick off all zones simultaneously
+  const extractionPromises = zones.map((zone, i) => {
+    console.log(`📸 Zone ${i + 1}/${zones.length}: ${zone.name} (${formatTime(zone.start)}-${formatTime(zone.end)}) - ${zone.frames} frames`);
 
-      allFrames.push(...zoneFrames.map(f => ({
+    return extractFramesFromRange(
+      videoFile,
+      zone.start,
+      zone.end,
+      zone.frames,
+      320 // 320x180 resolution - small but sufficient for Claude
+    ).then(zoneFrames => ({
+      frames: zoneFrames.map(f => ({
         ...f,
         zone: zone.name,
         zoneIndex: i
-      })));
-
-      console.log(`  ✅ Extracted ${zoneFrames.length} frames from ${zone.name}`);
-    } catch (error) {
+      })),
+      zoneName: zone.name,
+      zoneIndex: i
+    })).catch(error => {
       console.error(`  ❌ Failed to extract frames from ${zone.name}:`, error);
-      // Continue with other zones even if one fails
-    }
-  }
+      return { frames: [], zoneName: zone.name, zoneIndex: i };
+    });
+  });
+
+  // Wait for all zones to complete
+  const results = await Promise.all(extractionPromises);
+
+  // Combine and sort by zone index to maintain order
+  const allFrames = results
+    .sort((a, b) => a.zoneIndex - b.zoneIndex)
+    .flatMap(r => {
+      console.log(`  ✅ Extracted ${r.frames.length} frames from ${r.zoneName}`);
+      return r.frames;
+    });
 
   console.log(`✅ Phase 1 complete: ${allFrames.length} total frames gathered`);
   return { frames: allFrames, zones };
