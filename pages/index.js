@@ -5199,11 +5199,15 @@ const exportVideo = async () => {
                                 });
                               }
 
-                              // Use adaptive threshold - take top moments by score rather than fixed threshold
-                              const motionCuts = videoAnalysisResult
-                                .filter(m => m.motionScore > 0.15 || m.sceneChange) // Lowered from 0.6 to 0.15
-                                .sort((a, b) => b.motionScore - a.motionScore)
-                                .slice(0, 12) // Get more candidates, then filter
+                              // Truly adaptive: take top moments by relative score, not fixed threshold
+                              // Sort all moments by score, take top 15, then filter to those above average
+                              const sortedMoments = [...videoAnalysisResult].sort((a, b) => b.motionScore - a.motionScore);
+                              const avgScore = videoAnalysisResult.reduce((sum, m) => sum + m.motionScore, 0) / videoAnalysisResult.length;
+
+                              // Take moments that are above average OR are scene changes, up to 12
+                              const motionCuts = sortedMoments
+                                .filter(m => m.motionScore > avgScore || m.sceneChange)
+                                .slice(0, 12)
                                 .map((m, index) => ({
                                   start: Math.max(0, m.time - 1),
                                   end: Math.min(duration, m.time + 3),
@@ -5211,11 +5215,23 @@ const exportVideo = async () => {
                                   importance: m.motionScore
                                 }));
 
+                              // Fallback: if no moments above average, just take top 8
+                              const finalMotionCuts = motionCuts.length > 0 ? motionCuts : sortedMoments
+                                .slice(0, 8)
+                                .map((m, index) => ({
+                                  start: Math.max(0, m.time - 1),
+                                  end: Math.min(duration, m.time + 3),
+                                  reason: 'Motion peak',
+                                  importance: m.motionScore
+                                }));
+
+                              console.log(`📍 Quick Gen: Found ${finalMotionCuts.length} motion moments (avg threshold: ${avgScore.toFixed(3)})`);
+
                               // Step 3: Apply gentle beat-sync if enabled
-                              let finalCuts = motionCuts;
+                              let finalCuts = finalMotionCuts;
                               if (enableBeatSync && musicAnalysis?.beatGrid && music) {
                                 console.log('🎵 Applying gentle beat-sync...');
-                                finalCuts = applyGentleBeatSync(motionCuts, musicAnalysis);
+                                finalCuts = applyGentleBeatSync(finalMotionCuts, musicAnalysis);
                               }
 
                               // Step 4: Create anchors
