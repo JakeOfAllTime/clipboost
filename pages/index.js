@@ -2573,39 +2573,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     };
   }, [isPreviewMode, togglePreviewPlayback, stopEnhancedPreview, previewAnchorIndex, previewTimeline, seekPreviewTime]);
 
-  useEffect(() => {
-    if (!isPreviewMode || anchors.length === 0) return;
-
-    const checkAndJump = () => {
-      if (!videoRef.current) return;
-      
-      const currentAnchor = anchors[previewAnchorIndex];
-      if (!currentAnchor) return;
-
-      const currentTime = videoRef.current.currentTime;
-
-      if (currentTime >= currentAnchor.end) {
-        const nextIndex = previewAnchorIndex + 1;
-        
-        if (nextIndex < anchors.length) {
-          setPreviewAnchorIndex(nextIndex);
-          videoRef.current.currentTime = anchors[nextIndex].start;
-        } else {
-          stopPreviewMode();
-        }
-      }
-    };
-
-    previewIntervalRef.current = setInterval(checkAndJump, 100);
-
-    return () => {
-      if (previewIntervalRef.current) {
-        clearInterval(previewIntervalRef.current);
-      }
-    };
-  }, [isPreviewMode, previewAnchorIndex, anchors]);
-
-  // Enhanced preview playback monitoring with RAF
+  // Enhanced preview playback monitoring with RAF (ONLY system for transitions)
   useEffect(() => {
     if (!isPreviewMode || !isPreviewPlaying || previewTimeline.length === 0) {
       if (previewAnimationRef.current) {
@@ -2615,10 +2583,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    let isTransitioning = false;
+    // Use ref for transition state to persist across RAF calls
+    const transitioningRef = { current: false };
 
     const updatePreviewTime = () => {
-      if (!videoRef.current || isTransitioning) {
+      if (!videoRef.current || transitioningRef.current) {
         previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
         return;
       }
@@ -2633,15 +2602,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       setPreviewCurrentTime(newPreviewTime);
 
       // Check if we've reached the end of current segment
-      if (sourceTime >= currentSegment.sourceEnd - 0.05) { // 50ms tolerance for tighter transitions
+      if (sourceTime >= currentSegment.sourceEnd - 0.05) {
         const nextIndex = previewAnchorIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
-          // Jump to next segment
-          isTransitioning = true;
+          // Mark transitioning to block RAF updates during seek
+          transitioningRef.current = true;
           const nextSegment = previewTimeline[nextIndex];
 
-          // Seek to next segment and ensure playback continues
+          // Seek to next segment
           videoRef.current.currentTime = nextSegment.sourceStart;
           setPreviewAnchorIndex(nextIndex);
           setPreviewCurrentTime(nextSegment.previewStart);
@@ -2651,10 +2620,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             videoRef.current.play().catch(err => console.error('Play failed:', err));
           }
 
-          // Minimal delay to let seek settle (reduced from 50ms to 30ms)
+          // Wait for seek to complete before resuming RAF updates (increased from 30ms to 100ms for reliability)
           setTimeout(() => {
-            isTransitioning = false;
-          }, 30);
+            transitioningRef.current = false;
+          }, 100);
 
         } else {
           // End of preview - loop or stop
