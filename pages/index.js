@@ -36,6 +36,7 @@ const ReelForge = () => {
   const [activeVideo, setActiveVideo] = useState('A'); // 'A' or 'B'
   const videoBRef = useRef(null); // Second video element for crossfade
   const standbyReadyRef = useRef(false); // Track if standby video is seeked and ready
+  const waitingForStandbyRef = useRef(null); // Track timestamp when we started waiting for standby
 
   // Music state
   const [music, setMusic] = useState(null);
@@ -2767,7 +2768,16 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
           // GAPLESS SWAP: If standby is ready, instant transition
           if (standbyReadyRef.current && standbyVideoEl) {
-            console.log('✅ GAPLESS SWAP: Standby ready, instant transition');
+            // Log if we were waiting
+            if (waitingForStandbyRef.current) {
+              const waitDuration = Date.now() - waitingForStandbyRef.current;
+              console.log(`✅ GAPLESS SWAP: Standby ready after waiting ${waitDuration}ms`);
+            } else {
+              console.log('✅ GAPLESS SWAP: Standby ready, instant transition');
+            }
+
+            // Reset waiting timer (successful swap)
+            waitingForStandbyRef.current = null;
 
             // Pause active video
             activeVideoEl.pause();
@@ -2788,14 +2798,39 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               console.log('🔄 Pre-seeking new standby to clip', afterNextIndex);
               activeVideoEl.currentTime = afterNextSegment.sourceStart;
             }
-          } else {
-            console.warn('⚠️ FALLBACK: Standby NOT ready, using visible seek (THIS CAUSES STUTTER)');
+          } else if (standbyVideoEl) {
+            // WAIT FOR STANDBY: Pause and give it time to finish seeking
+            console.warn('⏸️ WAITING: Standby not ready yet, pausing to wait...');
 
-            // Fallback: standby not ready, use old method (visible seek)
+            // Pause active video to wait for standby
+            if (!activeVideoEl.paused) {
+              activeVideoEl.pause();
+            }
+
+            // Check if we've been waiting too long (timeout after 1 second)
+            if (!waitingForStandbyRef.current) {
+              waitingForStandbyRef.current = Date.now();
+            }
+
+            const waitTime = Date.now() - waitingForStandbyRef.current;
+
+            if (waitTime > 1000) {
+              // Timeout: give up and do visible seek
+              console.error('❌ TIMEOUT: Standby took too long, forcing visible seek');
+              waitingForStandbyRef.current = null;
+              activeVideoEl.currentTime = nextSegment.sourceStart;
+              setPreviewAnchorIndex(nextIndex);
+              setPreviewCurrentTime(nextSegment.previewStart);
+              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
+            }
+            // Otherwise keep waiting, RAF will check again next frame
+
+          } else {
+            console.error('❌ ERROR: No standby video element available');
+            // Fallback: no standby video, use visible seek
             activeVideoEl.currentTime = nextSegment.sourceStart;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
-
             if (activeVideoEl.paused) {
               activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
             }
