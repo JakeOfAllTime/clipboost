@@ -2354,19 +2354,22 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setMusic(null);
     setMusicUrl(null);
 
-    // Optimize video in background for instant seeking
+    // OPTIMIZATION TEMPORARILY DISABLED (takes several minutes)
+    // Testing dual-video system with original video first
+    // Once dual-video works smoothly, we can re-enable optimization for even better performance
+
+    /* UNCOMMENT TO RE-ENABLE KEYFRAME OPTIMIZATION:
     if (ffmpeg && ffmpegLoaded) {
       const optimizedFile = await optimizeVideoForEditing(file);
       if (optimizedFile) {
-        // Replace with optimized version for editing
         const optimizedUrl = URL.createObjectURL(optimizedFile);
         setVideo(optimizedFile);
         setVideoUrl(optimizedUrl);
-        // Clean up old URL
         URL.revokeObjectURL(url);
         console.log('✅ Now using optimized video for editing (instant seeks enabled)');
       }
     }
+    */
 
  try {
     const saved = localStorage.getItem('clipboost-autosave');
@@ -2710,7 +2713,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     };
   }, [isPreviewMode, togglePreviewPlayback, stopEnhancedPreview, previewAnchorIndex, previewTimeline, seekPreviewTime]);
 
-  // Dual-video gapless preview (professional NLE quality)
+  // Dual-video gapless preview (professional NLE quality) - WITH DEBUG LOGGING
   useEffect(() => {
     if (!isPreviewMode || !isPreviewPlaying || previewTimeline.length === 0) {
       if (previewAnimationRef.current) {
@@ -2719,6 +2722,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
       return;
     }
+
+    console.log('🎬 RAF Loop Started:', {
+      activeVideo,
+      previewAnchorIndex,
+      totalClips: previewTimeline.length,
+      standbyReady: standbyReadyRef.current
+    });
 
     const updatePreviewTime = () => {
       // Get active and standby video refs
@@ -2743,16 +2753,27 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       if (sourceTime >= currentSegment.sourceEnd - 0.05) {
         const nextIndex = previewAnchorIndex + 1;
 
+        console.log('⏭️ Clip ending, attempting transition:', {
+          fromClip: previewAnchorIndex,
+          toClip: nextIndex,
+          activeVideo,
+          standbyReady: standbyReadyRef.current,
+          sourceTime,
+          segmentEnd: currentSegment.sourceEnd
+        });
+
         if (nextIndex < previewTimeline.length) {
           const nextSegment = previewTimeline[nextIndex];
 
           // GAPLESS SWAP: If standby is ready, instant transition
           if (standbyReadyRef.current && standbyVideoEl) {
+            console.log('✅ GAPLESS SWAP: Standby ready, instant transition');
+
             // Pause active video
             activeVideoEl.pause();
 
             // Play standby video (already seeked and ready)
-            standbyVideoEl.play().catch(err => console.error('Standby play failed:', err));
+            standbyVideoEl.play().catch(err => console.error('❌ Standby play failed:', err));
 
             // Swap active video
             setActiveVideo(activeVideo === 'A' ? 'B' : 'A');
@@ -2764,20 +2785,24 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             if (afterNextIndex < previewTimeline.length) {
               standbyReadyRef.current = false;
               const afterNextSegment = previewTimeline[afterNextIndex];
+              console.log('🔄 Pre-seeking new standby to clip', afterNextIndex);
               activeVideoEl.currentTime = afterNextSegment.sourceStart;
             }
           } else {
+            console.warn('⚠️ FALLBACK: Standby NOT ready, using visible seek (THIS CAUSES STUTTER)');
+
             // Fallback: standby not ready, use old method (visible seek)
             activeVideoEl.currentTime = nextSegment.sourceStart;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
 
             if (activeVideoEl.paused) {
-              activeVideoEl.play().catch(err => console.error('Play failed:', err));
+              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
             }
           }
 
         } else {
+          console.log('🏁 Preview complete');
           // End of preview - loop or stop
           setIsPreviewPlaying(false);
           activeVideoEl.pause();
@@ -4624,6 +4649,13 @@ const exportVideo = async () => {
                       onTimeUpdate={handleTimeUpdate}
                       onLoadedMetadata={handleLoadedMetadata}
                       onEnded={() => setIsPlaying(false)}
+                      onSeeked={() => {
+                        if (isPreviewMode && activeVideo === 'B') {
+                          // Video A is standby
+                          console.log('✅ Video A seeked (standby ready)');
+                          standbyReadyRef.current = true;
+                        }
+                      }}
                     />
                     {/* Video B - Standby (for gapless clip transitions) */}
                     <video
@@ -4634,7 +4666,13 @@ const exportVideo = async () => {
                       }`}
                       preload="auto"
                       playsInline
-                      onSeeked={() => { standbyReadyRef.current = true; }}
+                      onSeeked={() => {
+                        if (isPreviewMode && activeVideo === 'A') {
+                          // Video B is standby
+                          console.log('✅ Video B seeked (standby ready)');
+                          standbyReadyRef.current = true;
+                        }
+                      }}
                     />
 
                     {/* Play/Pause Overlay Button */}
