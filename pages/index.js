@@ -7,9 +7,12 @@ const ReelForge = () => {
   // Core video state
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
+  const [originalVideoFile, setOriginalVideoFile] = useState(null); // Keep original for export
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0); // Only for initial value & explicit seeks
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isOptimizingVideo, setIsOptimizingVideo] = useState(false);
+  const [optimizationProgress, setOptimizationProgress] = useState(0);
 
   // Performance: Use refs for 60fps updates (avoid re-renders)
   const currentTimeRef = useRef(0);
@@ -2265,8 +2268,62 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   });
 };
 
+  // Optimize video with frequent keyframes for instant seeking (professional NLE quality)
+  const optimizeVideoForEditing = async (videoFile) => {
+    if (!ffmpeg || !ffmpegLoaded) {
+      console.warn('FFmpeg not loaded, skipping optimization');
+      return null;
+    }
+
+    try {
+      setIsOptimizingVideo(true);
+      setOptimizationProgress(0);
+      console.log('🔧 Optimizing video for editing (adding keyframes)...');
+
+      // Set up progress tracking for optimization
+      ffmpeg.on('progress', ({ progress: prog }) => {
+        setOptimizationProgress(Math.min(95, Math.round(prog * 100)));
+      });
+
+      // Write input file to FFmpeg filesystem
+      await ffmpeg.writeFile('input.mp4', await fetchFile(videoFile));
+
+      // Re-mux with frequent keyframes for instant seeking
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',      // Speed over compression
+        '-g', '15',                   // Keyframe every 15 frames (~0.5s at 30fps)
+        '-keyint_min', '15',          // Min keyframe interval
+        '-sc_threshold', '0',         // Disable scene detection (force keyframes)
+        '-c:a', 'copy',               // Copy audio without re-encoding
+        'optimized.mp4'
+      ]);
+
+      // Read optimized video
+      const data = await ffmpeg.readFile('optimized.mp4');
+      const optimizedBlob = new Blob([data.buffer], { type: 'video/mp4' });
+      const optimizedFile = new File([optimizedBlob], videoFile.name, { type: 'video/mp4' });
+
+      // Cleanup
+      await ffmpeg.deleteFile('input.mp4');
+      await ffmpeg.deleteFile('optimized.mp4');
+
+      console.log('✅ Video optimized for editing (instant seeking enabled)');
+      setOptimizationProgress(100);
+      setIsOptimizingVideo(false);
+
+      return optimizedFile;
+    } catch (error) {
+      console.error('❌ Video optimization failed:', error);
+      setIsOptimizingVideo(false);
+      // Return original file if optimization fails
+      return null;
+    }
+  };
+
   // Video handlers
-  const handleVideoUpload = (e) => {
+  const handleVideoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -2276,6 +2333,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
+    // Store original file for export (maintains quality)
+    setOriginalVideoFile(file);
+
+    // Create URL for immediate preview
     const url = URL.createObjectURL(file);
     setVideo(file);
     setVideoUrl(url);
@@ -2287,6 +2348,21 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setCurrentTime(0);
     setMusic(null);
     setMusicUrl(null);
+
+    // Optimize video in background for instant seeking
+    if (ffmpeg && ffmpegLoaded) {
+      const optimizedFile = await optimizeVideoForEditing(file);
+      if (optimizedFile) {
+        // Replace with optimized version for editing
+        const optimizedUrl = URL.createObjectURL(optimizedFile);
+        setVideo(optimizedFile);
+        setVideoUrl(optimizedUrl);
+        // Clean up old URL
+        URL.revokeObjectURL(url);
+        console.log('✅ Now using optimized video for editing (instant seeks enabled)');
+      }
+    }
+
  try {
     const saved = localStorage.getItem('clipboost-autosave');
     if (saved) {
@@ -3708,7 +3784,10 @@ const exportVideo = async () => {
   setShowExportModal(false);
 
   try {
-    await ffmpeg.writeFile('input.mp4', await fetchFile(video));
+    // Use original video file for export (maintains quality)
+    // If no original (old projects), use current video
+    const fileToExport = originalVideoFile || video;
+    await ffmpeg.writeFile('input.mp4', await fetchFile(fileToExport));
 
     // Process clips
     let clips = [];
@@ -4106,6 +4185,23 @@ const exportVideo = async () => {
               </div>
             ) : (
               <div className="h-full flex flex-col">
+                {/* Optimization Progress Indicator */}
+                {isOptimizingVideo && (
+                  <div className="mb-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm font-semibold text-cyan-400">Optimizing for editing...</span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
+                        style={{ width: `${optimizationProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Adding keyframes for instant seeking (professional NLE quality)</p>
+                  </div>
+                )}
+
                 {/* MEDIA CENTER - Collapsible */}
                 <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full border-0 sm:border">
                   <button
