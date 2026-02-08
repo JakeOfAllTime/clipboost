@@ -8,8 +8,14 @@ const ReelForge = () => {
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0); // Only for initial value & explicit seeks
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Performance: Use refs for 60fps updates (avoid re-renders)
+  const currentTimeRef = useRef(0);
+  const playheadRef = useRef(null); // Main timeline playhead
+  const playheadProgressRef = useRef(null); // Progress bar
+  const timeDisplayRef = useRef(null); // Time text display
 
   // Preview mode state
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -2319,11 +2325,25 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   };
 
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+  const handleTimeUpdate = useCallback(() => {
+    if (!videoRef.current || duration === 0) return;
+
+    const time = videoRef.current.currentTime;
+    currentTimeRef.current = time;
+
+    // Direct DOM updates - no React re-render (60fps optimization)
+    const percent = (time / duration) * 100;
+
+    if (playheadRef.current) {
+      playheadRef.current.style.left = `${percent}%`;
     }
-  };
+    if (playheadProgressRef.current) {
+      playheadProgressRef.current.style.width = `${percent}%`;
+    }
+    if (timeDisplayRef.current) {
+      timeDisplayRef.current.textContent = `${formatTime(time)} / ${formatTime(duration)}`;
+    }
+  }, [duration]);
 
   // Preview mode functions
   const startPreviewMode = () => {
@@ -2763,7 +2783,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const percent = Math.max(0, Math.min(1, x / rect.width));
     const time = percent * duration;
     videoRef.current.currentTime = time;
-    setCurrentTime(time);
+    currentTimeRef.current = time;
+    setCurrentTime(time); // Update state for initial render
   }, [duration]);
 
   const handleTimelineMouseDown = useCallback((e) => {
@@ -2818,7 +2839,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     const newAnchor = {
       id: Date.now(),
-      start: currentTime,
+      start: currentTimeRef.current,
       end: Math.min(currentTime + 2, duration)
     };
 
@@ -3870,10 +3891,14 @@ const exportVideo = async () => {
         togglePlay();
       } else if (e.code === 'ArrowLeft' && videoRef.current) {
         e.preventDefault();
-        videoRef.current.currentTime = Math.max(0, currentTime - 1);
+        const newTime = Math.max(0, currentTimeRef.current - 1);
+        videoRef.current.currentTime = newTime;
+        currentTimeRef.current = newTime;
       } else if (e.code === 'ArrowRight' && videoRef.current) {
         e.preventDefault();
-        videoRef.current.currentTime = Math.min(duration, currentTime + 1);
+        const newTime = Math.min(duration, currentTimeRef.current + 1);
+        videoRef.current.currentTime = newTime;
+        currentTimeRef.current = newTime;
       } else if ((e.code === 'Delete' || e.code === 'Backspace') && selectedAnchor) {
         e.preventDefault();
         deleteAnchor(selectedAnchor);
@@ -4729,7 +4754,9 @@ const exportVideo = async () => {
                     <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
-                        <div className="text-xs text-gray-400">{formatTime(currentTime)} / {formatTime(duration)} • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}</div>
+                        <div className="text-xs text-gray-400">
+                          <span ref={timeDisplayRef}>{formatTime(currentTime)} / {formatTime(duration)}</span> • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}
+                        </div>
                       </div>
 
                       {/* Layered Timeline: Top = Playhead Track, Bottom = Clips Lane */}
@@ -4778,6 +4805,7 @@ const exportVideo = async () => {
 
                           {/* Playhead - spans full height of timeline */}
                           <div
+                            ref={playheadRef}
                             className="absolute top-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none"
                             style={{ left: `${(currentTime / duration) * 100}%`, height: '160px', zIndex: 50 }}
                           >
@@ -4786,6 +4814,7 @@ const exportVideo = async () => {
 
                           {/* Progress bar fill */}
                           <div
+                            ref={playheadProgressRef}
                             className="absolute bottom-0 left-0 h-1 bg-cyan-500/30 pointer-events-none"
                             style={{ width: `${(currentTime / duration) * 100}%` }}
                           />
