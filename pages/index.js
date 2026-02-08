@@ -100,6 +100,11 @@ const ReelForge = () => {
   // Double-tap tracking for anchor deletion on mobile
   const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
 
+  // Hold-to-drag tracking for easier anchor movement on mobile
+  const holdTimerRef = useRef(null);
+  const [holdingAnchor, setHoldingAnchor] = useState(null);
+  const HOLD_DURATION_MS = 400; // Hold for 400ms to activate drag
+
   // Throttle video seeking during drag for smoother performance
   const lastSeekTimeRef = useRef(0);
   const SEEK_THROTTLE_MS = 100; // Only seek every 100ms max
@@ -2583,11 +2588,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    // Use ref for transition state to persist across RAF calls
-    const transitioningRef = { current: false };
-
     const updatePreviewTime = () => {
-      if (!videoRef.current || transitioningRef.current) {
+      if (!videoRef.current) {
         previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
         return;
       }
@@ -2606,11 +2608,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         const nextIndex = previewAnchorIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
-          // Mark transitioning to block RAF updates during seek
-          transitioningRef.current = true;
           const nextSegment = previewTimeline[nextIndex];
 
-          // Seek to next segment
+          // Seek to next segment immediately (no delay)
           videoRef.current.currentTime = nextSegment.sourceStart;
           setPreviewAnchorIndex(nextIndex);
           setPreviewCurrentTime(nextSegment.previewStart);
@@ -2619,11 +2619,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           if (videoRef.current.paused) {
             videoRef.current.play().catch(err => console.error('Play failed:', err));
           }
-
-          // Wait for seek to complete before resuming RAF updates (increased from 30ms to 100ms for reliability)
-          setTimeout(() => {
-            transitioningRef.current = false;
-          }, 100);
 
         } else {
           // End of preview - loop or stop
@@ -2903,30 +2898,48 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const handleAnchorMouseDown = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
-    setDragState({
-      active: true,
-      type: dragType,
-      startX: e.clientX || e.touches?.[0]?.clientX || 0,
-      anchorSnapshot: { ...anchor }
-    });
+
+    // Start hold timer for drag activation
+    setHoldingAnchor({ id: anchor.id, type: dragType });
+    holdTimerRef.current = setTimeout(() => {
+      // After hold duration, activate drag mode with haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate([30, 10, 30]); // Stronger feedback on grab
+      }
+      setDragState({
+        active: true,
+        type: dragType,
+        startX: e.clientX || e.touches?.[0]?.clientX || 0,
+        anchorSnapshot: { ...anchor }
+      });
+    }, HOLD_DURATION_MS);
   }, []);
 
   const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent click interference and scrolling
 
-    // Haptic feedback if supported
+    // Initial haptic feedback on touch
     if (navigator.vibrate) {
       navigator.vibrate(10);
     }
 
     setSelectedAnchor(anchor.id);
-    setDragState({
-      active: true,
-      type: dragType,
-      startX: e.touches?.[0]?.clientX || 0,
-      anchorSnapshot: { ...anchor }
-    });
+
+    // Start hold timer for drag activation
+    setHoldingAnchor({ id: anchor.id, type: dragType });
+    holdTimerRef.current = setTimeout(() => {
+      // After hold duration, activate drag mode with stronger haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate([30, 10, 30]); // "Grabbed" feeling
+      }
+      setDragState({
+        active: true,
+        type: dragType,
+        startX: e.touches?.[0]?.clientX || 0,
+        anchorSnapshot: { ...anchor }
+      });
+    }, HOLD_DURATION_MS);
   }, []);
 
   // Persistent drag handlers with 60fps throttling (optimized)
@@ -3043,6 +3056,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (rafIdRef.current) {
       cancelAnimationFrame(rafIdRef.current);
     }
+
+    // Cancel hold timer if released before hold duration
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    setHoldingAnchor(null);
 
     const { dragState, anchors, saveToHistory } = dragDataRef.current;
 
@@ -6251,7 +6271,9 @@ onMouseLeave={() => {
     setHoveredAnchor(null);
   }
 }}
-  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition touch-manipulation`}
+  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition-all touch-manipulation ${
+    holdingAnchor?.id === anchor.id ? 'scale-110 shadow-lg shadow-cyan-500/50' : ''
+  }`}
   style={{ touchAction: 'none', zIndex: 10 }}
 >
                         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
