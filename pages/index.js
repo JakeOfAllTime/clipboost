@@ -32,6 +32,11 @@ const ReelForge = () => {
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const previewAnimationRef = useRef(null);
 
+  // Dual-video system for gapless preview (professional NLE quality)
+  const [activeVideo, setActiveVideo] = useState('A'); // 'A' or 'B'
+  const videoBRef = useRef(null); // Second video element for crossfade
+  const standbyReadyRef = useRef(false); // Track if standby video is seeked and ready
+
   // Music state
   const [music, setMusic] = useState(null);
   const [musicUrl, setMusicUrl] = useState(null);
@@ -2532,8 +2537,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, [findSegmentAtTime, music]);
 
-  // Start enhanced preview mode
-  const startEnhancedPreview = useCallback(() => {
+  // Start enhanced preview mode with dual-video system
+  const startEnhancedPreview = useCallback(async () => {
     if (anchors.length === 0) {
       alert('Add anchors first to preview');
       return;
@@ -2542,14 +2547,43 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     buildPreviewTimeline();
     setIsPreviewMode(true);
     setPreviewCurrentTime(0);
-    setIsPreviewPlaying(true);
+    setPreviewAnchorIndex(0);
 
-    // Seek to start
-    seekPreviewTime(0);
+    // Initialize dual-video system for gapless playback
+    const videoA = videoRef.current;
+    const videoB = videoBRef.current;
+
+    if (!videoA || !videoB) {
+      console.error('Video elements not ready');
+      return;
+    }
+
+    // Use anchors directly (timeline will be built from these)
+    const firstAnchor = anchors[0];
+    const secondAnchor = anchors.length > 1 ? anchors[1] : null;
+
+    // Pre-seek both videos for gapless transitions
+    videoA.currentTime = firstAnchor.start;
+    if (secondAnchor) {
+      standbyReadyRef.current = false;
+      videoB.currentTime = secondAnchor.start;
+    }
+
+    // Set Video A as active
+    setActiveVideo('A');
+
+    // Wait for Video A to be seeked and ready
+    await new Promise((resolve) => {
+      const onSeeked = () => {
+        videoA.removeEventListener('seeked', onSeeked);
+        resolve();
+      };
+      videoA.addEventListener('seeked', onSeeked);
+    });
 
     // Set up Web Audio API mixer
-    if (videoRef.current && musicRef.current) {
-      setupAudioMixer(videoRef.current, musicRef.current);
+    if (videoA && musicRef.current) {
+      setupAudioMixer(videoA, musicRef.current);
 
       // Resume audio context if suspended
       if (audioContextRef.current?.state === 'suspended') {
@@ -2557,21 +2591,23 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
     }
 
-    // Start music
+    // Start music from beginning
     if (music && musicRef.current) {
+      musicRef.current.currentTime = 0;
       musicRef.current.play();
     }
 
-    // Start video (handle autoplay restrictions)
-    if (videoRef.current) {
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(err => {
-          console.warn('Autoplay blocked, user interaction required:', err);
-        });
-      }
+    // Start video A playback
+    setIsPreviewPlaying(true);
+    const playPromise = videoA.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(err => {
+        console.warn('Autoplay blocked, user interaction required:', err);
+      });
     }
-  }, [anchors, buildPreviewTimeline, seekPreviewTime, music, audioBalance]);
+
+    console.log('✅ Dual-video preview initialized (Video A active, Video B standby)');
+  }, [anchors, buildPreviewTimeline, music, audioBalance]);
 
   // Stop enhanced preview
   const stopEnhancedPreview = useCallback(() => {
@@ -2674,7 +2710,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     };
   }, [isPreviewMode, togglePreviewPlayback, stopEnhancedPreview, previewAnchorIndex, previewTimeline, seekPreviewTime]);
 
-  // Enhanced preview playback monitoring with RAF (ONLY system for transitions)
+  // Dual-video gapless preview (professional NLE quality)
   useEffect(() => {
     if (!isPreviewMode || !isPreviewPlaying || previewTimeline.length === 0) {
       if (previewAnimationRef.current) {
@@ -2685,7 +2721,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
 
     const updatePreviewTime = () => {
-      if (!videoRef.current) {
+      // Get active and standby video refs
+      const activeVideoEl = activeVideo === 'A' ? videoRef.current : videoBRef.current;
+      const standbyVideoEl = activeVideo === 'A' ? videoBRef.current : videoRef.current;
+
+      if (!activeVideoEl) {
         previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
         return;
       }
@@ -2693,7 +2733,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const currentSegment = previewTimeline[previewAnchorIndex];
       if (!currentSegment) return;
 
-      const sourceTime = videoRef.current.currentTime;
+      const sourceTime = activeVideoEl.currentTime;
       const offset = sourceTime - currentSegment.sourceStart;
       const newPreviewTime = currentSegment.previewStart + offset;
 
@@ -2706,22 +2746,42 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         if (nextIndex < previewTimeline.length) {
           const nextSegment = previewTimeline[nextIndex];
 
-          // Seek to next segment immediately (no delay)
-          videoRef.current.currentTime = nextSegment.sourceStart;
-          setPreviewAnchorIndex(nextIndex);
-          setPreviewCurrentTime(nextSegment.previewStart);
+          // GAPLESS SWAP: If standby is ready, instant transition
+          if (standbyReadyRef.current && standbyVideoEl) {
+            // Pause active video
+            activeVideoEl.pause();
 
-          // Ensure video continues playing after seek
-          if (videoRef.current.paused) {
-            videoRef.current.play().catch(err => console.error('Play failed:', err));
+            // Play standby video (already seeked and ready)
+            standbyVideoEl.play().catch(err => console.error('Standby play failed:', err));
+
+            // Swap active video
+            setActiveVideo(activeVideo === 'A' ? 'B' : 'A');
+            setPreviewAnchorIndex(nextIndex);
+            setPreviewCurrentTime(nextSegment.previewStart);
+
+            // Pre-seek the now-standby video to the NEXT segment (if it exists)
+            const afterNextIndex = nextIndex + 1;
+            if (afterNextIndex < previewTimeline.length) {
+              standbyReadyRef.current = false;
+              const afterNextSegment = previewTimeline[afterNextIndex];
+              activeVideoEl.currentTime = afterNextSegment.sourceStart;
+            }
+          } else {
+            // Fallback: standby not ready, use old method (visible seek)
+            activeVideoEl.currentTime = nextSegment.sourceStart;
+            setPreviewAnchorIndex(nextIndex);
+            setPreviewCurrentTime(nextSegment.previewStart);
+
+            if (activeVideoEl.paused) {
+              activeVideoEl.play().catch(err => console.error('Play failed:', err));
+            }
           }
 
         } else {
           // End of preview - loop or stop
           setIsPreviewPlaying(false);
-          videoRef.current.pause();
+          activeVideoEl.pause();
           if (musicRef.current) musicRef.current.pause();
-          // Reset to beginning
           seekPreviewTime(0);
           return;
         }
@@ -2737,7 +2797,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         cancelAnimationFrame(previewAnimationRef.current);
       }
     };
-  }, [isPreviewMode, isPreviewPlaying, previewTimeline, previewAnchorIndex, seekPreviewTime]);
+  }, [isPreviewMode, isPreviewPlaying, previewTimeline, previewAnchorIndex, seekPreviewTime, activeVideo]);
 
   // Music handlers
   const handleMusicUpload = (e) => {
@@ -4551,15 +4611,30 @@ const exportVideo = async () => {
                   {/* Video Player Section */}
                   <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
+                    {/* Dual-video system for gapless preview (professional NLE quality) */}
+                    {/* Video A - Primary */}
                     <video
                       ref={videoRef}
                       src={videoUrl}
-                      className="w-full h-full object-contain"
+                      className={`w-full h-full object-contain ${
+                        isPreviewMode && activeVideo === 'B' ? 'hidden' : 'block'
+                      }`}
                       preload="auto"
                       playsInline
                       onTimeUpdate={handleTimeUpdate}
                       onLoadedMetadata={handleLoadedMetadata}
                       onEnded={() => setIsPlaying(false)}
+                    />
+                    {/* Video B - Standby (for gapless clip transitions) */}
+                    <video
+                      ref={videoBRef}
+                      src={videoUrl}
+                      className={`w-full h-full object-contain absolute inset-0 ${
+                        isPreviewMode && activeVideo === 'B' ? 'block' : 'hidden'
+                      }`}
+                      preload="auto"
+                      playsInline
+                      onSeeked={() => { standbyReadyRef.current = true; }}
                     />
 
                     {/* Play/Pause Overlay Button */}
