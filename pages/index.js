@@ -37,6 +37,7 @@ const ReelForge = () => {
   const videoBRef = useRef(null); // Second video element for crossfade
   const standbyReadyRef = useRef(false); // Track if standby video is seeked and ready
   const waitingForStandbyRef = useRef(null); // Track timestamp when we started waiting for standby
+  const transitioningRef = useRef(false); // Prevent infinite loop when waiting for standby
 
   // Music state
   const [music, setMusic] = useState(null);
@@ -2721,8 +2722,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         cancelAnimationFrame(previewAnimationRef.current);
         previewAnimationRef.current = null;
       }
+      // Reset transition state when stopping preview
+      transitioningRef.current = false;
+      waitingForStandbyRef.current = null;
       return;
     }
+
+    // Reset transition state at start of RAF loop
+    transitioningRef.current = false;
+    waitingForStandbyRef.current = null;
 
     console.log('🎬 RAF Loop Started:', {
       activeVideo,
@@ -2750,8 +2758,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
       setPreviewCurrentTime(newPreviewTime);
 
-      // Check if we've reached the end of current segment
-      if (sourceTime >= currentSegment.sourceEnd - 0.05) {
+      // Check if we've reached the end of current segment (skip if already transitioning)
+      if (sourceTime >= currentSegment.sourceEnd - 0.05 && !transitioningRef.current) {
         const nextIndex = previewAnchorIndex + 1;
 
         console.log('⏭️ Clip ending, attempting transition:', {
@@ -2776,8 +2784,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               console.log('✅ GAPLESS SWAP: Standby ready, instant transition');
             }
 
-            // Reset waiting timer (successful swap)
+            // Reset waiting timer and transition flag (successful swap)
             waitingForStandbyRef.current = null;
+            transitioningRef.current = false;
 
             // Pause active video
             activeVideoEl.pause();
@@ -2800,7 +2809,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             }
           } else if (standbyVideoEl) {
             // WAIT FOR STANDBY: Pause and give it time to finish seeking
-            console.warn('⏸️ WAITING: Standby not ready yet, pausing to wait...');
 
             // Pause active video to wait for standby
             if (!activeVideoEl.paused) {
@@ -2809,7 +2817,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
             // Check if we've been waiting too long (timeout after 1 second)
             if (!waitingForStandbyRef.current) {
+              console.warn('⏸️ WAITING: Standby not ready yet, pausing to wait...');
               waitingForStandbyRef.current = Date.now();
+              transitioningRef.current = true; // Prevent checking again until swap or timeout
             }
 
             const waitTime = Date.now() - waitingForStandbyRef.current;
@@ -2818,6 +2828,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               // Timeout: give up and do visible seek
               console.error('❌ TIMEOUT: Standby took too long, forcing visible seek');
               waitingForStandbyRef.current = null;
+              transitioningRef.current = false; // Reset transition flag
               activeVideoEl.currentTime = nextSegment.sourceStart;
               setPreviewAnchorIndex(nextIndex);
               setPreviewCurrentTime(nextSegment.previewStart);
@@ -2828,6 +2839,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           } else {
             console.error('❌ ERROR: No standby video element available');
             // Fallback: no standby video, use visible seek
+            transitioningRef.current = false; // Reset transition flag
             activeVideoEl.currentTime = nextSegment.sourceStart;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
@@ -2839,6 +2851,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         } else {
           console.log('🏁 Preview complete');
           // End of preview - loop or stop
+          transitioningRef.current = false; // Reset transition flag
+          waitingForStandbyRef.current = null; // Reset waiting timer
           setIsPreviewPlaying(false);
           activeVideoEl.pause();
           if (musicRef.current) musicRef.current.pause();
