@@ -29,12 +29,24 @@ export default async function handler(req, res) {
     console.log(`📸 API: Analyzing video [${videoType || 'visual-only'}]`);
     console.log(`📦 Payload size: ${payloadMB}MB (${payloadSize} bytes)`);
 
+    // Debug: Check if API key is available
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    console.log(`🔑 API Key present: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO - MISSING!'}`);
+
+    if (!apiKey) {
+      console.error('❌ ANTHROPIC_API_KEY environment variable is not set!');
+      return res.status(500).json({
+        error: 'Server configuration error',
+        details: 'API key not configured. Please check environment variables.'
+      });
+    }
+
     // Call Claude API with messages (no tools)
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
