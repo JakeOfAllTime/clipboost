@@ -34,10 +34,12 @@ const ReelForge = () => {
 
   // Dual-video system for gapless preview (professional NLE quality)
   const [activeVideo, setActiveVideo] = useState('A'); // 'A' or 'B'
+  const activeVideoRef = useRef('A'); // Ref version for RAF loop (prevent restarts)
   const videoBRef = useRef(null); // Second video element for crossfade
   const standbyReadyRef = useRef(false); // Track if standby video is seeked and ready
   const waitingForStandbyRef = useRef(null); // Track timestamp when we started waiting for standby
   const transitioningRef = useRef(false); // Prevent infinite loop when waiting for standby
+  const previewAnchorIndexRef = useRef(0); // Ref version for RAF loop (prevent restarts)
 
   // Music state
   const [music, setMusic] = useState(null);
@@ -2552,7 +2554,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     buildPreviewTimeline();
     setIsPreviewMode(true);
     setPreviewCurrentTime(0);
+
+    // Initialize refs and state for dual-video system
+    previewAnchorIndexRef.current = 0;
     setPreviewAnchorIndex(0);
+
+    activeVideoRef.current = 'A';
+    setActiveVideo('A');
+
+    // Reset transition flags
+    transitioningRef.current = false;
+    waitingForStandbyRef.current = null;
 
     // Initialize dual-video system for gapless playback
     const videoA = videoRef.current;
@@ -2573,9 +2585,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       standbyReadyRef.current = false;
       videoB.currentTime = secondAnchor.start;
     }
-
-    // Set Video A as active
-    setActiveVideo('A');
 
     // Wait for Video A to be seeked and ready
     await new Promise((resolve) => {
@@ -2728,28 +2737,28 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    // Reset transition state at start of RAF loop
-    transitioningRef.current = false;
-    waitingForStandbyRef.current = null;
+    // DON'T reset transition state here - would break mid-transition
+    // Only reset when preview stops (in cleanup above)
 
     console.log('🎬 RAF Loop Started:', {
-      activeVideo,
-      previewAnchorIndex,
+      activeVideo: activeVideoRef.current,
+      previewAnchorIndex: previewAnchorIndexRef.current,
       totalClips: previewTimeline.length,
       standbyReady: standbyReadyRef.current
     });
 
     const updatePreviewTime = () => {
-      // Get active and standby video refs
-      const activeVideoEl = activeVideo === 'A' ? videoRef.current : videoBRef.current;
-      const standbyVideoEl = activeVideo === 'A' ? videoBRef.current : videoRef.current;
+      // Get active and standby video refs (read from ref, not state)
+      const activeVideoEl = activeVideoRef.current === 'A' ? videoRef.current : videoBRef.current;
+      const standbyVideoEl = activeVideoRef.current === 'A' ? videoBRef.current : videoRef.current;
 
       if (!activeVideoEl) {
         previewAnimationRef.current = requestAnimationFrame(updatePreviewTime);
         return;
       }
 
-      const currentSegment = previewTimeline[previewAnchorIndex];
+      const currentIndex = previewAnchorIndexRef.current;
+      const currentSegment = previewTimeline[currentIndex];
       if (!currentSegment) return;
 
       const sourceTime = activeVideoEl.currentTime;
@@ -2760,12 +2769,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
       // Check if we've reached the end of current segment (skip if already transitioning)
       if (sourceTime >= currentSegment.sourceEnd - 0.05 && !transitioningRef.current) {
-        const nextIndex = previewAnchorIndex + 1;
+        const nextIndex = currentIndex + 1;
 
         console.log('⏭️ Clip ending, attempting transition:', {
-          fromClip: previewAnchorIndex,
+          fromClip: currentIndex,
           toClip: nextIndex,
-          activeVideo,
+          activeVideo: activeVideoRef.current,
           standbyReady: standbyReadyRef.current,
           sourceTime,
           segmentEnd: currentSegment.sourceEnd
@@ -2788,16 +2797,27 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             waitingForStandbyRef.current = null;
             transitioningRef.current = false;
 
-            // Pause active video
-            activeVideoEl.pause();
+            // Swap active video (update both ref and state)
+            const newActiveVideo = activeVideoRef.current === 'A' ? 'B' : 'A';
+            activeVideoRef.current = newActiveVideo;
+            setActiveVideo(newActiveVideo);
 
-            // Play standby video (already seeked and ready)
-            standbyVideoEl.play().catch(err => console.error('❌ Standby play failed:', err));
-
-            // Swap active video
-            setActiveVideo(activeVideo === 'A' ? 'B' : 'A');
+            // Update clip index (update both ref and state)
+            previewAnchorIndexRef.current = nextIndex;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
+
+            // Pause active video BEFORE starting standby
+            activeVideoEl.pause();
+
+            // Play standby video (wait for pause to complete)
+            setTimeout(() => {
+              standbyVideoEl.play().catch(err => {
+                console.error('❌ Standby play failed:', err);
+                // Fallback: try again after brief delay
+                setTimeout(() => standbyVideoEl.play().catch(() => {}), 50);
+              });
+            }, 10);
 
             // Pre-seek the now-standby video to the NEXT segment (if it exists)
             const afterNextIndex = nextIndex + 1;
@@ -2828,23 +2848,37 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               // Timeout: give up and do visible seek
               console.error('❌ TIMEOUT: Standby took too long, forcing visible seek');
               waitingForStandbyRef.current = null;
-              transitioningRef.current = false; // Reset transition flag
-              activeVideoEl.currentTime = nextSegment.sourceStart;
+              transitioningRef.current = false;
+
+              // Update index (both ref and state)
+              previewAnchorIndexRef.current = nextIndex;
               setPreviewAnchorIndex(nextIndex);
               setPreviewCurrentTime(nextSegment.previewStart);
-              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
+
+              // Seek and play (same video, no swap)
+              activeVideoEl.currentTime = nextSegment.sourceStart;
+              setTimeout(() => {
+                activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
+              }, 10);
             }
             // Otherwise keep waiting, RAF will check again next frame
 
           } else {
             console.error('❌ ERROR: No standby video element available');
             // Fallback: no standby video, use visible seek
-            transitioningRef.current = false; // Reset transition flag
-            activeVideoEl.currentTime = nextSegment.sourceStart;
+            transitioningRef.current = false;
+
+            // Update index (both ref and state)
+            previewAnchorIndexRef.current = nextIndex;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
+
+            // Seek and play
+            activeVideoEl.currentTime = nextSegment.sourceStart;
             if (activeVideoEl.paused) {
-              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
+              setTimeout(() => {
+                activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
+              }, 10);
             }
           }
 
@@ -2871,7 +2905,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         cancelAnimationFrame(previewAnimationRef.current);
       }
     };
-  }, [isPreviewMode, isPreviewPlaying, previewTimeline, previewAnchorIndex, seekPreviewTime, activeVideo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewMode, isPreviewPlaying, previewTimeline]);
 
   // Music handlers
   const handleMusicUpload = (e) => {
