@@ -2501,7 +2501,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   };
 
   // Zoom loupe: computes the time window shown in the loupe strip for the selected anchor
-  const loupeWindow = useMemo(() => {
+  // Computed inline (not memoized) to avoid stale useMemo cache issues
+  const loupeWindow = (() => {
     if (!selectedAnchor || !duration) return null;
     const anchor = anchors.find(a => a.id === selectedAnchor);
     if (!anchor) return null;
@@ -2512,7 +2513,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const start = Math.max(0, center - windowDuration / 2);
     const end = Math.min(duration, start + windowDuration);
     return { start, end, duration: end - start };
-  }, [selectedAnchor, anchors, duration]);
+  })();
 
   // Build preview timeline map from anchors
   const buildPreviewTimeline = useCallback(() => {
