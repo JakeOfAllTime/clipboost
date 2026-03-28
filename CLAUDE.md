@@ -1,4 +1,48 @@
-# ReelForge - AI-Powered Video Editor
+---
+
+## Mac Mini Autonomous Workflow (Updated March 2026)
+
+**Environment:** Apple M4 Mac Mini, macOS, Claude Code + Dispatch
+
+### Git Safety Protocol
+- Commit frequently with clear, descriptive messages (every logical change)
+- NEVER leave the project in a broken state between commits
+- Good commit messages are critical — Claude may resume mid-task in a future session
+- Vercel auto-deploys on push to main — test locally first with `npm run dev`
+- Use `git log` to review recent changes, `git revert <hash>` to undo if needed
+
+### Session Handoff Protocol
+- At the END of every autonomous session, update `PROGRESS.md` with:
+  - What was completed
+  - What was attempted but failed
+  - What the next logical step is
+  - Any open questions for the user
+- At the START of every session, READ `PROGRESS.md` before touching any code
+
+### TASK.md Workflow
+- User sets the current goal in `TASK.md`
+- Claude reads it, works the task, updates status inline
+- Format:
+```
+  ## Current Task
+  [what needs doing]
+
+  ## Status
+  [in progress / blocked / done]
+
+  ## Notes
+  [anything worth logging mid-task]
+```
+
+### Dispatch + Computer Use Notes
+- User may assign tasks remotely via phone through Claude Dispatch
+- Claude can now see the screen, terminal output, and browser — use this
+- Always run `npm run dev` and verify visually before committing
+- Playwright MCP preferred for screenshots when available
+
+### Model Reference (Current)
+- Fast iteration: claude-sonnet-4-6
+- Deep analysis / architecture: claude-opus-4-6# ReelForge - AI-Powered Video Editor
 
 **Mission:** Eliminate time-consuming video editing. Transform 30-min raw footage → polished 40s social clips in 2 minutes.
 
