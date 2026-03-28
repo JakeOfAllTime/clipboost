@@ -25,7 +25,7 @@
   /* Primary Actions - Gradient */
   --gradient-primary: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
   --gradient-accent: linear-gradient(135deg, #e91e8c 0%, #ff00ff 100%);
-  --gradient-hero: linear-gradient(135deg, #1e3a8a 0%, #0c3a4a 50%, #0e5c6e 100%);
+  --gradient-hero: linear-gradient(135deg, #2d0552 0%, #1a1060 25%, #0a3a5a 55%, #0e5c6e 80%, #2d0552 100%);
 
   /* Semantic Colors */
   --accent-success: #00ff88;
@@ -296,11 +296,12 @@ html {
   right: 0;
   height: 400px;
   background: linear-gradient(135deg,
-    #1e3a8a 0%,
-    #0c3a4a 30%,
-    #0e5c6e 60%,
-    #1e3a8a 100%);
-  opacity: 0.6;
+    #2d0552 0%,
+    #1a1060 25%,
+    #0a3a5a 55%,
+    #0e5c6e 80%,
+    #2d0552 100%);
+  opacity: 0.75;
   z-index: 0;
   pointer-events: none;
   animation: gradientShift 15s ease infinite;
@@ -326,7 +327,7 @@ html {
   bottom: 0;
   background-image:
     radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 50%, rgba(0, 200, 200, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(100, 0, 200, 0.12) 0%, transparent 50%),
     radial-gradient(circle at 50% 80%, rgba(79, 172, 254, 0.1) 0%, transparent 40%);
   animation: particleFloat 20s ease-in-out infinite;
 }

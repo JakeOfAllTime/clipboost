@@ -159,7 +159,6 @@ const ReelForge = () => {
   // Media Center collapse state
   const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(false);
   const [previewCardLooping, setPreviewCardLooping] = useState(true); // Phase 5B: clip loop in preview card
-  const [thumbnailSrc, setThumbnailSrc] = useState(''); // Phase 5B: data URL for preview card thumbnail
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -180,8 +179,13 @@ const ReelForge = () => {
   const lensRef = useRef(null);
   const lensTimestampRef = useRef(null);
 
-  // Anchor frame preview card (Phase 5B)
-  const thumbnailCanvasRef = useRef(null);
+  // Play Clips: DOM refs for RAF direct-update (eliminate 60 re-renders/sec)
+  const clipsPlayheadRef = useRef(null);
+  const clipsTimeDisplayRef = useRef(null);
+  const previewCurrentTimeRef = useRef(0); // authoritative value during RAF
+
+  // Preview card mini video player
+  const cardVideoRef = useRef(null);
 
   // Web Audio API refs for mixing
   const audioContextRef = useRef(null);
@@ -2545,6 +2549,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     videoRef.current.currentTime = sourceTime;
     setPreviewCurrentTime(previewTime);
     setPreviewAnchorIndex(segment.index);
+    previewCurrentTimeRef.current = previewTime;
+    if (clipsPlayheadRef.current && previewTotalDuration > 0) {
+      clipsPlayheadRef.current.style.left = `${(previewTime / previewTotalDuration) * 100}%`;
+    }
 
     // Sync music if available
     if (music && musicRef.current) {
@@ -2749,13 +2757,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // DON'T reset transition state here - would break mid-transition
     // Only reset when preview stops (in cleanup above)
 
-    console.log('🎬 RAF Loop Started:', {
-      activeVideo: activeVideoRef.current,
-      previewAnchorIndex: previewAnchorIndexRef.current,
-      totalClips: previewTimeline.length,
-      standbyReady: standbyReadyRef.current
-    });
-
     const updatePreviewTime = () => {
       // Get active and standby video refs (read from ref, not state)
       const activeVideoEl = activeVideoRef.current === 'A' ? videoRef.current : videoBRef.current;
@@ -2774,34 +2775,24 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const offset = sourceTime - currentSegment.sourceStart;
       const newPreviewTime = currentSegment.previewStart + offset;
 
-      setPreviewCurrentTime(newPreviewTime);
+      // DOM update: no React re-render every frame
+      previewCurrentTimeRef.current = newPreviewTime;
+      if (clipsPlayheadRef.current && previewTotalDuration > 0) {
+        clipsPlayheadRef.current.style.left = `${(newPreviewTime / previewTotalDuration) * 100}%`;
+      }
+      if (clipsTimeDisplayRef.current) {
+        clipsTimeDisplayRef.current.textContent = `${Math.floor(newPreviewTime / 60)}:${String(Math.floor(newPreviewTime % 60)).padStart(2, '0')} / ${Math.floor(previewTotalDuration / 60)}:${String(Math.floor(previewTotalDuration % 60)).padStart(2, '0')}`;
+      }
 
       // Check if we've reached the end of current segment (skip if already transitioning)
-      if (sourceTime >= currentSegment.sourceEnd - 0.05 && !transitioningRef.current) {
+      if (sourceTime >= currentSegment.sourceEnd - 0.2 && !transitioningRef.current) {
         const nextIndex = currentIndex + 1;
-
-        console.log('⏭️ Clip ending, attempting transition:', {
-          fromClip: currentIndex,
-          toClip: nextIndex,
-          activeVideo: activeVideoRef.current,
-          standbyReady: standbyReadyRef.current,
-          sourceTime,
-          segmentEnd: currentSegment.sourceEnd
-        });
 
         if (nextIndex < previewTimeline.length) {
           const nextSegment = previewTimeline[nextIndex];
 
           // GAPLESS SWAP: If standby is ready, instant transition
           if (standbyReadyRef.current && standbyVideoEl) {
-            // Log if we were waiting
-            if (waitingForStandbyRef.current) {
-              const waitDuration = Date.now() - waitingForStandbyRef.current;
-              console.log(`✅ GAPLESS SWAP: Standby ready after waiting ${waitDuration}ms`);
-            } else {
-              console.log('✅ GAPLESS SWAP: Standby ready, instant transition');
-            }
-
             // Reset waiting timer and transition flag (successful swap)
             waitingForStandbyRef.current = null;
             transitioningRef.current = false;
@@ -2833,7 +2824,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             if (afterNextIndex < previewTimeline.length) {
               standbyReadyRef.current = false;
               const afterNextSegment = previewTimeline[afterNextIndex];
-              console.log('🔄 Pre-seeking new standby to clip', afterNextIndex);
               activeVideoEl.currentTime = afterNextSegment.sourceStart;
             }
           } else if (standbyVideoEl) {
@@ -2846,7 +2836,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
             // Check if we've been waiting too long (timeout after 1 second)
             if (!waitingForStandbyRef.current) {
-              console.warn('⏸️ WAITING: Standby not ready yet, pausing to wait...');
               waitingForStandbyRef.current = Date.now();
               transitioningRef.current = true; // Prevent checking again until swap or timeout
             }
@@ -2855,7 +2844,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
             if (waitTime > 1000) {
               // Timeout: give up and do visible seek
-              console.error('❌ TIMEOUT: Standby took too long, forcing visible seek');
               waitingForStandbyRef.current = null;
               transitioningRef.current = false;
 
@@ -2873,7 +2861,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             // Otherwise keep waiting, RAF will check again next frame
 
           } else {
-            console.error('❌ ERROR: No standby video element available');
             // Fallback: no standby video, use visible seek
             transitioningRef.current = false;
 
@@ -2892,7 +2879,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           }
 
         } else {
-          console.log('🏁 Preview complete');
           // End of preview - loop or stop
           transitioningRef.current = false; // Reset transition flag
           waitingForStandbyRef.current = null; // Reset waiting timer
@@ -3390,55 +3376,27 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     };
   }, [holdingAnchor]);
 
-  // Phase 5B: Capture thumbnail from main video when a new anchor is selected,
-  // or when a drag ends (anchor position may have changed).
-  // Uses state (thumbnailSrc) to avoid null-ref during active drag.
+
+  // Phase 5B: Drive card video playback — plays & loops the clip segment in the mini player
   useEffect(() => {
-    if (dragState.active) return; // skip during drag; re-fires when drag ends
-    if (!selectedAnchor || !videoUrl || !videoRef.current) { setThumbnailSrc(''); return; }
-    const anchor = anchors.find(a => a.id === selectedAnchor);
-    if (!anchor) { setThumbnailSrc(''); return; }
-
-    const captureFrame = () => {
-      const canvas = thumbnailCanvasRef.current;
-      if (!canvas || !videoRef.current) return;
-      try {
-        const ctx = canvas.getContext('2d');
-        canvas.width = 160;
-        canvas.height = 90;
-        ctx.drawImage(videoRef.current, 0, 0, 160, 90);
-        setThumbnailSrc(canvas.toDataURL('image/jpeg', 0.75));
-      } catch (_) { /* video not ready or cross-origin */ }
-    };
-
-    const vid = videoRef.current;
-    if (Math.abs(vid.currentTime - anchor.start) < 0.5) {
-      captureFrame();
-    } else {
-      vid.addEventListener('seeked', captureFrame, { once: true });
-      vid.currentTime = anchor.start;
+    if (dragState.active || !selectedAnchor || !videoUrl) {
+      cardVideoRef.current?.pause();
+      return;
     }
-    return () => vid.removeEventListener('seeked', captureFrame);
+    const anchor = anchors.find(a => a.id === selectedAnchor);
+    if (!anchor || !cardVideoRef.current) return;
+
+    const vid = cardVideoRef.current;
+    vid.currentTime = anchor.start;
+    const startPlay = () => vid.play().catch(() => {});
+    vid.addEventListener('seeked', startPlay, { once: true });
+
+    return () => {
+      vid.removeEventListener('seeked', startPlay);
+      vid.pause();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAnchor, videoUrl, dragState.active]);
-
-  // Phase 5B: Loop main video within the selected anchor's range when previewCardLooping is on
-  useEffect(() => {
-    if (!previewCardLooping || !selectedAnchor || !videoRef.current) return;
-    const anchor = anchors.find(a => a.id === selectedAnchor);
-    if (!anchor) return;
-
-    const handleTimeUpdate = () => {
-      const vid = videoRef.current;
-      if (vid && vid.currentTime >= anchor.end) {
-        vid.currentTime = anchor.start;
-      }
-    };
-    const vid = videoRef.current;
-    vid.addEventListener('timeupdate', handleTimeUpdate);
-    return () => vid.removeEventListener('timeupdate', handleTimeUpdate);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewCardLooping, selectedAnchor, anchors]);
 
   // Persistent event listeners (only attach/detach once)
   useEffect(() => {
@@ -4857,9 +4815,8 @@ const exportVideo = async () => {
                       onLoadedMetadata={handleLoadedMetadata}
                       onEnded={() => setIsPlaying(false)}
                       onSeeked={() => {
-                        if (isPreviewMode && activeVideo === 'B') {
+                        if (isPreviewMode && activeVideoRef.current === 'B') {
                           // Video A is standby
-                          console.log('✅ Video A seeked (standby ready)');
                           standbyReadyRef.current = true;
                         }
                       }}
@@ -4874,9 +4831,8 @@ const exportVideo = async () => {
                       preload="auto"
                       playsInline
                       onSeeked={() => {
-                        if (isPreviewMode && activeVideo === 'A') {
+                        if (isPreviewMode && activeVideoRef.current === 'A') {
                           // Video B is standby
-                          console.log('✅ Video B seeked (standby ready)');
                           standbyReadyRef.current = true;
                         }
                       }}
@@ -5104,7 +5060,7 @@ const exportVideo = async () => {
                           {/* Time + Clip Counter - merged into one badge (top left) */}
                           {playbackMode === 'clips' && (
                             <div className="absolute top-1 left-2 text-xs font-semibold text-white bg-black/60 px-2 py-0.5 rounded z-20 pointer-events-none">
-                              {formatTime(previewCurrentTime)} / {formatTime(previewTotalDuration)}
+                              <span ref={clipsTimeDisplayRef}>0:00 / {formatTime(previewTotalDuration)}</span>
                               <span className="ml-2 opacity-60">· Clip {previewAnchorIndex + 1}/{previewTimeline.length}</span>
                             </div>
                           )}
@@ -5119,12 +5075,19 @@ const exportVideo = async () => {
                             return (
                               <div
                                 key={idx}
-                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2 overflow-hidden ${isCurrentSegment ? colors.glow : ''}`}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2 overflow-hidden cursor-pointer ${isCurrentSegment ? colors.glow : ''}`}
                                 style={{
                                   left: `${segmentLeft}%`,
                                   width: `${segmentWidth}%`
                                 }}
-                                title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s`}
+                                title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s — click to jump`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPlaybackMode('clips');
+                                  previewAnchorIndexRef.current = idx;
+                                  setPreviewAnchorIndex(idx);
+                                  seekPreviewTime(segment.previewStart);
+                                }}
                               >
                                 {/* Active indicator — top edge highlight */}
                                 {isCurrentSegment && (
@@ -5147,9 +5110,10 @@ const exportVideo = async () => {
                           {/* Playhead for clips timeline */}
                           {playbackMode === 'clips' && (
                             <div
+                              ref={clipsPlayheadRef}
                               className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
                               style={{
-                                left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
+                                left: '0%'
                               }}
                             >
                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
@@ -5388,19 +5352,26 @@ const exportVideo = async () => {
                                           className="rounded-xl overflow-hidden shadow-2xl border border-slate-600/60 pointer-events-auto"
                                           style={{ background: 'rgba(8, 12, 28, 0.97)' }}
                                         >
-                                          {/* Thumbnail image */}
+                                          {/* Mini video player */}
                                           <div className="relative bg-slate-950" style={{ height: '58px' }}>
-                                            {thumbnailSrc ? (
-                                              <img
-                                                src={thumbnailSrc}
-                                                alt=""
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                              />
-                                            ) : (
-                                              <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-[10px]">
-                                                ▶ loading…
-                                              </div>
-                                            )}
+                                            <video
+                                              ref={cardVideoRef}
+                                              src={videoUrl}
+                                              muted
+                                              playsInline
+                                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                              onTimeUpdate={() => {
+                                                const vid = cardVideoRef.current;
+                                                if (!vid) return;
+                                                const sel = anchors.find(a => a.id === selectedAnchor);
+                                                if (!sel) return;
+                                                if (previewCardLooping && vid.currentTime >= sel.end) {
+                                                  vid.currentTime = sel.start;
+                                                } else if (!previewCardLooping && vid.currentTime >= sel.end) {
+                                                  vid.pause();
+                                                }
+                                              }}
+                                            />
                                           </div>
                                           {/* Timestamps row + loop toggle */}
                                           <div className="flex items-center justify-between px-2 py-1" style={{ gap: '4px' }}>
@@ -7711,8 +7682,6 @@ onMouseLeave={() => {
     </div>
   </div>
 )}
-      {/* Phase 5B: Hidden canvas for thumbnail frame capture */}
-      <canvas ref={thumbnailCanvasRef} style={{ display: 'none' }} />
       </div>
     </div>
   </div>
