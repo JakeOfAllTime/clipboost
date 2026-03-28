@@ -122,6 +122,10 @@ const ReelForge = () => {
   const holdTimerRef = useRef(null);
   const [holdingAnchor, setHoldingAnchor] = useState(null);
   const HOLD_DURATION_MS = 400; // Hold for 400ms to activate drag
+  const upgradeTimerRef = useRef(null);  // Handle → move-whole-anchor upgrade (1s hold)
+  const dragLiveXRef = useRef(0);         // Tracks cursor X during drag for upgrade check
+  const loupeRef = useRef(null);          // Zoom loupe strip ref
+  const dragSourceRef = useRef('main');   // 'main' | 'loupe' — which timeline started the drag
 
   // Throttle video seeking during drag for smoother performance
   const lastSeekTimeRef = useRef(0);
@@ -2496,6 +2500,20 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   };
 
+  // Zoom loupe: computes the time window shown in the loupe strip for the selected anchor
+  const loupeWindow = useMemo(() => {
+    if (!selectedAnchor || !duration) return null;
+    const anchor = anchors.find(a => a.id === selectedAnchor);
+    if (!anchor) return null;
+    const anchorDuration = Math.max(anchor.end - anchor.start, 0.5);
+    // Show ~2.5x anchor duration on each side (min 8s total window)
+    const windowDuration = Math.max(anchorDuration / 0.35, 8);
+    const center = (anchor.start + anchor.end) / 2;
+    const start = Math.max(0, center - windowDuration / 2);
+    const end = Math.min(duration, start + windowDuration);
+    return { start, end, duration: end - start };
+  }, [selectedAnchor, anchors, duration]);
+
   // Build preview timeline map from anchors
   const buildPreviewTimeline = useCallback(() => {
     if (anchors.length === 0) {
@@ -3160,60 +3178,108 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
 
-    // Start hold timer for drag activation
-    setHoldingAnchor({ id: anchor.id, type: dragType });
-    holdTimerRef.current = setTimeout(() => {
-      // After hold duration, activate drag mode with haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate([30, 10, 30]); // Stronger feedback on grab
-      }
+    const startX = e.clientX || e.touches?.[0]?.clientX || 0;
+
+    if (dragType === 'anchor-left' || dragType === 'anchor-right') {
+      // HANDLES: activate drag immediately — quick drag = resize that end
+      // If held ≥ 1s without significant movement, upgrade to moving the whole anchor
+      dragLiveXRef.current = startX;
+      dragSourceRef.current = 'main';
       setDragState({
         active: true,
         type: dragType,
-        startX: e.clientX || e.touches?.[0]?.clientX || 0,
+        startX,
         anchorSnapshot: { ...anchor }
       });
-    }, HOLD_DURATION_MS);
+
+      upgradeTimerRef.current = setTimeout(() => {
+        const moved = Math.abs(dragLiveXRef.current - startX);
+        if (moved < 15) {
+          // User held still for 1s — upgrade to whole-anchor move + haptic
+          if (navigator.vibrate) navigator.vibrate([40, 15, 40]);
+          setDragState(prev =>
+            prev.active ? { ...prev, type: 'anchor-move', startX: dragLiveXRef.current, anchorSnapshot: { ...anchor } } : prev
+          );
+        }
+        upgradeTimerRef.current = null;
+      }, 1000);
+
+    } else {
+      // BODY: existing hold-to-drag (400ms) — unchanged
+      setHoldingAnchor({ id: anchor.id, type: dragType });
+      dragSourceRef.current = 'main';
+      holdTimerRef.current = setTimeout(() => {
+        if (navigator.vibrate) {
+          navigator.vibrate([30, 10, 30]);
+        }
+        setDragState({
+          active: true,
+          type: dragType,
+          startX,
+          anchorSnapshot: { ...anchor }
+        });
+      }, HOLD_DURATION_MS);
+    }
   }, []);
 
   const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
-    e.preventDefault(); // Prevent click interference and scrolling
+    e.preventDefault();
 
-    // Initial haptic feedback on touch
-    if (navigator.vibrate) {
-      navigator.vibrate(10);
-    }
+    if (navigator.vibrate) navigator.vibrate(10);
 
     setSelectedAnchor(anchor.id);
 
-    // Start hold timer for drag activation
-    setHoldingAnchor({ id: anchor.id, type: dragType });
-    holdTimerRef.current = setTimeout(() => {
-      // After hold duration, activate drag mode with stronger haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate([30, 10, 30]); // "Grabbed" feeling
-      }
+    const startX = e.touches?.[0]?.clientX || 0;
+
+    if (dragType === 'anchor-left' || dragType === 'anchor-right') {
+      dragLiveXRef.current = startX;
+      dragSourceRef.current = 'main';
       setDragState({
         active: true,
         type: dragType,
-        startX: e.touches?.[0]?.clientX || 0,
+        startX,
         anchorSnapshot: { ...anchor }
       });
-    }, HOLD_DURATION_MS);
+
+      upgradeTimerRef.current = setTimeout(() => {
+        const moved = Math.abs(dragLiveXRef.current - startX);
+        if (moved < 15) {
+          if (navigator.vibrate) navigator.vibrate([40, 15, 40]);
+          setDragState(prev =>
+            prev.active ? { ...prev, type: 'anchor-move', startX: dragLiveXRef.current, anchorSnapshot: { ...anchor } } : prev
+          );
+        }
+        upgradeTimerRef.current = null;
+      }, 1000);
+
+    } else {
+      setHoldingAnchor({ id: anchor.id, type: dragType });
+      dragSourceRef.current = 'main';
+      holdTimerRef.current = setTimeout(() => {
+        if (navigator.vibrate) navigator.vibrate([30, 10, 30]);
+        setDragState({
+          active: true,
+          type: dragType,
+          startX,
+          anchorSnapshot: { ...anchor }
+        });
+      }, HOLD_DURATION_MS);
+    }
   }, []);
 
   // Persistent drag handlers with 60fps throttling (optimized)
   const rafIdRef = useRef(null);
-  const dragDataRef = useRef({ anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory });
+  const dragDataRef = useRef({ anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow: null });
 
   // Keep refs in sync without recreating handlers
   useEffect(() => {
-    dragDataRef.current = { anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory };
-  }, [anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory]);
+    dragDataRef.current = { anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow };
+  }, [anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow]);
 
   const processMouseMove = useCallback((clientX) => {
     const { dragState, anchors, duration, selectedAnchor, previewAnchor } = dragDataRef.current;
+    dragLiveXRef.current = clientX; // Track for handle upgrade timer
 
     if (dragState.type === 'timeline') {
       if (timelineRef.current && videoRef.current) {
@@ -3228,11 +3294,19 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const snapshot = dragState.anchorSnapshot;
       if (!snapshot) return;
 
-      const rect = timelineRef.current?.getBoundingClientRect();
+      // Use loupe coordinate space if drag started from loupe, else main timeline
+      const isLoupeDrag = dragSourceRef.current === 'loupe';
+      const rect = isLoupeDrag
+        ? loupeRef.current?.getBoundingClientRect()
+        : timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
 
+      // loupe shows a sub-window of the full video, so time-per-pixel is different
+      const { loupeWindow } = dragDataRef.current;
+      const effectiveDuration = isLoupeDrag && loupeWindow ? loupeWindow.duration : duration;
+
       const deltaX = clientX - dragState.startX;
-      const deltaTime = (deltaX / rect.width) * duration;
+      const deltaTime = (deltaX / rect.width) * effectiveDuration;
 
       let newStart = snapshot.start;
       let newEnd = snapshot.end;
@@ -3329,11 +3403,18 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       cancelAnimationFrame(rafIdRef.current);
     }
 
+    // Cancel handle upgrade timer
+    if (upgradeTimerRef.current) {
+      clearTimeout(upgradeTimerRef.current);
+      upgradeTimerRef.current = null;
+    }
+
     // Cancel hold timer if released before hold duration
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    dragSourceRef.current = 'main'; // Reset to main timeline
     setHoldingAnchor(null);
 
     const { dragState, anchors, saveToHistory } = dragDataRef.current;
@@ -5474,6 +5555,78 @@ const exportVideo = async () => {
                         </div>
                       </div>
 
+                      {/* === Zoom Loupe — appears when anchor selected, shows magnified anchor strip === */}
+                      {selectedAnchor && loupeWindow && duration > 0 && (() => {
+                        const anchor = anchors.find(a => a.id === selectedAnchor);
+                        if (!anchor) return null;
+                        const colors = getAnchorColor(anchors.indexOf(anchor), true);
+
+                        const anchorLeft = ((anchor.start - loupeWindow.start) / loupeWindow.duration) * 100;
+                        const anchorWidth = ((anchor.end - anchor.start) / loupeWindow.duration) * 100;
+                        const clampedLeft = Math.max(0, Math.min(95, anchorLeft));
+                        const clampedWidth = Math.max(2, Math.min(100 - clampedLeft, anchorWidth));
+
+                        return (
+                          <div
+                            ref={loupeRef}
+                            className="mt-1 relative rounded-lg border border-slate-600/60 overflow-hidden"
+                            style={{ height: '52px', background: 'rgba(8, 12, 28, 0.95)' }}
+                          >
+                            {/* Loupe label */}
+                            <div className="absolute top-0.5 left-2 text-[9px] font-semibold text-slate-500 pointer-events-none z-10 uppercase tracking-wider">
+                              ⌕ Zoom
+                            </div>
+
+                            {/* Time range labels */}
+                            <div className="absolute bottom-0.5 left-0 right-0 flex justify-between px-2 text-[9px] font-mono text-slate-600 pointer-events-none">
+                              <span>{formatTime(loupeWindow.start)}</span>
+                              <span>{formatTime((loupeWindow.start + loupeWindow.end) / 2)}</span>
+                              <span>{formatTime(loupeWindow.end)}</span>
+                            </div>
+
+                            {/* Center tick */}
+                            <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
+
+                            {/* Loupe anchor body — drag to move in zoomed space */}
+                            <div
+                              className={`absolute top-3 bottom-4 ${colors.bg} ${colors.border} border-2 ${colors.glow} rounded cursor-move`}
+                              style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%`, zIndex: 10 }}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                dragSourceRef.current = 'loupe';
+                                handleAnchorMouseDown(e, anchor, 'anchor-move');
+                              }}
+                            >
+                              {/* Duration badge inside loupe anchor */}
+                              <div className="absolute inset-0 flex items-center justify-center text-[9px] font-mono text-white/80 pointer-events-none">
+                                {(anchor.end - anchor.start).toFixed(1)}s
+                              </div>
+
+                              {/* Left handle */}
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-2 bg-green-500/80 hover:bg-green-400 cursor-ew-resize rounded-l"
+                                style={{ zIndex: 20 }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  dragSourceRef.current = 'loupe';
+                                  handleAnchorMouseDown(e, anchor, 'anchor-left');
+                                }}
+                              />
+                              {/* Right handle */}
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-2 bg-red-500/80 hover:bg-red-400 cursor-ew-resize rounded-r"
+                                style={{ zIndex: 20 }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  dragSourceRef.current = 'loupe';
+                                  handleAnchorMouseDown(e, anchor, 'anchor-right');
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Helper text */}
                       <div className="text-xs text-gray-500 text-center mt-2">
                         {anchors.length > 0
@@ -6045,13 +6198,12 @@ const exportVideo = async () => {
                       );
                     })}
 
-                    {/* Playhead for clips timeline */}
+                    {/* Playhead for clips timeline — driven by clipsPlayheadRef (DOM, no re-render) */}
                     {playbackMode === 'clips' && (
                       <div
+                        ref={clipsPlayheadRef}
                         className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
-                        style={{
-                          left: `${(previewCurrentTime / previewTotalDuration) * 100}%`
-                        }}
+                        style={{ left: '0%' }}
                       >
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
                       </div>
