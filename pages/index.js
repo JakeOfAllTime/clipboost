@@ -138,7 +138,7 @@ const ReelForge = () => {
   const [timelineZoom, setTimelineZoom] = useState(1);
 
   // Auto-generate V3 state
-  const [autoGenMode, setAutoGenMode] = useState('smart'); // 'quick' | 'smart' | 'pro'
+  const [autoGenMode, setAutoGenMode] = useState('quick'); // 'quick' | 'smart' | 'pro'
   const [enableBeatSync, setEnableBeatSync] = useState(false);
   const [userApiKey, setUserApiKey] = useState('');
 
@@ -158,6 +158,8 @@ const ReelForge = () => {
 
   // Media Center collapse state
   const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(false);
+  const [previewCardLooping, setPreviewCardLooping] = useState(true); // Phase 5B: clip loop in preview card
+  const [thumbnailSrc, setThumbnailSrc] = useState(''); // Phase 5B: data URL for preview card thumbnail
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -173,6 +175,13 @@ const ReelForge = () => {
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
   const precisionTimelineRef = useRef(null);
   const loadConfigInputRef = useRef(null);
+
+  // Magnifier lens refs (Phase 5A) — updated via direct DOM mutation inside RAF, no setState
+  const lensRef = useRef(null);
+  const lensTimestampRef = useRef(null);
+
+  // Anchor frame preview card (Phase 5B)
+  const thumbnailCanvasRef = useRef(null);
 
   // Web Audio API refs for mixing
   const audioContextRef = useRef(null);
@@ -3056,7 +3065,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const newAnchor = {
       id: Date.now(),
       start: time,
-      end: Math.min(time + 2, duration)
+      end: Math.min(time + 5, duration)
     };
 
     const hasOverlap = anchors.some(a =>
@@ -3273,6 +3282,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         ).sort((a, b) => a.start - b.start);
         setAnchors(updated);
 
+        // === Phase 5A: Update magnifier lens position & text (direct DOM, no setState) ===
+        if (lensRef.current && lensTimestampRef.current && duration > 0) {
+          const clampedX = Math.max(2, Math.min(98, ((clientX - rect.left) / rect.width) * 100));
+          const displayTime = dragState.type === 'anchor-right' ? newEnd : newStart;
+          const mins = Math.floor(displayTime / 60);
+          const secs = (displayTime % 60).toFixed(1).padStart(4, '0');
+          lensRef.current.style.left = `${clampedX}%`;
+          lensRef.current.style.display = 'flex';
+          lensTimestampRef.current.textContent = `${mins}:${secs}`;
+        }
+
         // Sync video to the frame being adjusted (throttled for smooth performance)
         const now = Date.now();
         if (videoRef.current && now - lastSeekTimeRef.current >= SEEK_THROTTLE_MS) {
@@ -3336,12 +3356,89 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       saveToHistory(anchors);
     }
     setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
+
+    // Phase 5A: hide magnifier lens on drag end
+    if (lensRef.current) lensRef.current.style.display = 'none';
   }, []);
 
   const handleTouchMove = useCallback((e) => {
     e.preventDefault();
     handleMouseMove(e);
   }, [handleMouseMove]);
+
+  // Cancel pending hold-to-drag if mouse/touch is released before the timer fires.
+  // Without this, a quick click releases the mouse while holdTimerRef is still pending —
+  // the timer fires 400ms later, sets dragState.active=true, and the anchor chases the cursor
+  // even though the user already let go. This effect is the targeted fix.
+  useEffect(() => {
+    if (!holdingAnchor) return;
+
+    const cancelPendingDrag = () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      setHoldingAnchor(null);
+    };
+
+    document.addEventListener('mouseup', cancelPendingDrag, { once: true });
+    document.addEventListener('touchend', cancelPendingDrag, { once: true });
+
+    return () => {
+      document.removeEventListener('mouseup', cancelPendingDrag);
+      document.removeEventListener('touchend', cancelPendingDrag);
+    };
+  }, [holdingAnchor]);
+
+  // Phase 5B: Capture thumbnail from main video when a new anchor is selected,
+  // or when a drag ends (anchor position may have changed).
+  // Uses state (thumbnailSrc) to avoid null-ref during active drag.
+  useEffect(() => {
+    if (dragState.active) return; // skip during drag; re-fires when drag ends
+    if (!selectedAnchor || !videoUrl || !videoRef.current) { setThumbnailSrc(''); return; }
+    const anchor = anchors.find(a => a.id === selectedAnchor);
+    if (!anchor) { setThumbnailSrc(''); return; }
+
+    const captureFrame = () => {
+      const canvas = thumbnailCanvasRef.current;
+      if (!canvas || !videoRef.current) return;
+      try {
+        const ctx = canvas.getContext('2d');
+        canvas.width = 160;
+        canvas.height = 90;
+        ctx.drawImage(videoRef.current, 0, 0, 160, 90);
+        setThumbnailSrc(canvas.toDataURL('image/jpeg', 0.75));
+      } catch (_) { /* video not ready or cross-origin */ }
+    };
+
+    const vid = videoRef.current;
+    if (Math.abs(vid.currentTime - anchor.start) < 0.5) {
+      captureFrame();
+    } else {
+      vid.addEventListener('seeked', captureFrame, { once: true });
+      vid.currentTime = anchor.start;
+    }
+    return () => vid.removeEventListener('seeked', captureFrame);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAnchor, videoUrl, dragState.active]);
+
+  // Phase 5B: Loop main video within the selected anchor's range when previewCardLooping is on
+  useEffect(() => {
+    if (!previewCardLooping || !selectedAnchor || !videoRef.current) return;
+    const anchor = anchors.find(a => a.id === selectedAnchor);
+    if (!anchor) return;
+
+    const handleTimeUpdate = () => {
+      const vid = videoRef.current;
+      if (vid && vid.currentTime >= anchor.end) {
+        vid.currentTime = anchor.start;
+      }
+    };
+    const vid = videoRef.current;
+    vid.addEventListener('timeupdate', handleTimeUpdate);
+    return () => vid.removeEventListener('timeupdate', handleTimeUpdate);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewCardLooping, selectedAnchor, anchors]);
 
   // Persistent event listeners (only attach/detach once)
   useEffect(() => {
@@ -3532,6 +3629,32 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
     });
   };
+
+  // Seek the precision video AFTER the modal has mounted.
+  // The calls inside openPrecisionModal/openPrecisionModalMobile fire synchronously
+  // right after setShowPrecisionModal(true), before React commits the <video> element,
+  // so precisionVideoRef.current is still null — resulting in a black screen.
+  // This effect runs after the DOM commit and reliably seeks to the right frame.
+  useEffect(() => {
+    if (!showPrecisionModal || !precisionAnchor) return;
+
+    const seekPrecisionVideo = () => {
+      if (precisionVideoRef.current) {
+        const targetTime = selectedHandle === 'start' ? precisionAnchor.start : precisionAnchor.end;
+        precisionVideoRef.current.currentTime = targetTime;
+      }
+    };
+
+    // Try immediately (video may already be loaded if it was open before)
+    seekPrecisionVideo();
+
+    // Also seek on loadedmetadata in case the video element just mounted
+    const vid = precisionVideoRef.current;
+    if (vid) {
+      vid.addEventListener('loadedmetadata', seekPrecisionVideo, { once: true });
+      return () => vid.removeEventListener('loadedmetadata', seekPrecisionVideo);
+    }
+  }, [showPrecisionModal, precisionAnchor, selectedHandle]);
 
 const goToPreviousAnchor = () => {
   if (!precisionAnchor || precisionAnchor._index <= 0) return;
@@ -4342,7 +4465,7 @@ const exportVideo = async () => {
                 <Upload className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--accent-warm)' }} />
                 <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Upload Your Video</h2>
                 <p className="mb-6" style={{ color: 'var(--text-dim)' }}>Maximum file size: 500 MB</p>
-                <label className="inline-block px-8 py-4 btn-accent rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
+                <label className="inline-block px-8 py-4 btn-primary rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
                   Choose Video
                   <input
                     type="file"
@@ -4978,17 +5101,11 @@ const exportVideo = async () => {
                             setPlaybackMode('clips');
                           }}
                         >
-                          {/* Time Display - Top Left */}
+                          {/* Time + Clip Counter - merged into one badge (top left) */}
                           {playbackMode === 'clips' && (
                             <div className="absolute top-1 left-2 text-xs font-semibold text-white bg-black/60 px-2 py-0.5 rounded z-20 pointer-events-none">
                               {formatTime(previewCurrentTime)} / {formatTime(previewTotalDuration)}
-                            </div>
-                          )}
-
-                          {/* Clip Counter - Top Right */}
-                          {playbackMode === 'clips' && (
-                            <div className="absolute top-1 right-2 text-xs font-semibold text-white bg-black/60 px-2 py-0.5 rounded z-20 pointer-events-none">
-                              Clip {previewAnchorIndex + 1} of {previewTimeline.length}
+                              <span className="ml-2 opacity-60">· Clip {previewAnchorIndex + 1}/{previewTimeline.length}</span>
                             </div>
                           )}
 
@@ -5002,16 +5119,27 @@ const exportVideo = async () => {
                             return (
                               <div
                                 key={idx}
-                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2`}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2 overflow-hidden ${isCurrentSegment ? colors.glow : ''}`}
                                 style={{
                                   left: `${segmentLeft}%`,
                                   width: `${segmentWidth}%`
                                 }}
                                 title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s`}
                               >
+                                {/* Active indicator — top edge highlight */}
+                                {isCurrentSegment && (
+                                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/90 rounded-t pointer-events-none" />
+                                )}
+                                {/* Clip number */}
                                 <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
                                   {idx + 1}
                                 </div>
+                                {/* Duration badge — only render if segment is wide enough */}
+                                {segmentWidth > 7 && (
+                                  <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-white/60 pointer-events-none leading-none">
+                                    {segment.duration.toFixed(1)}s
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -5053,7 +5181,7 @@ const exportVideo = async () => {
                       </div>
 
                       {/* Layered Timeline: Top = Playhead Track, Bottom = Clips Lane */}
-                      <div className="relative bg-gradient-to-b from-slate-800/60 to-slate-900/80 rounded-lg border border-slate-700/50 overflow-hidden" style={{ height: '160px' }}>
+                      <div className="relative bg-gradient-to-b from-slate-800/60 to-slate-900/80 rounded-lg border border-slate-700/50 overflow-visible" style={{ height: '160px' }}>
 
                         {/* Top Layer: Playhead Track (30% height) - Click to seek */}
                         <div
@@ -5138,7 +5266,7 @@ const exportVideo = async () => {
                             const newAnchor = {
                               id: Date.now(),
                               start: time,
-                              end: Math.min(time + 2, duration)
+                              end: Math.min(time + 5, duration)
                             };
 
                             const hasOverlap = anchors.some(a =>
@@ -5179,7 +5307,7 @@ const exportVideo = async () => {
                               const newAnchor = {
                                 id: Date.now(),
                                 start: time,
-                                end: Math.min(time + 2, duration)
+                                end: Math.min(time + 5, duration)
                               };
 
                               const hasOverlap = anchors.some(a =>
@@ -5206,6 +5334,25 @@ const exportVideo = async () => {
                           style={{ height: 'calc(160px - 48px)', top: '48px' }}
                           title="Double-click to create clip"
                         >
+                          {/* === Phase 5A: Magnifier Lens — floats above cursor during anchor drag === */}
+                          <div
+                            ref={lensRef}
+                            style={{
+                              display: 'none',
+                              position: 'absolute',
+                              top: '-34px',
+                              transform: 'translateX(-50%)',
+                              zIndex: 500,
+                              pointerEvents: 'none',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            className="bg-slate-950/95 border border-cyan-500/70 text-cyan-300 font-mono text-[11px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-cyan-500/30 whitespace-nowrap"
+                          >
+                            <span style={{ opacity: 0.7 }}>⏱</span>
+                            <span ref={lensTimestampRef}>0:00.0</span>
+                          </div>
+
                           {anchors.length === 0 ? (
                             // Empty state
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
@@ -5231,6 +5378,55 @@ const exportVideo = async () => {
                                       zIndex: isSelected ? 50 : 30
                                     }}
                                   >
+                                    {/* === Phase 5B: Anchor Frame Preview Card === */}
+                                    {isSelected && !dragState.active && (
+                                      <div
+                                        className="absolute left-1/2 pointer-events-none"
+                                        style={{ top: '-84px', transform: 'translateX(-50%)', zIndex: 600, minWidth: '128px', maxWidth: '180px' }}
+                                      >
+                                        <div
+                                          className="rounded-xl overflow-hidden shadow-2xl border border-slate-600/60 pointer-events-auto"
+                                          style={{ background: 'rgba(8, 12, 28, 0.97)' }}
+                                        >
+                                          {/* Thumbnail image */}
+                                          <div className="relative bg-slate-950" style={{ height: '58px' }}>
+                                            {thumbnailSrc ? (
+                                              <img
+                                                src={thumbnailSrc}
+                                                alt=""
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                              />
+                                            ) : (
+                                              <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-[10px]">
+                                                ▶ loading…
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Timestamps row + loop toggle */}
+                                          <div className="flex items-center justify-between px-2 py-1" style={{ gap: '4px' }}>
+                                            <span className="text-[9px] font-mono text-cyan-400 tabular-nums">{formatTime(anchor.start)}</span>
+                                            <button
+                                              className="text-[11px] transition-opacity hover:opacity-80"
+                                              title={previewCardLooping ? 'Loop ON — click to disable' : 'Loop OFF — click to enable'}
+                                              onMouseDown={(e) => e.stopPropagation()}
+                                              onClick={(e) => { e.stopPropagation(); setPreviewCardLooping(l => !l); }}
+                                              style={{ opacity: previewCardLooping ? 1 : 0.35, lineHeight: 1 }}
+                                            >
+                                              🔁
+                                            </button>
+                                            <span className="text-[9px] font-mono text-red-400 tabular-nums">{formatTime(anchor.end)}</span>
+                                          </div>
+                                        </div>
+                                        {/* Arrow pointing down to anchor */}
+                                        <div style={{
+                                          width: 0, height: 0, margin: '0 auto',
+                                          borderLeft: '5px solid transparent',
+                                          borderRight: '5px solid transparent',
+                                          borderTop: '6px solid rgba(8, 12, 28, 0.97)',
+                                        }} />
+                                      </div>
+                                    )}
+
                                     <div
                                       data-anchor-element="true"
                                       onClick={(e) => handleAnchorClick(e, anchor)}
@@ -6488,7 +6684,7 @@ const exportVideo = async () => {
     const newAnchor = {
       id: Date.now(),
       start: time,
-      end: Math.min(time + 2, duration)
+      end: Math.min(time + 5, duration)
     };
 
     const hasOverlap = anchors.some(a =>
@@ -7405,7 +7601,11 @@ onMouseLeave={() => {
           <div className="panel rounded-2xl p-2 sm:p-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--accent-primary)', textShadow: '0 0 10px rgba(59,130,246,0.4)' }}>⚡ Export Your Video</h2>
-              <p style={{ color: 'var(--text-secondary)' }}>Select platforms and export your final video</p>
+              {anchors.length > 0 && (
+                <p style={{ color: 'var(--text-tertiary)' }}>
+                  {anchors.length} clip{anchors.length !== 1 ? 's' : ''} &bull; {formatTime(anchors.reduce((s, a) => s + (a.end - a.start), 0))} total — ready to forge
+                </p>
+              )}
             </div>
 
             <div className="space-y-4 mb-6">
@@ -7511,6 +7711,8 @@ onMouseLeave={() => {
     </div>
   </div>
 )}
+      {/* Phase 5B: Hidden canvas for thumbnail frame capture */}
+      <canvas ref={thumbnailCanvasRef} style={{ display: 'none' }} />
       </div>
     </div>
   </div>
