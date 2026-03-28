@@ -101,6 +101,7 @@ const ReelForge = () => {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisPhase, setAnalysisPhase] = useState('');
   const [targetDuration, setTargetDuration] = useState(60);
+  const [maxClipLength, setMaxClipLength] = useState(8); // 2-15s per clip (Quick Gen)
   const [musicAnalysis, setMusicAnalysis] = useState(null);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
   // Auto-save state
@@ -5787,6 +5788,25 @@ const exportVideo = async () => {
                         <span className="text-gray-500 text-xs">180s</span>
                       </div>
 
+                      {/* Max Clip Length Slider (Quick Gen only) */}
+                      {autoGenMode === 'quick' && (
+                        <div className="flex items-center gap-3 text-xs">
+                          <label className="text-gray-300 whitespace-nowrap">
+                            Max clip: {maxClipLength}s
+                          </label>
+                          <input
+                            type="range"
+                            min="2"
+                            max="15"
+                            step="1"
+                            value={maxClipLength}
+                            onChange={(e) => setMaxClipLength(parseInt(e.target.value))}
+                            className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-cyan-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                          />
+                          <span className="text-gray-500 text-xs">15s</span>
+                        </div>
+                      )}
+
                       {/* Auto-Generate Button */}
                       <button
                         onClick={async () => {
@@ -5797,7 +5817,7 @@ const exportVideo = async () => {
 
                             console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
 
-                            // === MODE 1: QUICK GEN (FREE - Motion Only) ===
+                            // === MODE 1: QUICK GEN (FREE - Motion Only, Variable Lengths) ===
                             if (autoGenMode === 'quick') {
                               console.log('⚡ Quick Gen: Motion detection only (FREE)');
                               setAnalysisPhase('Detecting motion...');
@@ -5816,58 +5836,61 @@ const exportVideo = async () => {
                                 setAnalysisProgress(100);
                               }
 
-                              // Step 2: Find high-motion moments
-                              // Debug: log motion score distribution
-                              if (videoAnalysisResult.length > 0) {
-                                const scores = videoAnalysisResult.map(m => m.motionScore);
-                                const maxScore = Math.max(...scores);
-                                const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-                                const sceneChanges = videoAnalysisResult.filter(m => m.sceneChange).length;
-                                console.log('📊 Motion analysis stats:', {
-                                  totalFrames: videoAnalysisResult.length,
-                                  maxScore: maxScore.toFixed(3),
-                                  avgScore: avgScore.toFixed(3),
-                                  sceneChanges
+                              // Step 2: Score analysis & variable clip length assignment
+                              const allScores = videoAnalysisResult.map(m => m.motionScore);
+                              const avgScore = allScores.reduce((a, b) => a + b, 0) / allScores.length;
+                              const maxMotionScore = Math.max(...allScores);
+                              const scoreRange = (maxMotionScore - avgScore) || 1;
+                              const sceneChanges = videoAnalysisResult.filter(m => m.sceneChange).length;
+                              console.log('📊 Motion stats:', { frames: videoAnalysisResult.length, max: maxMotionScore.toFixed(3), avg: avgScore.toFixed(3), sceneChanges, targetDuration, maxClipLength });
+
+                              // Candidates: above-average motion OR scene changes (up to 40 candidates)
+                              const sortedMoments = [...videoAnalysisResult].sort((a, b) => b.motionScore - a.motionScore);
+                              const candidates = sortedMoments
+                                .filter(m => m.motionScore > avgScore * 0.7 || m.sceneChange)
+                                .slice(0, 40);
+
+                              // Assign variable clip length: higher score → longer clip (2s min, maxClipLength max)
+                              const MIN_CLIP = 2;
+                              const candidateCuts = (candidates.length > 0 ? candidates : sortedMoments.slice(0, 12))
+                                .map(m => {
+                                  const normalized = Math.min(1, Math.max(0, (m.motionScore - avgScore * 0.7) / scoreRange));
+                                  const clipLen = Math.max(MIN_CLIP, Math.round(MIN_CLIP + normalized * (maxClipLength - MIN_CLIP)));
+                                  const start = Math.max(0, m.time - clipLen * 0.3);
+                                  const end = Math.min(duration, m.time + clipLen * 0.7);
+                                  return { start, end, reason: m.sceneChange ? 'Scene change' : 'High motion', importance: m.motionScore };
                                 });
+
+                              // Step 3: Greedy selection — pick highest-importance clips until total ≈ targetDuration
+                              let totalDur = 0;
+                              const selectedCuts = [];
+                              for (const cut of candidateCuts) {
+                                if (totalDur >= targetDuration) break;
+                                const overlaps = selectedCuts.some(s => cut.start < s.end && cut.end > s.start);
+                                if (!overlaps) {
+                                  const remaining = targetDuration - totalDur;
+                                  const actualEnd = Math.min(cut.end, cut.start + remaining);
+                                  const actualDur = actualEnd - cut.start;
+                                  if (actualDur >= 1) {
+                                    selectedCuts.push({ ...cut, end: actualEnd });
+                                    totalDur += actualDur;
+                                  }
+                                }
                               }
 
-                              // Truly adaptive: take top moments by relative score, not fixed threshold
-                              // Sort all moments by score, take top 15, then filter to those above average
-                              const sortedMoments = [...videoAnalysisResult].sort((a, b) => b.motionScore - a.motionScore);
-                              const avgScore = videoAnalysisResult.reduce((sum, m) => sum + m.motionScore, 0) / videoAnalysisResult.length;
+                              // Sort chronologically
+                              const chronoCuts = selectedCuts.sort((a, b) => a.start - b.start);
+                              console.log(`📍 Quick Gen: ${chronoCuts.length} clips, total ${totalDur.toFixed(1)}s (target ${targetDuration}s)`);
 
-                              // Take moments that are above average OR are scene changes, up to 12
-                              const motionCuts = sortedMoments
-                                .filter(m => m.motionScore > avgScore || m.sceneChange)
-                                .slice(0, 12)
-                                .map((m, index) => ({
-                                  start: Math.max(0, m.time - 1),
-                                  end: Math.min(duration, m.time + 3),
-                                  reason: m.sceneChange ? 'Scene change' : 'High motion',
-                                  importance: m.motionScore
-                                }));
-
-                              // Fallback: if no moments above average, just take top 8
-                              const finalMotionCuts = motionCuts.length > 0 ? motionCuts : sortedMoments
-                                .slice(0, 8)
-                                .map((m, index) => ({
-                                  start: Math.max(0, m.time - 1),
-                                  end: Math.min(duration, m.time + 3),
-                                  reason: 'Motion peak',
-                                  importance: m.motionScore
-                                }));
-
-                              console.log(`📍 Quick Gen: Found ${finalMotionCuts.length} motion moments (avg threshold: ${avgScore.toFixed(3)})`);
-
-                              // Step 3: Apply gentle beat-sync if enabled
-                              let finalCuts = finalMotionCuts;
+                              // Step 4: Apply gentle beat-sync if enabled
+                              let finalCuts = chronoCuts;
                               if (enableBeatSync && musicAnalysis?.beatGrid && music) {
                                 console.log('🎵 Applying gentle beat-sync...');
-                                finalCuts = applyGentleBeatSync(finalMotionCuts, musicAnalysis);
+                                finalCuts = applyGentleBeatSync(chronoCuts, musicAnalysis);
                               }
 
-                              // Step 4: Create anchors
-                              const newAnchors = finalCuts.map((cut, index) => ({
+                              // Step 5: Create anchors
+                              const finalAnchors = finalCuts.map((cut, index) => ({
                                 id: Date.now() + index,
                                 start: Math.max(0, cut.start),
                                 end: Math.min(duration, cut.end),
@@ -5875,21 +5898,10 @@ const exportVideo = async () => {
                                 _importance: cut.importance
                               }));
 
-                              const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
-                                if (index === 0) {
-                                  kept.push(anchor);
-                                  return kept;
-                                }
-                                const lastKept = kept[kept.length - 1];
-                                if (anchor.start >= lastKept.end) {
-                                  kept.push(anchor);
-                                }
-                                return kept;
-                              }, []);
-
                               console.log('✅ QUICK GEN COMPLETE:', {
                                 anchorsCreated: finalAnchors.length,
-                                totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+                                totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1) + 's',
+                                target: targetDuration + 's'
                               });
 
                               setAnchors(finalAnchors);
@@ -6360,6 +6372,25 @@ const exportVideo = async () => {
     <span className="text-stone-500 text-xs">15s - 180s</span>
   </div>
 
+  {/* Max Clip Length Slider (Quick Gen only) */}
+  {autoGenMode === 'quick' && (
+    <div className="flex items-center gap-3 text-xs mt-1">
+      <label className="text-stone-300 whitespace-nowrap">
+        Max clip: {maxClipLength}s
+      </label>
+      <input
+        type="range"
+        min="2"
+        max="15"
+        step="1"
+        value={maxClipLength}
+        onChange={(e) => setMaxClipLength(parseInt(e.target.value))}
+        className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-cyan-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+      />
+      <span className="text-stone-500 text-xs">2s - 15s</span>
+    </div>
+  )}
+
   <button
       onClick={async () => {
         if (!video || isAnalyzing) return;
@@ -6369,7 +6400,7 @@ const exportVideo = async () => {
 
           console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
 
-          // === MODE 1: QUICK GEN (FREE - Motion Only) ===
+          // === MODE 1: QUICK GEN (FREE - Motion Only, Variable Lengths) ===
           if (autoGenMode === 'quick') {
             console.log('⚡ Quick Gen: Motion detection only (FREE)');
 
@@ -6383,27 +6414,59 @@ const exportVideo = async () => {
               console.log('✅ Using cached motion analysis');
             }
 
-            // Step 2: Find high-motion moments
-            const motionCuts = videoAnalysisResult
-              .filter(m => m.motionScore > 0.6 || m.sceneChange)
-              .sort((a, b) => b.motionScore - a.motionScore)
-              .slice(0, 8)
-              .map((m, index) => ({
-                start: Math.max(0, m.time - 1),
-                end: Math.min(duration, m.time + 3),
-                reason: m.sceneChange ? 'Scene change' : 'High motion',
-                importance: m.motionScore
-              }));
+            // Step 2: Score analysis & variable clip length assignment
+            const allScores2 = videoAnalysisResult.map(m => m.motionScore);
+            const avgScore2 = allScores2.reduce((a, b) => a + b, 0) / allScores2.length;
+            const maxMotionScore2 = Math.max(...allScores2);
+            const scoreRange2 = (maxMotionScore2 - avgScore2) || 1;
+            console.log('📊 Motion stats:', { frames: videoAnalysisResult.length, max: maxMotionScore2.toFixed(3), avg: avgScore2.toFixed(3), targetDuration, maxClipLength });
 
-            // Step 3: Apply gentle beat-sync if enabled
-            let finalCuts = motionCuts;
-            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-              console.log('🎵 Applying gentle beat-sync...');
-              finalCuts = applyGentleBeatSync(motionCuts, musicAnalysis);
+            // Candidates: above-average motion OR scene changes (up to 40)
+            const sortedMoments2 = [...videoAnalysisResult].sort((a, b) => b.motionScore - a.motionScore);
+            const candidates2 = sortedMoments2
+              .filter(m => m.motionScore > avgScore2 * 0.7 || m.sceneChange)
+              .slice(0, 40);
+
+            // Variable clip length: higher score → longer clip
+            const MIN_CLIP2 = 2;
+            const candidateCuts2 = (candidates2.length > 0 ? candidates2 : sortedMoments2.slice(0, 12))
+              .map(m => {
+                const normalized = Math.min(1, Math.max(0, (m.motionScore - avgScore2 * 0.7) / scoreRange2));
+                const clipLen = Math.max(MIN_CLIP2, Math.round(MIN_CLIP2 + normalized * (maxClipLength - MIN_CLIP2)));
+                const start = Math.max(0, m.time - clipLen * 0.3);
+                const end = Math.min(duration, m.time + clipLen * 0.7);
+                return { start, end, reason: m.sceneChange ? 'Scene change' : 'High motion', importance: m.motionScore };
+              });
+
+            // Step 3: Greedy selection until total ≈ targetDuration
+            let totalDur2 = 0;
+            const selectedCuts2 = [];
+            for (const cut of candidateCuts2) {
+              if (totalDur2 >= targetDuration) break;
+              const overlaps = selectedCuts2.some(s => cut.start < s.end && cut.end > s.start);
+              if (!overlaps) {
+                const remaining = targetDuration - totalDur2;
+                const actualEnd = Math.min(cut.end, cut.start + remaining);
+                const actualDur = actualEnd - cut.start;
+                if (actualDur >= 1) {
+                  selectedCuts2.push({ ...cut, end: actualEnd });
+                  totalDur2 += actualDur;
+                }
+              }
             }
 
-            // Step 4: Create anchors
-            const newAnchors = finalCuts.map((cut, index) => ({
+            const chronoCuts2 = selectedCuts2.sort((a, b) => a.start - b.start);
+            console.log(`📍 Quick Gen: ${chronoCuts2.length} clips, ${totalDur2.toFixed(1)}s (target ${targetDuration}s)`);
+
+            // Step 4: Apply gentle beat-sync if enabled
+            let finalCuts2 = chronoCuts2;
+            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
+              console.log('🎵 Applying gentle beat-sync...');
+              finalCuts2 = applyGentleBeatSync(chronoCuts2, musicAnalysis);
+            }
+
+            // Step 5: Create anchors
+            const finalAnchors2 = finalCuts2.map((cut, index) => ({
               id: Date.now() + index,
               start: Math.max(0, cut.start),
               end: Math.min(duration, cut.end),
@@ -6411,25 +6474,14 @@ const exportVideo = async () => {
               _importance: cut.importance
             }));
 
-            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
-              if (index === 0) {
-                kept.push(anchor);
-                return kept;
-              }
-              const lastKept = kept[kept.length - 1];
-              if (anchor.start >= lastKept.end) {
-                kept.push(anchor);
-              }
-              return kept;
-            }, []);
-
             console.log('✅ QUICK GEN COMPLETE:', {
-              anchorsCreated: finalAnchors.length,
-              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
+              anchorsCreated: finalAnchors2.length,
+              totalDuration: finalAnchors2.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1) + 's',
+              target: targetDuration + 's'
             });
 
-            setAnchors(finalAnchors);
-            saveToHistory(finalAnchors);
+            setAnchors(finalAnchors2);
+            saveToHistory(finalAnchors2);
           }
 
           // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
