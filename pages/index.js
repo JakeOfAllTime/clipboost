@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import Head from 'next/head';
 import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -100,13 +101,14 @@ const ReelForge = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisPhase, setAnalysisPhase] = useState('');
-  const [targetDuration, setTargetDuration] = useState(60);
+  const [targetDuration, setTargetDuration] = useState(20);
   const [maxClipLength, setMaxClipLength] = useState(8); // 2-15s per clip (Quick Gen)
   const [musicAnalysis, setMusicAnalysis] = useState(null);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
   // Auto-save state
   const [showRestoreToast, setShowRestoreToast] = useState(false);
   const [restoredAnchorCount, setRestoredAnchorCount] = useState(0);
+  const [restoredVideoName, setRestoredVideoName] = useState(null);
   const [showAutoSaveIndicator, setShowAutoSaveIndicator] = useState(false);
   const [hoveredAnchor, setHoveredAnchor] = useState(null);
 
@@ -142,20 +144,22 @@ const ReelForge = () => {
   // Timeline zoom state
   const [timelineZoom, setTimelineZoom] = useState(1);
 
+  // Clip thumbnails: Map<anchorId, dataURL> — captured from video midpoint
+  const [clipThumbnails, setClipThumbnails] = useState({});
+
   // Auto-generate V3 state
   const [autoGenMode, setAutoGenMode] = useState('quick'); // 'quick' | 'smart' | 'pro'
   const [enableBeatSync, setEnableBeatSync] = useState(false);
   const [userApiKey, setUserApiKey] = useState('');
 
-  // Sidebar navigation state (load from localStorage)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+  // Sidebar navigation state — start false on server, sync from localStorage after hydration
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('clipboost-sidebar-collapsed');
-      return saved === 'true';
-    } catch {
-      return false;
-    }
-  });
+      if (saved === 'true') setSidebarCollapsed(true);
+    } catch {}
+  }, []);
   const [currentSection, setCurrentSection] = useState('edit'); // 'edit' | 'export'
 
   // Playback mode state
@@ -164,6 +168,16 @@ const ReelForge = () => {
   // Media Center collapse state
   const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(false);
   const [previewCardLooping, setPreviewCardLooping] = useState(true); // Phase 5B: clip loop in preview card
+  const [cardVideoPlaying, setCardVideoPlaying] = useState(false);   // tracks play/pause for overlay button
+
+  // Toast notifications — replaces all native alert() / confirm() dialogs
+  const [toasts, setToasts] = useState([]);
+  const dismissToast = useCallback((id) => setToasts(prev => prev.filter(t => t.id !== id)), []);
+  const showToast = useCallback((message, type = 'info', action = null) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type, action }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), type === 'error' ? 5000 : 3500);
+  }, []);
 
   // FFmpeg state
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -188,6 +202,15 @@ const ReelForge = () => {
   const clipsPlayheadRef = useRef(null);
   const clipsTimeDisplayRef = useRef(null);
   const previewCurrentTimeRef = useRef(0); // authoritative value during RAF
+
+  // Clips bar scrubbing
+  const clipsBarRef = useRef(null);
+  const clipsBarScrubRef = useRef(false); // true while dragging
+
+  // Loupe handle drag — floating frame thumbnail
+  const [loupeDragThumb, setLoupeDragThumb] = useState(null); // { dataUrl, side } | null
+  const loupeDragThumbCanvas = useRef(null); // offscreen canvas for frame capture
+  const loupeDragActiveRef = useRef(false);  // true while a loupe handle is being dragged
 
   // Preview card mini video player
   const cardVideoRef = useRef(null);
@@ -271,7 +294,8 @@ const platforms = {
             anchors,
             musicStartTime,
             audioBalance,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            videoName: video?.name || null
           };
           localStorage.setItem('clipboost-autosave', JSON.stringify(saveData));
 
@@ -524,7 +548,7 @@ const dismissRestoreToast = () => {
         if (config.trimStart !== undefined) setTrimStart(config.trimStart);
         if (config.trimEnd !== undefined) setTrimEnd(config.trimEnd);
       } catch (error) {
-        alert('Error loading configuration file');
+        showToast('Error loading configuration file', 'error');
       }
     };
     reader.readAsText(file);
@@ -2356,7 +2380,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     const maxSize = 500 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert(`File too large! Maximum size is 500 MB.`);
+      showToast('File too large — maximum size is 500 MB', 'warning');
       return;
     }
 
@@ -2400,6 +2424,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const daysSince = (Date.now() - data.timestamp) / (1000 * 60 * 60 * 24);
       if (daysSince < 7 && data.anchors && data.anchors.length > 0) {
         setRestoredAnchorCount(data.anchors.length);
+        setRestoredVideoName(data.videoName || null);
         setShowRestoreToast(true);
         setTimeout(() => setShowRestoreToast(false), 10000);
       } else {
@@ -2417,6 +2442,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       setDuration(dur);
       setTrimStart(0);
       setTrimEnd(dur);
+      // Paint the first frame so the player isn't black on upload
+      videoRef.current.currentTime = 0.1;
     }
   };
 
@@ -2454,7 +2481,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   // Preview mode functions
   const startPreviewMode = () => {
     if (anchors.length === 0) {
-      alert('Add anchors first to preview');
+      showToast('Create some clips first to enable preview', 'warning');
       return;
     }
 
@@ -2507,9 +2534,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (!selectedAnchor || !duration) return null;
     const anchor = anchors.find(a => a.id === selectedAnchor);
     if (!anchor) return null;
-    const anchorDuration = Math.max(anchor.end - anchor.start, 0.5);
-    // Show ~2.5x anchor duration on each side (min 8s total window)
-    const windowDuration = Math.max(anchorDuration / 0.35, 8);
+    const anchorDuration = Math.max(anchor.end - anchor.start, 0.1);
+    // Context: proportional but capped — anchor fills ~65-80% of loupe at any clip length
+    const CONTEXT = Math.min(Math.max(anchorDuration * 0.25, 0.5), 3);
+    const windowDuration = anchorDuration + CONTEXT * 2;
     const center = (anchor.start + anchor.end) / 2;
     const start = Math.max(0, center - windowDuration / 2);
     const end = Math.min(duration, start + windowDuration);
@@ -2561,30 +2589,121 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   // Seek to preview time
   const seekPreviewTime = useCallback((previewTime) => {
     const segment = findSegmentAtTime(previewTime);
-    if (!segment || !videoRef.current) return;
+    if (!segment) return;
 
     const offset = previewTime - segment.previewStart;
     const sourceTime = segment.sourceStart + offset;
 
-    videoRef.current.currentTime = sourceTime;
-    setPreviewCurrentTime(previewTime);
+    // Always clear stuck-transition state on any manual seek
+    transitioningRef.current = false;
+    waitingForStandbyRef.current = null;
+    standbyReadyRef.current = false;
+
+    // Seek the active video element (may be A or B after a swap)
+    const activeVideoEl = activeVideoRef.current === 'A' ? videoRef.current : videoBRef.current;
+    const standbyVideoEl = activeVideoRef.current === 'A' ? videoBRef.current : videoRef.current;
+    if (activeVideoEl) activeVideoEl.currentTime = sourceTime;
+    // Also reset standby to be ready for the segment after this one
+    const afterIndex = segment.index + 1;
+    if (standbyVideoEl && previewTimeline[afterIndex]) {
+      standbyVideoEl.currentTime = previewTimeline[afterIndex].sourceStart;
+    }
+
+    // Sync anchor index refs so RAF tracks the right segment
+    previewAnchorIndexRef.current = segment.index;
     setPreviewAnchorIndex(segment.index);
+    setPreviewCurrentTime(previewTime);
     previewCurrentTimeRef.current = previewTime;
+
+    // Update clips bar playhead
     if (clipsPlayheadRef.current && previewTotalDuration > 0) {
       clipsPlayheadRef.current.style.left = `${(previewTime / previewTotalDuration) * 100}%`;
+    }
+    // Update main timeline playhead to the source position
+    if (duration > 0) {
+      const pct = (sourceTime / duration) * 100;
+      if (playheadRef.current) playheadRef.current.style.left = `${pct}%`;
+      if (playheadProgressRef.current) playheadProgressRef.current.style.width = `${pct}%`;
     }
 
     // Sync music if available
     if (music && musicRef.current) {
-      const musicTime = segment.musicTime + offset;
-      musicRef.current.currentTime = musicTime;
+      const musicTime = (segment.musicTime ?? 0) + offset;
+      musicRef.current.currentTime = Math.max(0, musicTime);
     }
-  }, [findSegmentAtTime, music]);
+  }, [findSegmentAtTime, music, previewTimeline, previewTotalDuration, duration]);
+
+  // Scrub clips bar by clientX — called during drag
+  const scrubClipsBar = useCallback((clientX) => {
+    if (!clipsBarRef.current || previewTotalDuration <= 0) return;
+    const rect = clipsBarRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const newTime = pct * previewTotalDuration;
+    setPlaybackMode('clips');
+    seekPreviewTime(newTime);
+  }, [previewTotalDuration, seekPreviewTime]);
+
+  // Frame thumbnail during loupe handle drag — capture from main video at 100ms intervals
+  useEffect(() => {
+    // Initialise the offscreen canvas once
+    if (!loupeDragThumbCanvas.current) {
+      const c = document.createElement('canvas');
+      c.width = 120; c.height = 68;
+      loupeDragThumbCanvas.current = c;
+    }
+    if (!dragState.active || dragSourceRef.current !== 'loupe') {
+      // Drag ended or not a loupe drag — clear thumbnail
+      if (loupeDragThumb !== null) setLoupeDragThumb(null);
+      loupeDragActiveRef.current = false;
+      return;
+    }
+    const handle = dragState.handle; // 'anchor-left' | 'anchor-right' | 'anchor-move'
+    if (handle !== 'anchor-left' && handle !== 'anchor-right') {
+      if (loupeDragThumb !== null) setLoupeDragThumb(null);
+      return;
+    }
+    loupeDragActiveRef.current = true;
+    const side = handle === 'anchor-left' ? 'start' : 'end';
+    const capture = () => {
+      const vid = videoRef.current;
+      if (!vid || !loupeDragThumbCanvas.current) return;
+      const ctx = loupeDragThumbCanvas.current.getContext('2d');
+      try {
+        ctx.drawImage(vid, 0, 0, 120, 68);
+        const dataUrl = loupeDragThumbCanvas.current.toDataURL('image/jpeg', 0.75);
+        setLoupeDragThumb({ dataUrl, side });
+      } catch (_) {}
+    };
+    capture(); // immediate first frame
+    const interval = setInterval(capture, 100);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragState.active, dragState.handle]);
+
+  // Global listeners for clips bar scrub drag
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!clipsBarScrubRef.current) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      scrubClipsBar(clientX);
+    };
+    const onUp = () => { clipsBarScrubRef.current = false; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+  }, [scrubClipsBar]);
 
   // Start enhanced preview mode with dual-video system
   const startEnhancedPreview = useCallback(async () => {
     if (anchors.length === 0) {
-      alert('Add anchors first to preview');
+      showToast('Create some clips first to enable preview', 'warning');
       return;
     }
 
@@ -2667,6 +2786,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setPreviewCurrentTime(0);
     setPreviewAnchorIndex(0);
 
+    // Clear stuck-transition state
+    transitioningRef.current = false;
+    waitingForStandbyRef.current = null;
+
     if (previewAnimationRef.current) {
       cancelAnimationFrame(previewAnimationRef.current);
       previewAnimationRef.current = null;
@@ -2677,9 +2800,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       musicRef.current.currentTime = musicStartTime;
     }
 
-    if (videoRef.current) {
-      videoRef.current.pause();
-    }
+    // Pause BOTH video elements — active may be A or B after swaps
+    if (videoRef.current) videoRef.current.pause();
+    if (videoBRef.current) videoBRef.current.pause();
   }, [musicStartTime]);
 
   // Toggle preview playback
@@ -2690,15 +2813,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    // Toggle play/pause
+    // Toggle play/pause — affect whichever video is currently active
+    const activeVideoEl = activeVideoRef.current === 'A' ? videoRef.current : videoBRef.current;
     if (isPreviewPlaying) {
       setIsPreviewPlaying(false);
       if (videoRef.current) videoRef.current.pause();
+      if (videoBRef.current) videoBRef.current.pause(); // pause both to be safe
       if (musicRef.current) musicRef.current.pause();
     } else {
       setIsPreviewPlaying(true);
-      if (videoRef.current) videoRef.current.play();
-      if (musicRef.current) musicRef.current.play();
+      if (activeVideoEl) activeVideoEl.play().catch(() => {});
+      if (musicRef.current) musicRef.current.play().catch(() => {});
     }
   }, [isPreviewMode, isPreviewPlaying, startEnhancedPreview]);
 
@@ -2707,6 +2832,46 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Always build preview timeline when anchors change (for clips timeline display)
     buildPreviewTimeline();
   }, [anchors, buildPreviewTimeline]);
+
+  // Capture thumbnails for any anchors that don't have one yet
+  useEffect(() => {
+    if (!videoUrl || anchors.length === 0) return;
+    const missing = anchors.filter(a => !clipThumbnails[a.id]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    const vid = document.createElement('video');
+    vid.src = videoUrl;
+    vid.muted = true;
+    vid.preload = 'metadata';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 90;
+    const ctx = canvas.getContext('2d');
+
+    const captureNext = async (idx) => {
+      if (cancelled || idx >= missing.length) return;
+      const anchor = missing[idx];
+      const mid = (anchor.start + anchor.end) / 2;
+      vid.currentTime = mid;
+      await new Promise((res) => {
+        const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); res(); };
+        vid.addEventListener('seeked', onSeeked);
+      });
+      if (cancelled) return;
+      ctx.drawImage(vid, 0, 0, 160, 90);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      setClipThumbnails(prev => ({ ...prev, [anchor.id]: dataUrl }));
+      captureNext(idx + 1);
+    };
+
+    vid.addEventListener('loadedmetadata', () => captureNext(0), { once: true });
+    vid.load();
+
+    return () => { cancelled = true; vid.src = ''; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchors, videoUrl]);
 
   // Keyboard shortcuts for preview mode
   useEffect(() => {
@@ -2802,6 +2967,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
       if (clipsTimeDisplayRef.current) {
         clipsTimeDisplayRef.current.textContent = `${Math.floor(newPreviewTime / 60)}:${String(Math.floor(newPreviewTime % 60)).padStart(2, '0')} / ${Math.floor(previewTotalDuration / 60)}:${String(Math.floor(previewTotalDuration % 60)).padStart(2, '0')}`;
+      }
+      // Also keep the main timeline playhead in sync with the source position
+      if (duration > 0) {
+        const pct = (sourceTime / duration) * 100;
+        if (playheadRef.current) playheadRef.current.style.left = `${pct}%`;
+        if (playheadProgressRef.current) playheadProgressRef.current.style.width = `${pct}%`;
       }
 
       // Check if we've reached the end of current segment (skip if already transitioning)
@@ -3110,7 +3281,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     );
 
     if (hasOverlap) {
-      alert('Anchor overlaps with existing anchor');
+      showToast('Clip overlaps with an existing clip — try a different position', 'warning');
       return;
     }
 
@@ -3133,6 +3304,27 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Mark delete hint as seen
     setHasSeenDeleteHint(true);
   }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
+
+  // Nudge selected anchor start or end by one video frame (1/30s)
+  const FRAME_STEP = 1 / 30;
+  const nudgeAnchor = useCallback((handle, direction) => {
+    if (!selectedAnchor) return;
+    setAnchors(prev => {
+      const updated = prev.map(a => {
+        if (a.id !== selectedAnchor) return a;
+        const delta = direction * FRAME_STEP;
+        if (handle === 'start') {
+          const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
+          return { ...a, start: newStart };
+        } else {
+          const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, duration));
+          return { ...a, end: newEnd };
+        }
+      });
+      saveToHistory(updated);
+      return updated;
+    });
+  }, [selectedAnchor, duration, saveToHistory]);
 
   const handleAnchorClick = useCallback((e, anchor) => {
     e.stopPropagation();
@@ -3282,6 +3474,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const processMouseMove = useCallback((clientX) => {
     const { dragState, anchors, duration, selectedAnchor, previewAnchor } = dragDataRef.current;
     dragLiveXRef.current = clientX; // Track for handle upgrade timer
+
+    // Cancel handle→move upgrade the moment the user actually drags (> 5px).
+    // This prevents the 1-second timer from firing mid-drag and hijacking the resize.
+    if (
+      upgradeTimerRef.current &&
+      (dragState.type === 'anchor-left' || dragState.type === 'anchor-right') &&
+      Math.abs(clientX - dragState.startX) > 5
+    ) {
+      clearTimeout(upgradeTimerRef.current);
+      upgradeTimerRef.current = null;
+    }
 
     if (dragState.type === 'timeline') {
       if (timelineRef.current && videoRef.current) {
@@ -4035,7 +4238,7 @@ const goToNextAnchor = () => {
 
     } catch (error) {
       console.error('Trim error:', error);
-      alert('Error trimming video');
+      showToast('Error trimming video — please try again', 'error');
     } finally {
       setIsProcessing(false);
       setProgress(0);
@@ -4244,7 +4447,7 @@ const exportVideo = async () => {
 
   } catch (error) {
     console.error('Export error:', error);
-    alert('Error exporting video');
+    showToast('Export failed — check console for details', 'error');
   } finally {
     setIsProcessing(false);
   }
@@ -4330,6 +4533,11 @@ const exportVideo = async () => {
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
 
   return (
+<>
+<Head>
+  <title>ReelForge — AI Video Editor</title>
+  <meta name="description" content="Transform raw footage into polished social clips in minutes." />
+</Head>
 <div className="flex min-h-screen relative" style={{ color: 'var(--text-primary)', background: 'var(--bg-primary)' }}>
   {/* Animated Hero Gradient Background */}
   <div className="hero-gradient">
@@ -4451,9 +4659,15 @@ const exportVideo = async () => {
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <div className="font-semibold mb-1">Previous Work Found</div>
-                <div className="text-sm text-gray-300 mb-3">
-                  Found {restoredAnchorCount} anchor{restoredAnchorCount === 1 ? '' : 's'} from your last session
+                <div className="text-sm text-gray-300 mb-1">
+                  Found {restoredAnchorCount} clip{restoredAnchorCount === 1 ? '' : 's'} from your last session
                 </div>
+                {restoredVideoName && (
+                  <div className="text-xs text-amber-400/80 mb-3">
+                    ⚠ From: <span className="font-mono">{restoredVideoName}</span> — may not match your current video
+                  </div>
+                )}
+                {!restoredVideoName && <div className="mb-3" />}
                 <div className="flex gap-2">
                   <button
                     onClick={restoreAutoSave}
@@ -4921,21 +5135,25 @@ const exportVideo = async () => {
                       }}
                     />
 
-                    {/* Play/Pause Overlay Button */}
+                    {/* Play/Pause Overlay Button — hidden during Play Clips (preview owns playback) */}
                     <button
-                      onClick={togglePlay}
+                      onClick={isPreviewMode ? togglePreviewPlayback : togglePlay}
                       className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-                        isPlaying
-                          ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20'
-                          : 'bg-black/40 opacity-100'
+                        isPreviewMode
+                          ? (isPreviewPlaying
+                              ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20'
+                              : 'bg-black/40 opacity-100')
+                          : (isPlaying
+                              ? 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/20'
+                              : 'bg-black/40 opacity-100')
                       }`}
                     >
                       <div className={`transition-all duration-300 ${
-                        isPlaying
+                        (isPreviewMode ? isPreviewPlaying : isPlaying)
                           ? 'scale-75 opacity-60 group-hover:scale-100 group-hover:opacity-100'
                           : 'scale-100 opacity-100'
                       }`}>
-                        {isPlaying ? (
+                        {(isPreviewMode ? isPreviewPlaying : isPlaying) ? (
                           <Pause size={64} className="text-white drop-shadow-lg" />
                         ) : (
                           <Play size={64} className="text-white drop-shadow-lg" />
@@ -5095,34 +5313,7 @@ const exportVideo = async () => {
                           <span>►</span>
                         </button>
 
-                        {/* Precision Button - Updated icon and gradient */}
-                        {selectedAnchor !== null && (
-                          <button
-                            onClick={() => {
-                              const anchor = anchors.find(a => a.id === selectedAnchor);
-                              if (anchor) {
-                                const anchorIndex = anchors.findIndex(a => a.id === selectedAnchor);
-                                const timelineOffset = anchors
-                                  .slice(0, anchorIndex)
-                                  .reduce((sum, a) => sum + (a.end - a.start), 0);
-
-                                setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
-                                setPrecisionTime(anchor.end);
-                                setSelectedHandle('end');
-                                setShowPrecisionModal(true);
-                                setHasSeenPrecisionHint(true); // Mark hint as seen
-                              }
-                            }}
-                            className={`px-4 py-2 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 rounded-lg flex items-center gap-2 text-sm transition ${selectedAnchor && !hasSeenPrecisionHint ? 'precision-button-active' : ''}`}
-                            title="Edit Current Anchor - Frame-perfect trimming"
-                          >
-                            <div className="relative">
-                              <ZoomIn size={16} />
-                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full" />
-                            </div>
-                            <span className="hidden sm:inline">Precision</span>
-                          </button>
-                        )}
+                        {/* Precision button removed — frame nudge now lives inline in the loupe strip */}
                       </div>
                     ) : null}
 
@@ -5130,14 +5321,16 @@ const exportVideo = async () => {
                     {anchors.length > 0 ? (
                       <div>
                         <div
-                          className="relative h-20 bg-slate-800 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500/40 transition-all"
-                          onClick={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const clickX = e.clientX - rect.left;
-                            const percentage = clickX / rect.width;
-                            const newTime = percentage * previewTotalDuration;
-                            seekPreviewTime(newTime);
-                            setPlaybackMode('clips');
+                          ref={clipsBarRef}
+                          className="relative h-20 bg-slate-800 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500/40 transition-all select-none"
+                          onMouseDown={(e) => {
+                            if (e.button !== 0) return;
+                            clipsBarScrubRef.current = true;
+                            scrubClipsBar(e.clientX);
+                          }}
+                          onTouchStart={(e) => {
+                            clipsBarScrubRef.current = true;
+                            scrubClipsBar(e.touches[0].clientX);
                           }}
                         >
                           {/* Time + Clip Counter - merged into one badge (top left) */}
@@ -5155,13 +5348,16 @@ const exportVideo = async () => {
                             const isCurrentSegment = playbackMode === 'clips' && idx === previewAnchorIndex;
                             const colors = getAnchorColor(idx, isCurrentSegment);
 
+                            const thumb = clipThumbnails[segment.anchorId];
                             return (
                               <div
                                 key={idx}
-                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2 overflow-hidden cursor-pointer ${isCurrentSegment ? colors.glow : ''}`}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.border} border-2 overflow-hidden cursor-pointer ${isCurrentSegment ? colors.glow : ''}`}
                                 style={{
                                   left: `${segmentLeft}%`,
-                                  width: `${segmentWidth}%`
+                                  width: `${segmentWidth}%`,
+                                  backgroundColor: thumb ? 'transparent' : undefined,
+                                  ...(thumb ? {} : {})
                                 }}
                                 title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s — click to jump`}
                                 onClick={(e) => {
@@ -5170,19 +5366,36 @@ const exportVideo = async () => {
                                   previewAnchorIndexRef.current = idx;
                                   setPreviewAnchorIndex(idx);
                                   seekPreviewTime(segment.previewStart);
+                                  // Select the corresponding anchor → shows pillbox
+                                  setSelectedAnchor(segment.anchorId);
                                 }}
                               >
+                                {/* Thumbnail background */}
+                                {thumb ? (
+                                  <div
+                                    className="absolute inset-0"
+                                    style={{
+                                      backgroundImage: `url(${thumb})`,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center',
+                                    }}
+                                  />
+                                ) : (
+                                  <div className={`absolute inset-0 ${colors.bg}`} />
+                                )}
+                                {/* Dark scrim for readability */}
+                                <div className={`absolute inset-0 ${thumb ? 'bg-black/40' : 'bg-black/20'}`} />
                                 {/* Active indicator — top edge highlight */}
                                 {isCurrentSegment && (
                                   <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/90 rounded-t pointer-events-none" />
                                 )}
                                 {/* Clip number */}
-                                <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
+                                <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none text-white drop-shadow">
                                   {idx + 1}
                                 </div>
                                 {/* Duration badge — only render if segment is wide enough */}
                                 {segmentWidth > 7 && (
-                                  <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-white/60 pointer-events-none leading-none">
+                                  <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-white/70 pointer-events-none leading-none drop-shadow">
                                     {segment.duration.toFixed(1)}s
                                   </div>
                                 )}
@@ -5194,9 +5407,17 @@ const exportVideo = async () => {
                           {playbackMode === 'clips' && (
                             <div
                               ref={clipsPlayheadRef}
-                              className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
-                              style={{
-                                left: '0%'
+                              className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg z-10 cursor-ew-resize"
+                              style={{ left: '0%' }}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                clipsBarScrubRef.current = true;
+                                scrubClipsBar(e.clientX);
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                                clipsBarScrubRef.current = true;
+                                scrubClipsBar(e.touches[0].clientX);
                               }}
                             >
                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
@@ -5215,6 +5436,229 @@ const exportVideo = async () => {
                     )}
                   </div>
                   {/* End Playback Controls + Clips Preview Section */}
+
+                  {/* ═══ Loupe Strip — always visible, no layout pop ═══ */}
+                  {(() => {
+                    const anchor = anchors.find(a => a.id === selectedAnchor);
+                    const active = !!(anchor && loupeWindow);
+                    const colors = active ? getAnchorColor(anchors.indexOf(anchor), true) : null;
+                    const anchorLeft = active ? ((anchor.start - loupeWindow.start) / loupeWindow.duration) * 100 : 0;
+                    const anchorWidth = active ? ((anchor.end - anchor.start) / loupeWindow.duration) * 100 : 0;
+                    const clampedLeft = active ? Math.max(0, Math.min(95, anchorLeft)) : 0;
+                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorWidth)) : 0;
+                    // Thumbnail: left handle = near start, right handle = near end
+                    const thumbLeft = loupeDragThumb?.side === 'start' ? `${clampedLeft}%` : `${clampedLeft + clampedWidth}%`;
+
+                    return (
+                      <div className="mt-1 flex gap-1.5" style={{ height: '100px' }}>
+
+                        {/* LEFT: Video preview card — always 144px */}
+                        <div
+                          className="flex-shrink-0 rounded-lg overflow-hidden border transition-colors"
+                          style={{
+                            width: '144px',
+                            background: 'rgba(8, 12, 28, 0.97)',
+                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          {active ? (
+                            <>
+                              {/* Video with play/pause */}
+                              <div className="relative" style={{ height: '56px' }}>
+                                <video
+                                  ref={cardVideoRef}
+                                  src={videoUrl}
+                                  muted
+                                  playsInline
+                                  onPlay={() => setCardVideoPlaying(true)}
+                                  onPause={() => setCardVideoPlaying(false)}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                  onTimeUpdate={() => {
+                                    const vid = cardVideoRef.current;
+                                    if (!vid || !anchor) return;
+                                    if (previewCardLooping && vid.currentTime >= anchor.end) vid.currentTime = anchor.start;
+                                    else if (!previewCardLooping && vid.currentTime >= anchor.end) vid.pause();
+                                  }}
+                                />
+                                <button
+                                  className="absolute inset-0 flex items-center justify-center hover:bg-black/20 transition-colors"
+                                  style={{ background: 'transparent' }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const vid = cardVideoRef.current;
+                                    if (!vid) return;
+                                    if (vid.paused) vid.play().catch(() => {});
+                                    else vid.pause();
+                                  }}
+                                >
+                                  <div className="w-6 h-6 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20 opacity-60 hover:opacity-100" style={{ background: 'rgba(0,0,0,0.55)' }}>
+                                    <span className="text-white text-[10px] select-none">{cardVideoPlaying ? '⏸' : '▶'}</span>
+                                  </div>
+                                </button>
+                              </div>
+                              {/* Timestamps + loop */}
+                              <div className="flex items-center justify-between px-1.5" style={{ height: '20px' }}>
+                                <span className="text-[9px] font-mono text-cyan-400 tabular-nums">{formatTime(anchor.start)}</span>
+                                <button
+                                  className="text-[10px] transition-opacity hover:opacity-80"
+                                  title={previewCardLooping ? 'Loop ON' : 'Loop OFF'}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => { e.stopPropagation(); setPreviewCardLooping(l => !l); }}
+                                  style={{ opacity: previewCardLooping ? 1 : 0.35 }}
+                                >🔁</button>
+                                <span className="text-[9px] font-mono text-red-400 tabular-nums">{formatTime(anchor.end)}</span>
+                              </div>
+                              {/* Frame nudge buttons */}
+                              <div className="flex items-center justify-between px-1 gap-1" style={{ height: '22px' }}>
+                                {/* Start nudge */}
+                                <div className="flex items-center gap-0.5">
+                                  <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', -1); }}
+                                    className="text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
+                                    title="Start: back 1 frame"
+                                  >◄1f</button>
+                                  <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', 1); }}
+                                    className="text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
+                                    title="Start: forward 1 frame"
+                                  >1f►</button>
+                                </div>
+                                <span className="text-[8px] text-slate-600 select-none">S·E</span>
+                                {/* End nudge */}
+                                <div className="flex items-center gap-0.5">
+                                  <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', -1); }}
+                                    className="text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
+                                    title="End: back 1 frame"
+                                  >◄1f</button>
+                                  <button
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', 1); }}
+                                    className="text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
+                                    title="End: forward 1 frame"
+                                  >1f►</button>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <span className="text-slate-700 text-[9px] uppercase tracking-widest select-none">▶ preview</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT: Zoom Loupe — flex-1 */}
+                        <div
+                          ref={loupeRef}
+                          className="flex-1 relative rounded-lg border overflow-hidden transition-colors"
+                          style={{
+                            background: 'rgba(8, 12, 28, 0.95)',
+                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
+                          }}
+                        >
+                          {active ? (
+                            <>
+                              {/* Loupe label */}
+                              <div className="absolute top-0.5 left-2 text-[9px] font-semibold text-slate-500 pointer-events-none z-10 uppercase tracking-wider">⌕ Zoom</div>
+                              {/* Time range labels */}
+                              <div className="absolute bottom-0.5 left-0 right-0 flex justify-between px-2 text-[9px] font-mono text-slate-600 pointer-events-none">
+                                <span>{formatTime(loupeWindow.start)}</span>
+                                <span>{formatTime((loupeWindow.start + loupeWindow.end) / 2)}</span>
+                                <span>{formatTime(loupeWindow.end)}</span>
+                              </div>
+                              {/* Excluded footage zones — darker scrim outside the anchor handles */}
+                              <div
+                                className="absolute top-0 bottom-0 bg-black/40 pointer-events-none"
+                                style={{ left: 0, width: `${clampedLeft}%` }}
+                              />
+                              <div
+                                className="absolute top-0 bottom-0 bg-black/40 pointer-events-none"
+                                style={{ left: `${clampedLeft + clampedWidth}%`, right: 0 }}
+                              />
+                              {/* Center tick */}
+                              <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
+                              {/* Anchor body */}
+                              <div
+                                className={`absolute top-4 bottom-4 ${colors.bg} ${colors.border} border-2 ${colors.glow} rounded cursor-move`}
+                                style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%`, zIndex: 10 }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  handleAnchorMouseDown(e, anchor, 'anchor-move');
+                                  dragSourceRef.current = 'loupe';
+                                }}
+                              >
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <span className={`font-mono tabular-nums transition-all ${dragState.active && dragSourceRef.current === 'loupe' ? 'text-white text-[11px] font-bold drop-shadow' : 'text-white/70 text-[9px]'}`}>
+                                    {(anchor.end - anchor.start).toFixed(2)}s
+                                  </span>
+                                </div>
+                                {/* Left handle (green = start) */}
+                                <div
+                                  className="absolute left-0 top-0 bottom-0 bg-green-500 hover:bg-green-400 active:bg-green-300 cursor-ew-resize rounded-l flex items-center justify-center transition-colors"
+                                  style={{ zIndex: 20, width: '14px' }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    handleAnchorMouseDown(e, anchor, 'anchor-left');
+                                    dragSourceRef.current = 'loupe';
+                                  }}
+                                >
+                                  <div className="flex flex-col gap-[3px] pointer-events-none">
+                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
+                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
+                                  </div>
+                                </div>
+                                {/* Right handle (red = end) */}
+                                <div
+                                  className="absolute right-0 top-0 bottom-0 bg-red-500 hover:bg-red-400 active:bg-red-300 cursor-ew-resize rounded-r flex items-center justify-center transition-colors"
+                                  style={{ zIndex: 20, width: '14px' }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    handleAnchorMouseDown(e, anchor, 'anchor-right');
+                                    dragSourceRef.current = 'loupe';
+                                  }}
+                                >
+                                  <div className="flex flex-col gap-[3px] pointer-events-none">
+                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
+                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Floating frame thumbnail — appears only while dragging a handle */}
+                              {loupeDragThumb && (
+                                <div
+                                  className="absolute z-30 pointer-events-none"
+                                  style={{
+                                    left: thumbLeft,
+                                    bottom: '100%',
+                                    transform: 'translateX(-50%) translateY(-4px)',
+                                    marginBottom: '4px',
+                                  }}
+                                >
+                                  <div className="rounded-md overflow-hidden border-2 border-white/40 shadow-2xl" style={{ width: '120px', height: '68px' }}>
+                                    <img src={loupeDragThumb.dataUrl} alt="frame" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  </div>
+                                  <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] font-mono text-white/80 drop-shadow">
+                                    {formatTime(loupeDragThumb.side === 'start' ? anchor.start : anchor.end)}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <span className="text-slate-700 text-[10px] uppercase tracking-widest pointer-events-none select-none">⌕ select a clip to zoom</span>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  })()}
+                  {/* ═══ End Loupe Strip ═══ */}
 
                   {/* Unified Layered Timeline - Option B */}
                   <div className="mb-1 sm:mb-4">
@@ -5323,7 +5767,7 @@ const exportVideo = async () => {
                             );
 
                             if (hasOverlap) {
-                              alert('Clip overlaps with existing clip');
+                              showToast('Clip overlaps with an existing clip — try a different position', 'warning');
                               return;
                             }
 
@@ -5425,61 +5869,7 @@ const exportVideo = async () => {
                                       zIndex: isSelected ? 50 : 30
                                     }}
                                   >
-                                    {/* === Phase 5B: Anchor Frame Preview Card === */}
-                                    {isSelected && !dragState.active && (
-                                      <div
-                                        className="absolute left-1/2 pointer-events-none"
-                                        style={{ top: '-84px', transform: 'translateX(-50%)', zIndex: 600, minWidth: '128px', maxWidth: '180px' }}
-                                      >
-                                        <div
-                                          className="rounded-xl overflow-hidden shadow-2xl border border-slate-600/60 pointer-events-auto"
-                                          style={{ background: 'rgba(8, 12, 28, 0.97)' }}
-                                        >
-                                          {/* Mini video player */}
-                                          <div className="relative bg-slate-950" style={{ height: '58px' }}>
-                                            <video
-                                              ref={cardVideoRef}
-                                              src={videoUrl}
-                                              muted
-                                              playsInline
-                                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                              onTimeUpdate={() => {
-                                                const vid = cardVideoRef.current;
-                                                if (!vid) return;
-                                                const sel = anchors.find(a => a.id === selectedAnchor);
-                                                if (!sel) return;
-                                                if (previewCardLooping && vid.currentTime >= sel.end) {
-                                                  vid.currentTime = sel.start;
-                                                } else if (!previewCardLooping && vid.currentTime >= sel.end) {
-                                                  vid.pause();
-                                                }
-                                              }}
-                                            />
-                                          </div>
-                                          {/* Timestamps row + loop toggle */}
-                                          <div className="flex items-center justify-between px-2 py-1" style={{ gap: '4px' }}>
-                                            <span className="text-[9px] font-mono text-cyan-400 tabular-nums">{formatTime(anchor.start)}</span>
-                                            <button
-                                              className="text-[11px] transition-opacity hover:opacity-80"
-                                              title={previewCardLooping ? 'Loop ON — click to disable' : 'Loop OFF — click to enable'}
-                                              onMouseDown={(e) => e.stopPropagation()}
-                                              onClick={(e) => { e.stopPropagation(); setPreviewCardLooping(l => !l); }}
-                                              style={{ opacity: previewCardLooping ? 1 : 0.35, lineHeight: 1 }}
-                                            >
-                                              🔁
-                                            </button>
-                                            <span className="text-[9px] font-mono text-red-400 tabular-nums">{formatTime(anchor.end)}</span>
-                                          </div>
-                                        </div>
-                                        {/* Arrow pointing down to anchor */}
-                                        <div style={{
-                                          width: 0, height: 0, margin: '0 auto',
-                                          borderLeft: '5px solid transparent',
-                                          borderRight: '5px solid transparent',
-                                          borderTop: '6px solid rgba(8, 12, 28, 0.97)',
-                                        }} />
-                                      </div>
-                                    )}
+                                    {/* Preview card moved below timeline (above loupe) — no longer floats over timeline */}
 
                                     <div
                                       data-anchor-element="true"
@@ -5554,80 +5944,10 @@ const exportVideo = async () => {
                               })}
                             </>
                           )}
-                        </div>
-                      </div>
+                        </div>{/* end clips lane */}
+                      </div>{/* end 160px timeline container */}
 
-                      {/* === Zoom Loupe — appears when anchor selected, shows magnified anchor strip === */}
-                      {selectedAnchor && loupeWindow && duration > 0 && (() => {
-                        const anchor = anchors.find(a => a.id === selectedAnchor);
-                        if (!anchor) return null;
-                        const colors = getAnchorColor(anchors.indexOf(anchor), true);
-
-                        const anchorLeft = ((anchor.start - loupeWindow.start) / loupeWindow.duration) * 100;
-                        const anchorWidth = ((anchor.end - anchor.start) / loupeWindow.duration) * 100;
-                        const clampedLeft = Math.max(0, Math.min(95, anchorLeft));
-                        const clampedWidth = Math.max(2, Math.min(100 - clampedLeft, anchorWidth));
-
-                        return (
-                          <div
-                            ref={loupeRef}
-                            className="mt-1 relative rounded-lg border border-slate-600/60 overflow-hidden"
-                            style={{ height: '52px', background: 'rgba(8, 12, 28, 0.95)' }}
-                          >
-                            {/* Loupe label */}
-                            <div className="absolute top-0.5 left-2 text-[9px] font-semibold text-slate-500 pointer-events-none z-10 uppercase tracking-wider">
-                              ⌕ Zoom
-                            </div>
-
-                            {/* Time range labels */}
-                            <div className="absolute bottom-0.5 left-0 right-0 flex justify-between px-2 text-[9px] font-mono text-slate-600 pointer-events-none">
-                              <span>{formatTime(loupeWindow.start)}</span>
-                              <span>{formatTime((loupeWindow.start + loupeWindow.end) / 2)}</span>
-                              <span>{formatTime(loupeWindow.end)}</span>
-                            </div>
-
-                            {/* Center tick */}
-                            <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
-
-                            {/* Loupe anchor body — drag to move in zoomed space */}
-                            <div
-                              className={`absolute top-3 bottom-4 ${colors.bg} ${colors.border} border-2 ${colors.glow} rounded cursor-move`}
-                              style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%`, zIndex: 10 }}
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                dragSourceRef.current = 'loupe';
-                                handleAnchorMouseDown(e, anchor, 'anchor-move');
-                              }}
-                            >
-                              {/* Duration badge inside loupe anchor */}
-                              <div className="absolute inset-0 flex items-center justify-center text-[9px] font-mono text-white/80 pointer-events-none">
-                                {(anchor.end - anchor.start).toFixed(1)}s
-                              </div>
-
-                              {/* Left handle */}
-                              <div
-                                className="absolute left-0 top-0 bottom-0 w-2 bg-green-500/80 hover:bg-green-400 cursor-ew-resize rounded-l"
-                                style={{ zIndex: 20 }}
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  dragSourceRef.current = 'loupe';
-                                  handleAnchorMouseDown(e, anchor, 'anchor-left');
-                                }}
-                              />
-                              {/* Right handle */}
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-2 bg-red-500/80 hover:bg-red-400 cursor-ew-resize rounded-r"
-                                style={{ zIndex: 20 }}
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  dragSourceRef.current = 'loupe';
-                                  handleAnchorMouseDown(e, anchor, 'anchor-right');
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      {/* Loupe strip moved above main timeline — see "Loupe Strip" section above */}
 
                       {/* Helper text */}
                       <div className="text-xs text-gray-500 text-center mt-2">
@@ -5671,12 +5991,14 @@ const exportVideo = async () => {
                       <button
                         onClick={() => {
                           if (anchors.length > 0) {
-                            if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+                            {
+                              const count = anchors.length;
                               const emptyAnchors = [];
                               setAnchors(emptyAnchors);
                               saveToHistory(emptyAnchors);
                               setSelectedAnchor(null);
                               setPreviewAnchor(null);
+                              showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
                             }
                           }
                         }}
@@ -5720,8 +6042,9 @@ const exportVideo = async () => {
                             onChange={(e) => setAutoGenMode(e.target.value)}
                             className="w-3 h-3"
                           />
-                          <label htmlFor="mode-quick" className="cursor-pointer text-gray-300">
-                            Quick <span className="text-green-400">(FREE)</span>
+                          <label htmlFor="mode-quick" className="cursor-pointer" title="Motion detection — instant, no API cost">
+                            <span className="text-gray-300">Quick</span> <span className="text-green-400">(FREE)</span>
+                            <span className="hidden sm:inline text-gray-500 ml-1">· motion detection</span>
                           </label>
                         </div>
 
@@ -5735,8 +6058,9 @@ const exportVideo = async () => {
                             onChange={(e) => setAutoGenMode(e.target.value)}
                             className="w-3 h-3"
                           />
-                          <label htmlFor="mode-smart" className="cursor-pointer text-gray-300">
-                            Smart <span className="text-blue-400">($0.60)</span>
+                          <label htmlFor="mode-smart" className="cursor-pointer" title="AI narrative analysis — understands story structure">
+                            <span className="text-gray-300">Smart</span> <span className="text-blue-400">($0.60)</span>
+                            <span className="hidden sm:inline text-gray-500 ml-1">· AI narrative</span>
                           </label>
                         </div>
 
@@ -5750,8 +6074,9 @@ const exportVideo = async () => {
                             onChange={(e) => setAutoGenMode(e.target.value)}
                             className="w-3 h-3"
                           />
-                          <label htmlFor="mode-pro" className="cursor-pointer text-gray-300">
-                            Pro <span className="text-purple-400">($1.20)</span>
+                          <label htmlFor="mode-pro" className="cursor-pointer" title="Deep AI analysis — best results for complex videos">
+                            <span className="text-gray-300">Pro</span> <span className="text-purple-400">($1.20)</span>
+                            <span className="hidden sm:inline text-gray-500 ml-1">· deep analysis</span>
                           </label>
                         </div>
 
@@ -5861,25 +6186,51 @@ const exportVideo = async () => {
                                   return { start, end, reason: m.sceneChange ? 'Scene change' : 'High motion', importance: m.motionScore };
                                 });
 
-                              // Step 3: Greedy selection — pick highest-importance clips until total ≈ targetDuration
+                              // Step 3: Zone-guaranteed selection — ensure clips span the full video
+                              // Divide into 5 zones; pick best candidate from each, then fill with greedy
+                              const NUM_ZONES = 5;
+                              const zoneBests = Array.from({ length: NUM_ZONES }, (_, zi) => {
+                                const zoneStart = (zi / NUM_ZONES) * duration;
+                                const zoneEnd = ((zi + 1) / NUM_ZONES) * duration;
+                                // Find highest-importance candidate whose midpoint falls in this zone
+                                return candidateCuts
+                                  .filter(c => (c.start + c.end) / 2 >= zoneStart && (c.start + c.end) / 2 < zoneEnd)
+                                  .sort((a, b) => b.importance - a.importance)[0] || null;
+                              }).filter(Boolean);
+
+                              // Start with zone anchors
                               let totalDur = 0;
                               const selectedCuts = [];
+                              const addCut = (cut) => {
+                                const overlaps = selectedCuts.some(s => cut.start < s.end && cut.end > s.start);
+                                if (overlaps) return false;
+                                const remaining = targetDuration - totalDur;
+                                const actualEnd = Math.min(cut.end, cut.start + remaining);
+                                const actualDur = actualEnd - cut.start;
+                                if (actualDur < 1) return false;
+                                selectedCuts.push({ ...cut, end: actualEnd });
+                                totalDur += actualDur;
+                                return true;
+                              };
+
+                              // Guarantee one clip per zone (chronological order)
+                              for (const cut of zoneBests) {
+                                if (totalDur >= targetDuration) break;
+                                addCut(cut);
+                              }
+
+                              // Fill remaining duration with best remaining candidates
                               for (const cut of candidateCuts) {
                                 if (totalDur >= targetDuration) break;
-                                const overlaps = selectedCuts.some(s => cut.start < s.end && cut.end > s.start);
-                                if (!overlaps) {
-                                  const remaining = targetDuration - totalDur;
-                                  const actualEnd = Math.min(cut.end, cut.start + remaining);
-                                  const actualDur = actualEnd - cut.start;
-                                  if (actualDur >= 1) {
-                                    selectedCuts.push({ ...cut, end: actualEnd });
-                                    totalDur += actualDur;
-                                  }
-                                }
+                                addCut(cut);
                               }
 
                               // Sort chronologically
                               const chronoCuts = selectedCuts.sort((a, b) => a.start - b.start);
+                              // Log zone distribution
+                              const zoneNames = ['opening', 'early', 'middle', 'late', 'finale'];
+                              const distLog = chronoCuts.map(c => zoneNames[Math.min(4, Math.floor((c.start / duration) * NUM_ZONES))]);
+                              console.log('📍 Quick Gen zone distribution:', distLog.join(', '));
                               console.log(`📍 Quick Gen: ${chronoCuts.length} clips, total ${totalDur.toFixed(1)}s (target ${targetDuration}s)`);
 
                               // Step 4: Apply gentle beat-sync if enabled
@@ -5919,7 +6270,7 @@ const exportVideo = async () => {
                               setAnalysisProgress(20);
 
                               if (allFrames.length === 0) {
-                                alert('Failed to extract any frames from video. Please try again.');
+                                showToast('Failed to extract frames from video — please try again', 'error');
                                 return;
                               }
 
@@ -5930,7 +6281,7 @@ const exportVideo = async () => {
                               setAnalysisProgress(50);
 
                               if (!initialAnalysis) {
-                                alert('Narrative analysis failed. Please try again.');
+                                showToast('Narrative analysis failed — please try again', 'error');
                                 return;
                               }
 
@@ -6009,7 +6360,7 @@ const exportVideo = async () => {
                               const finalSelection = await selectFinalClips(allMoments, targetDuration, zones);
 
                               if (!finalSelection || !finalSelection.selectedClips) {
-                                alert('Final clip selection failed. Please try again.');
+                                showToast('Clip selection failed — please try again', 'error');
                                 return;
                               }
 
@@ -6047,7 +6398,7 @@ const exportVideo = async () => {
                               const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
 
                               if (allFrames.length === 0) {
-                                alert('Failed to extract any frames from video. Please try again.');
+                                showToast('Failed to extract frames from video — please try again', 'error');
                                 return;
                               }
 
@@ -6055,7 +6406,7 @@ const exportVideo = async () => {
                               const narrativeResult = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'pro' });
 
                               if (!narrativeResult) {
-                                alert('Narrative analysis failed. Please try again.');
+                                showToast('Narrative analysis failed — please try again', 'error');
                                 return;
                               }
 
@@ -6107,7 +6458,7 @@ const exportVideo = async () => {
                               const finalSelection = await selectFinalClips(allMoments, targetDuration, zones, { mode: 'pro' });
 
                               if (!finalSelection || !finalSelection.selectedClips) {
-                                alert('Final clip selection failed. Please try again.');
+                                showToast('Clip selection failed — please try again', 'error');
                                 return;
                               }
 
@@ -6135,7 +6486,7 @@ const exportVideo = async () => {
 
                           } catch (error) {
                             console.error('❌ Auto-generate error:', error);
-                            alert(`Auto-generate failed: ${error.message}`);
+                            showToast(`Auto-generate failed: ${error.message}`, 'error');
                           } finally {
                             setIsAnalyzing(false);
                             setAnalysisProgress(0);
@@ -6271,12 +6622,14 @@ const exportVideo = async () => {
   <button
     onClick={() => {
       if (anchors.length > 0) {
-        if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+        {
+          const count = anchors.length;
           const emptyAnchors = [];
           setAnchors(emptyAnchors);
           saveToHistory(emptyAnchors);
           setSelectedAnchor(null);
           setPreviewAnchor(null);
+          showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
         }
       }
     }}
@@ -6492,7 +6845,7 @@ const exportVideo = async () => {
             const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
 
             if (allFrames.length === 0) {
-              alert('Failed to extract any frames from video. Please try again.');
+              showToast('Failed to extract frames from video — please try again', 'error');
               return;
             }
 
@@ -6500,7 +6853,7 @@ const exportVideo = async () => {
             const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
 
             if (!initialAnalysis) {
-              alert('Narrative analysis failed. Please try again.');
+              showToast('Narrative analysis failed — please try again', 'error');
               return;
             }
 
@@ -6699,7 +7052,7 @@ const exportVideo = async () => {
             const transcript = await transcribeVideo(video);
 
             if (!transcript) {
-              alert('Audio transcription failed. Falling back to Smart Gen mode.');
+              showToast('Audio transcription failed — falling back to Smart Gen mode', 'warning');
               setAutoGenMode('smart');
               return;
             }
@@ -6730,7 +7083,7 @@ const exportVideo = async () => {
             const narrative = await analyzeMultiModal(frames, transcript, audioTopics, targetDuration);
 
             if (!narrative) {
-              alert('Multi-modal analysis failed. Please try again.');
+              showToast('Multi-modal analysis failed — please try again', 'error');
               return;
             }
 
@@ -6790,7 +7143,7 @@ const exportVideo = async () => {
 
         } catch (error) {
           console.error('Auto-generate error:', error);
-          alert('Error during generation: ' + error.message);
+          showToast(`Generation failed: ${error.message}`, 'error');
         } finally {
           setIsAnalyzing(false);
         }
@@ -6870,7 +7223,7 @@ const exportVideo = async () => {
     );
 
     if (hasOverlap) {
-      alert('Anchor overlaps with existing anchor');
+      showToast('Clip overlaps with an existing clip — try a different position', 'warning');
       return;
     }
 
@@ -7202,12 +7555,14 @@ onMouseLeave={() => {
                 <button
                   onClick={() => {
                     if (anchors.length > 0) {
-                      if (confirm(`Remove all ${anchors.length} anchor${anchors.length === 1 ? '' : 's'}?`)) {
+                      {
+                        const count = anchors.length;
                         const emptyAnchors = [];
                         setAnchors(emptyAnchors);
                         saveToHistory(emptyAnchors);
                         setSelectedAnchor(null);
                         setPreviewAnchor(null);
+                        showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
                       }
                     }
                   }}
@@ -7889,7 +8244,48 @@ onMouseLeave={() => {
 )}
       </div>
     </div>
+
+      {/* ── Toast Notifications ────────────────────────────────────────────────── */}
+  <div
+    className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2 pointer-events-none"
+    style={{ maxWidth: '360px' }}
+    aria-live="polite"
+    aria-atomic="false"
+  >
+    {toasts.map(toast => (
+      <div
+        key={toast.id}
+        role="alert"
+        className={`toast-enter pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-sm ${
+          toast.type === 'error'   ? 'bg-red-950/95 border-red-500/60 text-red-100' :
+          toast.type === 'warning' ? 'bg-amber-950/95 border-amber-500/60 text-amber-100' :
+          toast.type === 'success' ? 'bg-emerald-950/95 border-emerald-500/60 text-emerald-100' :
+                                     'bg-slate-900/95 border-cyan-500/60 text-slate-100'
+        }`}
+      >
+        <span className="text-sm leading-none mt-0.5 flex-shrink-0" aria-hidden="true">
+          {toast.type === 'error' ? '✕' : toast.type === 'warning' ? '⚠' : toast.type === 'success' ? '✓' : 'ℹ'}
+        </span>
+        <span className="flex-1 text-sm leading-snug">{toast.message}</span>
+        {toast.action && (
+          <button
+            className="text-xs font-bold underline opacity-80 hover:opacity-100 whitespace-nowrap flex-shrink-0 transition-opacity"
+            onClick={() => { toast.action.onClick(); dismissToast(toast.id); }}
+          >
+            {toast.action.label}
+          </button>
+        )}
+        <button
+          className="opacity-40 hover:opacity-100 text-sm flex-shrink-0 transition-opacity ml-1"
+          onClick={() => dismissToast(toast.id)}
+          aria-label="Dismiss"
+        >✕</button>
+      </div>
+    ))}
   </div>
+
+  </div>
+</>
   );
 };
 
