@@ -216,6 +216,21 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* AUDIT #21: keyboard focus was completely invisible. Use :focus-visible so mouse
+   clicks don't draw the ring but Tab navigation does. */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.35);
+  border-radius: 4px;
+}
+
 /* Timeline touch optimizations */
 .cursor-pointer {
   touch-action: none;
@@ -288,7 +303,11 @@ html {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Animated Hero Gradient Background */
+/* Animated Hero Gradient Background.
+   AUDIT P1 #7: background-position can't animate a linear-gradient fill unless
+   background-size is larger than the element — previously only the opacity pulse
+   was visible. Oversize the gradient canvas so the position shift actually scrolls
+   through the stops. */
 .hero-gradient {
   position: fixed;
   top: 0;
@@ -301,6 +320,8 @@ html {
     #0a3a5a 55%,
     #0e5c6e 80%,
     #2d0552 100%);
+  background-size: 300% 300%;
+  background-position: 0% 50%;
   opacity: 0.75;
   z-index: 0;
   pointer-events: none;
@@ -314,7 +335,7 @@ html {
   }
   50% {
     background-position: 100% 50%;
-    opacity: 0.8;
+    opacity: 0.85;
   }
 }
 
