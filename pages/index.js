@@ -117,6 +117,7 @@ const ReelForge = () => {
   const [hasSeenPrecisionHint, setHasSeenPrecisionHint] = useState(false);
   const [hasCreatedFirstClip, setHasCreatedFirstClip] = useState(false);
   const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
+  const [hasSeenLoupeHint, setHasSeenLoupeHint] = useState(false); // AUDIT P1 #5: first-select loupe hint
 
   // Double-tap tracking for anchor deletion on mobile
   const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
@@ -2927,43 +2928,102 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     buildPreviewTimeline();
   }, [anchors, buildPreviewTimeline]);
 
-  // Capture thumbnails for any anchors that don't have one yet
+  // Capture thumbnails for any anchors that don't have one yet.
+  // AUDIT P1 #8: previous impl used ONE video element and seeked serially — ~500ms
+  // per anchor, 5s+ for 10 clips, with no error handling. Now we spawn detached
+  // video elements in a small pool (cap 4 concurrent) so captures run in parallel,
+  // wrap each in try/catch, and surface a toast if more than 30% fail.
   useEffect(() => {
     if (!videoUrl || anchors.length === 0) return;
     const missing = anchors.filter(a => !clipThumbnails[a.id]);
     if (missing.length === 0) return;
 
     let cancelled = false;
-    const vid = document.createElement('video');
-    vid.src = videoUrl;
-    vid.muted = true;
-    vid.preload = 'metadata';
+    const videos = new Set();
+    const POOL_SIZE = Math.min(4, missing.length);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
-    const ctx = canvas.getContext('2d');
+    const captureOne = (anchor) => new Promise((resolve) => {
+      const vid = document.createElement('video');
+      videos.add(vid);
+      vid.src = videoUrl;
+      vid.muted = true;
+      vid.preload = 'metadata';
+      vid.crossOrigin = 'anonymous';
 
-    const captureNext = async (idx) => {
-      if (cancelled || idx >= missing.length) return;
-      const anchor = missing[idx];
       const mid = (anchor.start + anchor.end) / 2;
-      vid.currentTime = mid;
-      await new Promise((res) => {
-        const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); res(); };
-        vid.addEventListener('seeked', onSeeked);
+      let timeoutId = null;
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        vid.removeAttribute('src');
+        vid.load();
+        videos.delete(vid);
+      };
+
+      const finish = (ok) => {
+        if (cancelled) return resolve(false);
+        cleanup();
+        resolve(ok);
+      };
+
+      const drawAndStore = () => {
+        if (cancelled) return finish(false);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 160;
+          canvas.height = 90;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(vid, 0, 0, 160, 90);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          setClipThumbnails(prev => ({ ...prev, [anchor.id]: dataUrl }));
+          finish(true);
+        } catch (err) {
+          console.warn(`Thumbnail capture failed for anchor ${anchor.id}:`, err);
+          finish(false);
+        }
+      };
+
+      vid.addEventListener('loadedmetadata', () => {
+        if (cancelled) return finish(false);
+        vid.currentTime = mid;
+      }, { once: true });
+      vid.addEventListener('seeked', drawAndStore, { once: true });
+      vid.addEventListener('error', () => finish(false), { once: true });
+
+      // Safety: if neither seeked nor error fires within 3s, give up on this one.
+      timeoutId = setTimeout(() => finish(false), 3000);
+      vid.load();
+    });
+
+    // Run with bounded concurrency so mobile browsers don't choke on N video elements.
+    const runPool = async () => {
+      const queue = [...missing];
+      const results = [];
+      const workers = Array.from({ length: POOL_SIZE }, async () => {
+        while (queue.length > 0 && !cancelled) {
+          const anchor = queue.shift();
+          const ok = await captureOne(anchor);
+          results.push(ok);
+        }
       });
+      await Promise.all(workers);
       if (cancelled) return;
-      ctx.drawImage(vid, 0, 0, 160, 90);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-      setClipThumbnails(prev => ({ ...prev, [anchor.id]: dataUrl }));
-      captureNext(idx + 1);
+      const failed = results.filter(r => !r).length;
+      if (results.length > 0 && failed / results.length > 0.3) {
+        showToast(`Thumbnail capture failed for ${failed} of ${results.length} clips`, 'warning');
+      }
     };
 
-    vid.addEventListener('loadedmetadata', () => captureNext(0), { once: true });
-    vid.load();
+    runPool();
 
-    return () => { cancelled = true; vid.src = ''; };
+    return () => {
+      cancelled = true;
+      videos.forEach(v => {
+        v.removeAttribute('src');
+        try { v.load(); } catch (_) {}
+      });
+      videos.clear();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchors, videoUrl]);
 
@@ -3762,6 +3822,14 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     };
   }, [holdingAnchor]);
 
+
+  // AUDIT P1 #5: the loupe is undiscoverable from the main timeline. Surface a one-time
+  // toast the first time the user selects an anchor so they learn the loupe strip is live.
+  useEffect(() => {
+    if (!selectedAnchor || hasSeenLoupeHint) return;
+    showToast('Loupe strip active — drag the green/red handles for frame-accurate edits', 'info');
+    setHasSeenLoupeHint(true);
+  }, [selectedAnchor, hasSeenLoupeHint, showToast]);
 
   // Phase 5B: Drive card video playback — plays & loops the clip segment in the mini player.
   // AUDIT P0 #4: previously, rapid anchor switching stacked play()/seeked listeners, and
@@ -5480,12 +5548,14 @@ const exportVideo = async () => {
                             return (
                               <div
                                 key={idx}
-                                className={`absolute top-0 bottom-0 transition-all rounded ${colors.border} border-2 overflow-hidden cursor-pointer ${isCurrentSegment ? colors.glow : ''}`}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${isCurrentSegment ? '' : colors.border} border-2 overflow-hidden cursor-pointer`}
                                 style={{
                                   left: `${segmentLeft}%`,
                                   width: `${segmentWidth}%`,
                                   backgroundColor: thumb ? 'transparent' : undefined,
-                                  ...(thumb ? {} : {})
+                                  borderColor: isCurrentSegment ? 'var(--accent-cyan)' : undefined,
+                                  boxShadow: isCurrentSegment ? '0 0 18px rgba(0, 212, 255, 0.65), inset 0 0 0 1px rgba(0, 212, 255, 0.4)' : undefined,
+                                  zIndex: isCurrentSegment ? 2 : 1
                                 }}
                                 title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s — click to jump`}
                                 onClick={(e) => {
@@ -5630,12 +5700,21 @@ const exportVideo = async () => {
                               <div className="flex items-center justify-between px-1.5" style={{ height: '20px' }}>
                                 <span className="text-[9px] font-mono text-cyan-400 tabular-nums">{formatTime(anchor.start)}</span>
                                 <button
-                                  className="text-[10px] transition-opacity hover:opacity-80"
-                                  title={previewCardLooping ? 'Loop ON' : 'Loop OFF'}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide transition-all"
+                                  aria-pressed={previewCardLooping}
+                                  title={previewCardLooping ? 'Loop is ON — click to disable' : 'Loop is OFF — click to enable'}
                                   onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setPreviewCardLooping(l => !l); }}
-                                  style={{ opacity: previewCardLooping ? 1 : 0.35 }}
-                                >🔁</button>
+                                  style={{
+                                    background: previewCardLooping ? 'rgba(0, 212, 255, 0.2)' : 'rgba(100, 116, 139, 0.2)',
+                                    color: previewCardLooping ? 'var(--accent-cyan)' : 'var(--text-tertiary)',
+                                    boxShadow: previewCardLooping ? '0 0 8px rgba(0, 212, 255, 0.4)' : 'none',
+                                    border: previewCardLooping ? '1px solid rgba(0, 212, 255, 0.5)' : '1px solid rgba(100, 116, 139, 0.3)'
+                                  }}
+                                >
+                                  <span>🔁</span>
+                                  <span>{previewCardLooping ? 'ON' : 'OFF'}</span>
+                                </button>
                                 <span className="text-[9px] font-mono text-red-400 tabular-nums">{formatTime(anchor.end)}</span>
                               </div>
                               {/* Frame nudge buttons */}
@@ -6029,6 +6108,18 @@ const exportVideo = async () => {
                                       <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
                                         {formatTime(anchor.end - anchor.start)}
                                       </div>
+
+                                      {/* AUDIT P1 #5: loupe discoverability — show magnifier on
+                                          hover so users see that clicking zooms into this anchor. */}
+                                      {!isSelected && hoveredAnchor?.id === anchor.id && (
+                                        <div
+                                          className="absolute top-0.5 right-0.5 pointer-events-none flex items-center justify-center rounded-full bg-black/60 backdrop-blur-sm"
+                                          style={{ width: '18px', height: '18px', boxShadow: '0 0 10px rgba(0,212,255,0.5)' }}
+                                          aria-hidden="true"
+                                        >
+                                          <span className="text-[11px] leading-none">🔍</span>
+                                        </div>
+                                      )}
 
                                       {isSelected && (
                                         <>
