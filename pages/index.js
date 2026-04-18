@@ -2021,6 +2021,100 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   }
 };
 
+// Smart Gen timestamp resolver + zone-distribution guard.
+// Root cause of the "clips pile at 0:00" bug: anchor code used `clip.startTime ?? 0`,
+// so when Claude's response omitted/mangled startTime, every clip fell back to 0.
+// Fix: resolve start from the moment inventory (allMoments[momentIndex-1].timestamp),
+// then rebalance the result if any zone holds >40% or the finale zone is empty on
+// longer videos (where gatherComprehensiveFrames already sampled it).
+const resolveAndValidateClips = (selectedClips, allMoments, videoDuration) => {
+  if (!Array.isArray(selectedClips) || selectedClips.length === 0) return [];
+  const clampStart = (t) => Math.max(0, Math.min(t, Math.max(0, videoDuration - 1)));
+  const clampEnd = (t) => Math.max(1, Math.min(t, videoDuration));
+
+  const resolveOne = (clip) => {
+    const idx = (clip.momentIndex ?? 0) - 1;
+    const moment = (idx >= 0 && idx < allMoments.length) ? allMoments[idx] : null;
+    const rawStart = moment?.timestamp ?? clip.startTime ?? clip.start ?? 0;
+    const rawLen =
+      clip.clipLength ??
+      ((clip.endTime ?? clip.end ?? 0) - (clip.startTime ?? clip.start ?? 0)) ??
+      4;
+    const len = Math.max(1.5, Math.min(10, Number.isFinite(rawLen) && rawLen > 0 ? rawLen : 4));
+    const start = clampStart(rawStart);
+    return {
+      start,
+      end: clampEnd(start + len),
+      _narrativeReason: clip.reason || moment?.description || 'Selected moment',
+      _importance: clip.importance ?? moment?.importance ?? 0.5,
+      _zone: moment?.zone || 'unknown',
+      _momentIndex: clip.momentIndex
+    };
+  };
+
+  // Resolve and dedupe by rounded start time (Claude occasionally returns near-duplicates).
+  const seen = new Set();
+  let resolved = selectedClips.map(resolveOne).filter(c => {
+    const key = Math.round(c.start * 10);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const zoneNames = ['opening', 'early', 'middle', 'late', 'finale'];
+  const countZones = (clips) => zoneNames.reduce((acc, n) => {
+    acc[n] = clips.filter(c => c._zone === n).length;
+    return acc;
+  }, {});
+
+  const zoneCount = countZones(resolved);
+  const total = resolved.length || 1;
+  const overloadedZone = zoneNames.find(n => zoneCount[n] / total > 0.4 && zoneCount[n] >= 3);
+  const finaleMissing = videoDuration > 300 && zoneCount.finale === 0;
+
+  if (overloadedZone || finaleMissing) {
+    console.warn(`⚠️ Smart Gen distribution failed: ${JSON.stringify(zoneCount)} — rebalancing`);
+
+    const usedIndices = new Set(resolved.map(c => c._momentIndex).filter(Boolean));
+    const emptyZones = zoneNames.filter(n => zoneCount[n] === 0);
+
+    for (const zoneName of emptyZones) {
+      const pick = allMoments
+        .map((m, i) => ({ moment: m, idx: i + 1 }))
+        .filter(({ moment, idx }) => moment.zone === zoneName && !usedIndices.has(idx))
+        .sort((a, b) => (b.moment.importance || 0) - (a.moment.importance || 0))[0];
+      if (!pick) continue;
+
+      // Drop the weakest clip from the overloaded zone so we swap, not append.
+      if (overloadedZone) {
+        const dropIdx = resolved
+          .map((c, i) => ({ c, i }))
+          .filter(x => x.c._zone === overloadedZone)
+          .sort((a, b) => (a.c._importance || 0) - (b.c._importance || 0))[0]?.i;
+        if (dropIdx !== undefined) resolved.splice(dropIdx, 1);
+      }
+
+      const start = clampStart(pick.moment.timestamp);
+      resolved.push({
+        start,
+        end: clampEnd(start + 4),
+        _narrativeReason: pick.moment.description || 'Zone coverage',
+        _importance: pick.moment.importance || 0.5,
+        _zone: zoneName,
+        _momentIndex: pick.idx
+      });
+      usedIndices.add(pick.idx);
+    }
+
+    console.log('✅ Smart Gen rebalanced:', countZones(resolved));
+  } else {
+    console.log('✅ Smart Gen zone distribution OK:', zoneCount);
+  }
+
+  resolved.sort((a, b) => a.start - b.start);
+  return resolved;
+};
+
 // Multi-modal analysis combining vision and audio
 const analyzeMultiModal = async (frames, transcript, audioTopics, targetDuration = 60) => {
   try {
@@ -6213,16 +6307,32 @@ const exportVideo = async () => {
                                 return true;
                               };
 
+                              // Track zone membership so we can enforce a per-zone cap.
+                              // AUDIT P0 #0: without a cap, the fill loop (sorted by motion score)
+                              // would happily dump every remaining candidate into the noisiest zone,
+                              // undoing the zone-bests spread.
+                              const zoneOf = (cut) => Math.min(
+                                NUM_ZONES - 1,
+                                Math.floor((((cut.start + cut.end) / 2) / duration) * NUM_ZONES)
+                              );
+                              const zoneCounts = Array(NUM_ZONES).fill(0);
+                              const expectedClips = Math.max(5, Math.ceil(targetDuration / 6));
+                              const MAX_PER_ZONE = Math.max(2, Math.ceil(expectedClips * 0.35));
+
                               // Guarantee one clip per zone (chronological order)
                               for (const cut of zoneBests) {
                                 if (totalDur >= targetDuration) break;
-                                addCut(cut);
+                                if (addCut(cut)) zoneCounts[zoneOf(cut)]++;
                               }
 
-                              // Fill remaining duration with best remaining candidates
+                              // Fill remaining duration with best remaining candidates, skipping
+                              // any zone already at cap (but only once ≥3 zones are represented).
                               for (const cut of candidateCuts) {
                                 if (totalDur >= targetDuration) break;
-                                addCut(cut);
+                                const zi = zoneOf(cut);
+                                const zonesCovered = zoneCounts.filter(n => n > 0).length;
+                                if (zonesCovered >= 3 && zoneCounts[zi] >= MAX_PER_ZONE) continue;
+                                if (addCut(cut)) zoneCounts[zi]++;
                               }
 
                               // Sort chronologically
@@ -6370,13 +6480,15 @@ const exportVideo = async () => {
                                 selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
                               }
 
-                              // Create anchors (Claude returns startTime/endTime, not start/end)
-                              const newAnchors = selectedClips.map((clip, index) => ({
+                              // Resolve timestamps via moment inventory (fixes 0:00 clustering)
+                              // and enforce zone distribution before creating anchors.
+                              const resolvedClips = resolveAndValidateClips(selectedClips, allMoments, duration);
+                              const newAnchors = resolvedClips.map((clip, index) => ({
                                 id: Date.now() + index,
-                                start: Math.max(0, clip.startTime ?? clip.start ?? 0),
-                                end: Math.min(duration, clip.endTime ?? clip.end ?? 0),
-                                _narrativeReason: clip.description || clip.reason || 'Selected moment',
-                                _importance: clip.importance || 0.5
+                                start: clip.start,
+                                end: clip.end,
+                                _narrativeReason: clip._narrativeReason,
+                                _importance: clip._importance
                               }));
 
                               setAnalysisProgress(100);
@@ -6467,12 +6579,13 @@ const exportVideo = async () => {
                                 selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
                               }
 
-                              const newAnchors = selectedClips.map((clip, index) => ({
+                              const resolvedClips = resolveAndValidateClips(selectedClips, allMoments, duration);
+                              const newAnchors = resolvedClips.map((clip, index) => ({
                                 id: Date.now() + index,
-                                start: Math.max(0, clip.startTime ?? clip.start ?? 0),
-                                end: Math.min(duration, clip.endTime ?? clip.end ?? 0),
-                                _narrativeReason: clip.description || clip.reason || 'Selected moment',
-                                _importance: clip.importance || 0.5
+                                start: clip.start,
+                                end: clip.end,
+                                _narrativeReason: clip._narrativeReason,
+                                _importance: clip._importance
                               }));
 
                               console.log('✅ PRO GEN COMPLETE:', {
