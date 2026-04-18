@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Head from 'next/head';
-import { Upload, Play, Pause, Trash2, Sparkles, Music as MusicIcon, Download, Scissors, X, ZoomIn, ZoomOut, RotateCcw, RotateCw, Save, FolderOpen, Volume2, VolumeX, Maximize2, Minimize2, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -118,6 +118,7 @@ const ReelForge = () => {
   const [hasCreatedFirstClip, setHasCreatedFirstClip] = useState(false);
   const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
   const [hasSeenLoupeHint, setHasSeenLoupeHint] = useState(false); // AUDIT P1 #5: first-select loupe hint
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false); // AUDIT P2 #12: "?" toggles shortcut overlay
 
   // Double-tap tracking for anchor deletion on mobile
   const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
@@ -4096,12 +4097,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, [showPrecisionModal, precisionAnchor, selectedHandle]);
 
+// AUDIT P3 #17: mutating `_index` onto the anchor object went stale on
+// reorder/delete. Always derive the current index from the live `anchors` array.
 const goToPreviousAnchor = () => {
-  if (!precisionAnchor || precisionAnchor._index <= 0) return;
-  const prevIndex = precisionAnchor._index - 1;
+  if (!precisionAnchor) return;
+  const currentIdx = anchors.findIndex(a => a.id === precisionAnchor.id);
+  if (currentIdx <= 0) return;
+  const prevIndex = currentIdx - 1;
   const prevAnchor = anchors[prevIndex];
 
-  // Recalculate timeline offset for previous anchor
   const timelineOffset = anchors
     .slice(0, prevIndex)
     .reduce((sum, a) => sum + (a.end - a.start), 0);
@@ -4115,11 +4119,12 @@ const goToPreviousAnchor = () => {
 };
 
 const goToNextAnchor = () => {
-  if (!precisionAnchor || precisionAnchor._index >= anchors.length - 1) return;
-  const nextIndex = precisionAnchor._index + 1;
+  if (!precisionAnchor) return;
+  const currentIdx = anchors.findIndex(a => a.id === precisionAnchor.id);
+  if (currentIdx < 0 || currentIdx >= anchors.length - 1) return;
+  const nextIndex = currentIdx + 1;
   const nextAnchor = anchors[nextIndex];
 
-  // Recalculate timeline offset for next anchor
   const timelineOffset = anchors
     .slice(0, nextIndex)
     .reduce((sum, a) => sum + (a.end - a.start), 0);
@@ -4717,6 +4722,17 @@ const exportVideo = async () => {
           setPrecisionTime(newEnd);
           precisionVideoRef.current.currentTime = newEnd;
         }
+        return;
+      }
+
+      // AUDIT P2 #12: "?" toggles the keyboard-shortcut overlay anywhere in the app.
+      if (e.key === '?' || (e.shiftKey && e.code === 'Slash')) {
+        e.preventDefault();
+        setShowKeyboardHelp(s => !s);
+        return;
+      }
+      if (e.code === 'Escape' && showKeyboardHelp) {
+        setShowKeyboardHelp(false);
         return;
       }
 
@@ -6787,1151 +6803,62 @@ const exportVideo = async () => {
           </div>
         )}
 
-        {/* OLD Timeline Section - TO BE REMOVED */}
-        {false && (
-          <div className="hidden space-y-4">
-            {/* Connected Timelines Box */}
-            <div className="panel rounded-2xl p-6">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">Timelines</h3>
 
-              {/* Clips Timeline - Sequential preview of final video */}
-              {anchors.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-gray-400 font-medium">Clips Timeline</label>
-                    <span className="text-xs text-gray-500">
-                      {anchors.length} clip{anchors.length !== 1 ? 's' : ''} • {previewTotalDuration.toFixed(1)}s total
-                    </span>
-                  </div>
-
-                  <div
-                    className="relative h-20 bg-slate-900 rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-600/40 transition-all"
-                    onClick={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const clickX = e.clientX - rect.left;
-                      const percentage = clickX / rect.width;
-                      const newTime = percentage * previewTotalDuration;
-                      seekPreviewTime(newTime);
-                      setPlaybackMode('clips');
-                    }}
-                  >
-                    {/* Render clip segments */}
-                    {previewTimeline.map((segment, idx) => {
-                      const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
-                      const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
-                      const isCurrentSegment = idx === previewAnchorIndex;
-                      const colors = getAnchorColor(idx, isCurrentSegment);
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`absolute top-0 bottom-0 transition-all rounded ${colors.bg} ${colors.border} border-2`}
-                          style={{
-                            left: `${segmentLeft}%`,
-                            width: `${segmentWidth}%`
-                          }}
-                          title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s`}
-                        >
-                          <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
-                            {idx + 1}
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Playhead for clips timeline — driven by clipsPlayheadRef (DOM, no re-render) */}
-                    {playbackMode === 'clips' && (
-                      <div
-                        ref={clipsPlayheadRef}
-                        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg pointer-events-none z-10"
-                        style={{ left: '0%' }}
-                      >
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl border-2 border-blue-500" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Divider */}
-              <div className="border-t border-gray-700 my-4"></div>
-
-              {/* Main Timeline - Full video duration with anchors */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs text-gray-400 font-medium">Main Timeline</label>
-                  <span className="text-xs text-gray-500">
-                    {formatTime(duration)} • Double-click to add clip
-                  </span>
-                </div>
-
-            {/* Timeline Panel - Moved toolbar below */}
-            <div className="mb-4">
-
-<div className="hidden">
-  {/* Left Group: Undo/Redo/Trim/Clear */}
-  <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
-  <button
-    onClick={undo}
-    disabled={historyIndex <= 0}
-    className="px-2 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
-    title="Undo (Ctrl+Z)"
-  >
-    <RotateCcw size={16} />
-    <span className="hidden sm:inline">Undo</span>
-  </button>
-  <button
-    onClick={redo}
-    disabled={historyIndex >= history.length - 1}
-    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-    title="Redo (Ctrl+Y)"
-  >
-    <RotateCw size={16} />
-    <span className="hidden sm:inline">Redo</span>
-  </button>
-  <button
-    onClick={() => setShowTrimModal(true)}
-    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm"
-  >
-    <Scissors size={16} />
-    <span className="hidden sm:inline">Trim</span>
-  </button>
-  <button
-    onClick={() => {
-      if (anchors.length > 0) {
-        {
-          const count = anchors.length;
-          const emptyAnchors = [];
-          setAnchors(emptyAnchors);
-          saveToHistory(emptyAnchors);
-          setSelectedAnchor(null);
-          setPreviewAnchor(null);
-          showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
-        }
-      }
-    }}
-    disabled={anchors.length === 0}
-    className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-    style={{ borderColor: 'var(--accent-hot)' }}
-  >
-    <Trash2 size={16} />
-    <span className="hidden sm:inline">Clear</span>
-  </button>
-</div>
-
-{/* Right Group: Auto-Gen */}
-<div className={`flex flex-col gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end ${showPrecisionModal || previewAnchor ? 'invisible' : ''}`} style={{ zIndex: 1 }}>
-
-  {/* Mode Selection */}
-  <div className="flex items-center gap-3 text-xs">
-    <div className="flex items-center gap-2">
-      <input
-        type="radio"
-        id="mode-quick"
-        name="autoGenMode"
-        value="quick"
-        checked={autoGenMode === 'quick'}
-        onChange={(e) => setAutoGenMode(e.target.value)}
-        className="w-3 h-3"
-      />
-      <label htmlFor="mode-quick" className="cursor-pointer text-stone-300">
-        Quick <span className="text-green-400">(FREE)</span>
-      </label>
-    </div>
-
-    <div className="flex items-center gap-2">
-      <input
-        type="radio"
-        id="mode-smart"
-        name="autoGenMode"
-        value="smart"
-        checked={autoGenMode === 'smart'}
-        onChange={(e) => setAutoGenMode(e.target.value)}
-        className="w-3 h-3"
-      />
-      <label htmlFor="mode-smart" className="cursor-pointer text-stone-300">
-        Smart <span className="text-blue-400">($0.60)</span>
-      </label>
-    </div>
-
-    <div className="flex items-center gap-2">
-      <input
-        type="radio"
-        id="mode-pro"
-        name="autoGenMode"
-        value="pro"
-        checked={autoGenMode === 'pro'}
-        onChange={(e) => setAutoGenMode(e.target.value)}
-        className="w-3 h-3"
-      />
-      <label htmlFor="mode-pro" className="cursor-pointer text-stone-300">
-        Pro <span className="text-purple-400">($1.20)</span>
-      </label>
-    </div>
-
-    <div className="flex items-center gap-2 ml-2 pl-2 border-l border-stone-700">
-      <input
-        type="checkbox"
-        id="beat-sync-toggle"
-        checked={enableBeatSync}
-        onChange={(e) => setEnableBeatSync(e.target.checked)}
-        disabled={!music}
-        className="w-3 h-3 cursor-pointer"
-      />
-      <label htmlFor="beat-sync-toggle" className="cursor-pointer text-stone-300">
-        Beat-Sync
-      </label>
-    </div>
-  </div>
-
-  {/* Target Duration Slider */}
-  <div className="flex items-center gap-3 text-xs mt-2">
-    <label htmlFor="target-duration" className="text-stone-300 whitespace-nowrap">
-      Target: {targetDuration}s
-    </label>
-    <input
-      type="range"
-      id="target-duration"
-      min="15"
-      max="180"
-      step="1"
-      value={targetDuration}
-      onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-      className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-amber-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-amber-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
-    />
-    <span className="text-stone-500 text-xs">15s - 180s</span>
-  </div>
-
-  {/* Max Clip Length Slider (Quick Gen only) */}
-  {autoGenMode === 'quick' && (
-    <div className="flex items-center gap-3 text-xs mt-1">
-      <label className="text-stone-300 whitespace-nowrap">
-        Max clip: {maxClipLength}s
-      </label>
-      <input
-        type="range"
-        min="2"
-        max="15"
-        step="1"
-        value={maxClipLength}
-        onChange={(e) => setMaxClipLength(parseInt(e.target.value))}
-        className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-cyan-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
-      />
-      <span className="text-stone-500 text-xs">2s - 15s</span>
-    </div>
-  )}
-
-  <button
-      onClick={async () => {
-        if (!video || isAnalyzing) return;
-
-        try {
-          setIsAnalyzing(true);
-
-          console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
-
-          // === MODE 1: QUICK GEN (FREE - Motion Only, Variable Lengths) ===
-          if (autoGenMode === 'quick') {
-            console.log('⚡ Quick Gen: Motion detection only (FREE)');
-
-            // Step 1: Motion detection
-            let videoAnalysisResult = videoAnalysis;
-            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
-              console.log('🎬 Running motion detection...');
-              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-              setVideoAnalysis(videoAnalysisResult);
-            } else {
-              console.log('✅ Using cached motion analysis');
-            }
-
-            // Step 2: Score analysis & variable clip length assignment
-            const allScores2 = videoAnalysisResult.map(m => m.motionScore);
-            const avgScore2 = allScores2.reduce((a, b) => a + b, 0) / allScores2.length;
-            const maxMotionScore2 = Math.max(...allScores2);
-            const scoreRange2 = (maxMotionScore2 - avgScore2) || 1;
-            console.log('📊 Motion stats:', { frames: videoAnalysisResult.length, max: maxMotionScore2.toFixed(3), avg: avgScore2.toFixed(3), targetDuration, maxClipLength });
-
-            // Candidates: above-average motion OR scene changes (up to 40)
-            const sortedMoments2 = [...videoAnalysisResult].sort((a, b) => b.motionScore - a.motionScore);
-            const candidates2 = sortedMoments2
-              .filter(m => m.motionScore > avgScore2 * 0.7 || m.sceneChange)
-              .slice(0, 40);
-
-            // Variable clip length: higher score → longer clip
-            const MIN_CLIP2 = 2;
-            const candidateCuts2 = (candidates2.length > 0 ? candidates2 : sortedMoments2.slice(0, 12))
-              .map(m => {
-                const normalized = Math.min(1, Math.max(0, (m.motionScore - avgScore2 * 0.7) / scoreRange2));
-                const clipLen = Math.max(MIN_CLIP2, Math.round(MIN_CLIP2 + normalized * (maxClipLength - MIN_CLIP2)));
-                const start = Math.max(0, m.time - clipLen * 0.3);
-                const end = Math.min(duration, m.time + clipLen * 0.7);
-                return { start, end, reason: m.sceneChange ? 'Scene change' : 'High motion', importance: m.motionScore };
-              });
-
-            // Step 3: Greedy selection until total ≈ targetDuration
-            let totalDur2 = 0;
-            const selectedCuts2 = [];
-            for (const cut of candidateCuts2) {
-              if (totalDur2 >= targetDuration) break;
-              const overlaps = selectedCuts2.some(s => cut.start < s.end && cut.end > s.start);
-              if (!overlaps) {
-                const remaining = targetDuration - totalDur2;
-                const actualEnd = Math.min(cut.end, cut.start + remaining);
-                const actualDur = actualEnd - cut.start;
-                if (actualDur >= 1) {
-                  selectedCuts2.push({ ...cut, end: actualEnd });
-                  totalDur2 += actualDur;
-                }
-              }
-            }
-
-            const chronoCuts2 = selectedCuts2.sort((a, b) => a.start - b.start);
-            console.log(`📍 Quick Gen: ${chronoCuts2.length} clips, ${totalDur2.toFixed(1)}s (target ${targetDuration}s)`);
-
-            // Step 4: Apply gentle beat-sync if enabled
-            let finalCuts2 = chronoCuts2;
-            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-              console.log('🎵 Applying gentle beat-sync...');
-              finalCuts2 = applyGentleBeatSync(chronoCuts2, musicAnalysis);
-            }
-
-            // Step 5: Create anchors
-            const finalAnchors2 = finalCuts2.map((cut, index) => ({
-              id: Date.now() + index,
-              start: Math.max(0, cut.start),
-              end: Math.min(duration, cut.end),
-              _narrativeReason: cut.reason,
-              _importance: cut.importance
-            }));
-
-            console.log('✅ QUICK GEN COMPLETE:', {
-              anchorsCreated: finalAnchors2.length,
-              totalDuration: finalAnchors2.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1) + 's',
-              target: targetDuration + 's'
-            });
-
-            setAnchors(finalAnchors2);
-            saveToHistory(finalAnchors2);
-          }
-
-          // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
-          else if (autoGenMode === 'smart') {
-            console.log('🧠 Smart Gen: Five-Phase Editorial Workflow (~$0.60-$1.50)');
-
-            // PHASE 1: Gather comprehensive frames
-            const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
-
-            if (allFrames.length === 0) {
-              showToast('Failed to extract frames from video — please try again', 'error');
-              return;
-            }
-
-            // PHASE 2: Identify moments (no clip lengths yet)
-            const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
-
-            if (!initialAnalysis) {
-              showToast('Narrative analysis failed — please try again', 'error');
-              return;
-            }
-
-            // Build initial moment inventory with zone enrichment
-            const enrichMomentsWithZones = (moments, zones) => {
-              return moments.map(moment => {
-                // Find which zone this timestamp falls into
-                const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
-                return {
-                  ...moment,
-                  zone: zone?.name || 'unknown',
-                  zoneIndex: zones.indexOf(zone)
-                };
-              });
-            };
-
-            let allMoments = enrichMomentsWithZones(initialAnalysis.keyMoments || [], zones);
-
-            // PHASE 3: Agentic seeking for missing moments
-            if (initialAnalysis.missingMoments && initialAnalysis.missingMoments.length > 0) {
-              const { newFrames, searches } = await seekMissingMoments(
-                video,
-                duration,
-                initialAnalysis.missingMoments,
-                allFrames,
-                zones
-              );
-
-              // PHASE 4: Analyze new frames (supplemental moments)
-              if (newFrames.length > 0) {
-                console.log(`🔄 Analyzing ${newFrames.length} new frames for supplemental moments...`);
-                const supplemental = await analyzeNewFrames(
-                  allFrames,
-                  newFrames,
-                  targetDuration,
-                  zones,
-                  initialAnalysis.missingMoments,
-                  [] // No cuts yet, just moments
-                );
-
-                // Merge moments with zone enrichment
-                const enrichedNewMoments = enrichMomentsWithZones(supplemental.newMoments || [], zones);
-                allMoments = [
-                  ...allMoments,
-                  ...enrichedNewMoments
-                ];
-
-                console.log(`✅ Moment Inventory: ${initialAnalysis.keyMoments.length} original + ${supplemental.newMoments?.length || 0} new = ${allMoments.length} total moments`);
-
-                // Log zone breakdown of all moments
-                const allMomentsZoneBreakdown = {};
-                allMoments.forEach(m => {
-                  allMomentsZoneBreakdown[m.zone] = (allMomentsZoneBreakdown[m.zone] || 0) + 1;
-                });
-                console.log('📊 Complete Moment Inventory by Zone:', allMomentsZoneBreakdown);
-              } else {
-                console.log('⚠️ No new frames found - proceeding with existing moments');
-              }
-            } else {
-              console.log('✅ No missing moments - proceeding with existing moments');
-            }
-
-            // PHASE 5: Select final clips with ALL moments known
-            console.log(`📝 Now selecting clips from ${allMoments.length} total moments...`);
-
-            // Debug: Log sample moments from each zone
-            console.log('🔍 Sample moments by zone:');
-            const zoneGroups = {};
-            allMoments.forEach((m, idx) => {
-              if (!zoneGroups[m.zone]) zoneGroups[m.zone] = [];
-              zoneGroups[m.zone].push(`#${idx + 1}: ${m.description.substring(0, 30)}... [imp:${m.importance}]`);
-            });
-            Object.entries(zoneGroups).forEach(([zone, moments]) => {
-              console.log(`  ${zone}: ${moments.slice(0, 2).join(', ')}`);
-            });
-
-            const clipSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType);
-
-            // Map moment indices back to actual moments and create anchors
-            console.log('🔧 Validating and mapping selected clips to anchors:');
-
-            // Step 1: Sort clips by start time
-            const sortedClips = [...clipSelection.selectedClips].sort((a, b) => a.startTime - b.startTime);
-
-            // Step 2: Validate and fix overlaps + duration overruns
-            const validatedClips = [];
-            for (let i = 0; i < sortedClips.length; i++) {
-              const clip = sortedClips[i];
-              let { startTime, endTime, momentIndex } = clip;
-
-              // Fix 1: Trim if exceeds video duration
-              if (endTime > duration) {
-                console.warn(`⚠️ Clip ${i+1} trimmed: ${formatTime(endTime)} → ${formatTime(duration)} (exceeded video duration)`);
-                endTime = duration;
-              }
-
-              // Fix 2: Check overlap with previous clip
-              if (i > 0) {
-                const prevClip = validatedClips[validatedClips.length - 1];
-                if (startTime < prevClip.endTime) {
-                  const overlap = prevClip.endTime - startTime;
-                  console.warn(`⚠️ Clip ${i+1} overlaps with previous by ${overlap.toFixed(1)}s - skipping`);
-                  continue; // Skip this clip entirely
-                }
-              }
-
-              // Ensure minimum clip length
-              if (endTime - startTime < 1.5) {
-                console.warn(`⚠️ Clip ${i+1} too short (${(endTime - startTime).toFixed(1)}s) - skipping`);
-                continue;
-              }
-
-              validatedClips.push({ ...clip, startTime, endTime });
-            }
-
-            console.log(`✅ Validated: ${clipSelection.selectedClips.length} → ${validatedClips.length} clips (removed ${clipSelection.selectedClips.length - validatedClips.length} overlaps)`);
-
-            // Step 3: Map to anchors
-            const allAnchors = validatedClips.map((clip, index) => {
-              const moment = allMoments[clip.momentIndex - 1];
-              console.log(`  Clip ${index + 1}: Moment #${clip.momentIndex} [${moment.zone}] @ ${formatTime(moment.timestamp)} → Anchor ${formatTime(clip.startTime)}-${formatTime(clip.endTime)}`);
-              return {
-                id: Date.now() + index,
-                start: clip.startTime,
-                end: clip.endTime,
-                _narrativeReason: moment.description,
-                _importance: moment.importance
-              };
-            });
-
-            console.log(`\n📍 Final anchor timestamps (sorted):`);
-            allAnchors.forEach((anchor, idx) => {
-              console.log(`  Anchor ${idx + 1}: ${formatTime(anchor.start)}-${formatTime(anchor.end)} (${(anchor.end - anchor.start).toFixed(1)}s)`);
-            });
-
-            // Enforce target duration - trim clips to fit within target (+10s tolerance)
-            const targetLimit = targetDuration + 10;
-            let runningTotal = 0;
-            const newAnchors = [];
-
-            for (const anchor of allAnchors) {
-              const clipDuration = anchor.end - anchor.start;
-              if (runningTotal + clipDuration <= targetLimit) {
-                newAnchors.push(anchor);
-                runningTotal += clipDuration;
-              } else if (runningTotal < targetDuration) {
-                // Partial clip to exactly hit target
-                const remaining = targetDuration - runningTotal;
-                if (remaining >= 2) { // Only add if at least 2 seconds
-                  newAnchors.push({
-                    ...anchor,
-                    end: anchor.start + remaining
-                  });
-                  runningTotal += remaining;
-                }
-                break;
-              } else {
-                break; // Already at or past target
-              }
-            }
-
-            const finalDuration = newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0);
-            const trimmedCount = allAnchors.length - newAnchors.length;
-
-            console.log('✅ SMART GEN COMPLETE:', {
-              storyType: initialAnalysis.storyType,
-              momentsInventoried: allMoments.length,
-              clipsSelected: allAnchors.length,
-              anchorsCreated: newAnchors.length,
-              trimmed: trimmedCount > 0 ? `${trimmedCount} clips to fit target` : 'none',
-              totalDuration: finalDuration.toFixed(1) + 's',
-              target: targetDuration + 's',
-              workflow: '5-phase (gather→analyze→seek→supplement→select)'
-            });
-
-            setAnchors(newAnchors);
-            saveToHistory(newAnchors);
-          }
-
-          // === MODE 3: PRO GEN (NEW - Vision + Audio) ===
-          else if (autoGenMode === 'pro') {
-            console.log('🎬 Pro Gen: Multi-modal analysis (Vision + Audio) (~$1.20)');
-
-            // Step 1: Motion detection for smart sampling
-            let videoAnalysisResult = videoAnalysis;
-            if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
-              console.log('🎬 Running motion detection for smart sampling...');
-              videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
-              setVideoAnalysis(videoAnalysisResult);
-            } else {
-              console.log('✅ Using cached motion analysis');
-            }
-
-            // Step 2: Transcribe audio
-            console.log('🎤 Transcribing audio with Whisper...');
-            const transcript = await transcribeVideo(video);
-
-            if (!transcript) {
-              showToast('Audio transcription failed — falling back to Smart Gen mode', 'warning');
-              setAutoGenMode('smart');
-              return;
-            }
-
-            console.log('✅ Transcription complete:', {
-              duration: transcript.duration,
-              segments: transcript.segments?.length,
-              language: transcript.language
-            });
-
-            // Step 3: Analyze transcript for topics and quotes
-            console.log('📊 Analyzing audio topics...');
-            const audioTopics = analyzeTranscriptTopics(transcript);
-
-            console.log('✅ Audio analysis complete:', {
-              topics: audioTopics.topics?.length,
-              keyQuotes: audioTopics.keyQuotes?.length,
-              pauses: audioTopics.pauses?.length
-            });
-
-            // Step 4: Extract frames with smart sampling
-            console.log('📸 Extracting frames with smart sampling...');
-            const frames = await extractFramesForNarrative(video, videoAnalysisResult, 12);
-            console.log(`✅ Extracted ${frames.length} frames`);
-
-            // Step 5: Multi-modal analysis (vision + audio)
-            console.log('🤖 Running multi-modal analysis...');
-            const narrative = await analyzeMultiModal(frames, transcript, audioTopics, targetDuration);
-
-            if (!narrative) {
-              showToast('Multi-modal analysis failed — please try again', 'error');
-              return;
-            }
-
-            console.log('📖 Story Type:', narrative.storyType);
-            console.log('📝 Narrative:', narrative.narrative);
-            console.log('✂️ Suggested Cuts:', narrative.suggestedCuts.length);
-
-            // Step 6: Refine with speech pauses
-            console.log('🗣️ Refining with speech pauses...');
-            let refinedCuts = refineWithSpeechPauses(
-              narrative.suggestedCuts,
-              audioTopics.pauses
-            );
-
-            // Step 7: Further refine with motion detection
-            console.log('🔍 Refining with motion detection...');
-            refinedCuts = refineWithMotionDetection(refinedCuts, videoAnalysisResult);
-
-            // Step 8: Apply gentle beat-sync if enabled
-            if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-              console.log('🎵 Applying gentle beat-sync...');
-              refinedCuts = applyGentleBeatSync(refinedCuts, musicAnalysis);
-            }
-
-            // Step 9: Create anchors
-            const newAnchors = refinedCuts.map((cut, index) => ({
-              id: Date.now() + index,
-              start: Math.max(0, cut.start || cut.startTime),
-              end: Math.min(duration, cut.end || cut.endTime),
-              _narrativeReason: cut.visualReason || cut.audioReason || cut.reason,
-              _importance: cut.importance,
-              _narrativeRole: cut.narrativeRole
-            }));
-
-            const finalAnchors = newAnchors.reduce((kept, anchor, index) => {
-              if (index === 0) {
-                kept.push(anchor);
-                return kept;
-              }
-              const lastKept = kept[kept.length - 1];
-              if (anchor.start >= lastKept.end) {
-                kept.push(anchor);
-              }
-              return kept;
-            }, []);
-
-            console.log('✅ PRO GEN COMPLETE:', {
-              storyType: narrative.storyType,
-              anchorsCreated: finalAnchors.length,
-              totalDuration: finalAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1),
-              confidence: narrative.confidence
-            });
-
-            setAnchors(finalAnchors);
-            saveToHistory(finalAnchors);
-          }
-
-        } catch (error) {
-          console.error('Auto-generate error:', error);
-          showToast(`Generation failed: ${error.message}`, 'error');
-        } finally {
-          setIsAnalyzing(false);
-        }
-      }}
-      disabled={!duration || isAnalyzing}
-      className="px-4 py-2 btn-accent rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shadow-md transition w-full sm:w-auto justify-center"
-    >
-      <Sparkles size={18} />
-      <span className="hidden sm:inline">{isAnalyzing ? 'Analyzing Story...' : 'Auto-Generate'}</span>
-      <span className="sm:hidden">{isAnalyzing ? 'Analyzing...' : 'Auto-Gen'}</span>
-    </button>
-
-
-  </div>
-</div>
-</div>
-{/* End hidden old toolbar */}
-
-{/* Timeline visualization - Main Timeline */}
-<div
-  ref={timelineRef}
-  onMouseDown={handleTimelineMouseDown}
-  onClick={(e) => {
-    // Clicking main timeline switches to full video mode
-    if (playbackMode === 'clips') {
-      setPlaybackMode('full');
-      stopEnhancedPreview();
-    }
-  }}
-  onTouchStart={(e) => {
-    e.preventDefault(); // Prevent scroll only
-    const touch = e.touches[0];
-    handleTimelineMouseDown({ ...e, clientX: touch.clientX });
-  }}
-  onTouchMove={(e) => {
-    e.preventDefault(); // Prevent scroll only
-  }}
-  onTouchEnd={(e) => {
-    e.preventDefault(); // Prevent scroll only
-
-    // Double-tap detection for mobile
-    const now = Date.now();
-    const timeSinceLastTap = now - lastTapTimeRef.current;
-    const touch = e.changedTouches[0];
-    const tapPosition = { x: touch.clientX, y: touch.clientY };
-    const distance = Math.sqrt(
-      Math.pow(tapPosition.x - lastTapPositionRef.current.x, 2) +
-      Math.pow(tapPosition.y - lastTapPositionRef.current.y, 2)
-    );
-
-    // If tapped within 300ms and within 30px of last tap, it's a double-tap
-    if (timeSinceLastTap < 300 && distance < 30) {
-      handleTimelineDoubleTap(e);
-      lastTapTimeRef.current = 0; // Reset to prevent triple-tap
-    } else {
-      lastTapTimeRef.current = now;
-      lastTapPositionRef.current = tapPosition;
-    }
-  }}
-  onDoubleClick={(e) => {
-    if (!timelineRef.current || !duration) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const time = percent * duration;
-    
-    const newAnchor = {
-      id: Date.now(),
-      start: time,
-      end: Math.min(time + 5, duration)
-    };
-
-    const hasOverlap = anchors.some(a =>
-      (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-      (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-      (newAnchor.start <= a.start && newAnchor.end >= a.end)
-    );
-
-    if (hasOverlap) {
-      showToast('Clip overlaps with an existing clip — try a different position', 'warning');
-      return;
-    }
-
-    const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-    setAnchors(updated);
-    saveToHistory(updated);
-    setSelectedAnchor(newAnchor.id);
-  }}
-  className="relative h-32 bg-slate-900 rounded-lg cursor-pointer mb-4 hover:ring-2 hover:ring-cyan-500/40 transition-all select-none"
-  style={{ touchAction: 'none', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', zIndex: 1 }}
-  title="Double-click to add anchor"
->
-  {/* Current time indicator - Thin white line */}
-                <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
-                  style={{ left: `${(currentTime / duration) * 100}%` }}
-                />
-
-                {/* Anchors */}
-                {anchors.map((anchor, index) => {
-                  const isSelected = selectedAnchor === anchor.id;
-                  const colors = getAnchorColor(index, isSelected);
-                  const width = ((anchor.end - anchor.start) / duration) * 100;
-
-                  return (
-                    <div
-                      key={anchor.id}
-                      className="absolute top-0 bottom-0"
-                      style={{
-                        left: `${(anchor.start / duration) * 100}%`,
-                        width: `${width}%`,
-                        zIndex: isSelected ? 50 : 30
-                      }}
-                    >
-<div
-  data-anchor-element="true"
-  onClick={(e) => handleAnchorClick(e, anchor)}
-  onDoubleClick={(e) => {
-    e.stopPropagation();
-    deleteAnchor(anchor.id);
-  }}
-  onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-  onTouchStart={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Record start position for detecting taps vs drags
-    const touch = e.touches[0];
-    anchorTapRef.current.startX = touch.clientX;
-    anchorTapRef.current.startY = touch.clientY;
-    anchorTapRef.current.hasMoved = false;
-
-    setSelectedAnchor(anchor.id);
-    handleAnchorTouchStart(e, anchor, 'anchor-move');
-  }}
-  onTouchMove={(e) => {
-    // Check if finger moved significantly (indicates drag, not tap)
-    const touch = e.touches[0];
-    const dx = Math.abs(touch.clientX - (anchorTapRef.current.startX || 0));
-    const dy = Math.abs(touch.clientY - (anchorTapRef.current.startY || 0));
-    if (dx > 10 || dy > 10) {
-      anchorTapRef.current.hasMoved = true;
-    }
-  }}
-  onTouchEnd={(e) => {
-    e.stopPropagation();
-
-    // Only count as tap if finger didn't move much
-    if (anchorTapRef.current.hasMoved) {
-      anchorTapRef.current = { anchorId: null, time: 0, hasMoved: false };
-      return;
-    }
-
-    // Double-tap detection for deletion
-    const now = Date.now();
-    if (anchorTapRef.current.anchorId === anchor.id && now - anchorTapRef.current.time < 400) {
-      // Double-tap detected - delete anchor
-      deleteAnchor(anchor.id);
-      anchorTapRef.current = { anchorId: null, time: 0, hasMoved: false };
-      setHasSeenDeleteHint(true);
-      return;
-    }
-    anchorTapRef.current = { anchorId: anchor.id, time: now, hasMoved: false };
-  }}
-onMouseEnter={() => {
-  if (!previewAnchor) {
-    setHoveredAnchor(anchor);
-  }
-}}
-onMouseLeave={() => {
-  if (!previewAnchor || previewAnchor.id !== anchor.id) {
-    setHoveredAnchor(null);
-  }
-}}
-  className={`absolute inset-0 ${colors.bg} border-2 ${colors.border} rounded cursor-move transition-all touch-manipulation ${
-    holdingAnchor?.id === anchor.id ? 'scale-110 shadow-lg shadow-cyan-500/50' : ''
-  }`}
-  style={{ touchAction: 'none', zIndex: 10 }}
->
-                        <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none">
-                          {formatTime(anchor.end - anchor.start)}
-                        </div>
-
-                        {isSelected && (
-                          <>
-                            {/* Left handle - Green (Start) - Expanded touch target with visual handle */}
-                            <div
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                handleAnchorMouseDown(e, anchor, 'anchor-left');
-                              }}
-                              onTouchStart={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleAnchorTouchStart(e, anchor, 'anchor-left');
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Select anchor and show start frame in preview
-                                setSelectedAnchor(anchor.id);
-                                setHoveredAnchor(null);
-                                setPreviewAnchor(anchor);
-                                setPreviewHandle('start');
-                                if (previewVideoRef.current) {
-                                  previewVideoRef.current.currentTime = anchor.start;
-                                }
-                              }}
-                              className="absolute left-0 top-0 bottom-0 w-8 cursor-ew-resize touch-none -translate-x-1/2 flex items-center justify-center"
-                              style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                              title="Drag to adjust start time"
-                            >
-                              {/* Visible pill-shaped grab handle */}
-                              <div className="w-1 h-full bg-green-500 hover:bg-green-400 transition-all rounded-full relative">
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-8 bg-green-400 rounded-full shadow-lg shadow-green-500/50 border-2 border-white/30" />
-                              </div>
-                            </div>
-                            {/* Right handle - Red (End) - Expanded touch target with visual handle */}
-                            <div
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                handleAnchorMouseDown(e, anchor, 'anchor-right');
-                              }}
-                              onTouchStart={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleAnchorTouchStart(e, anchor, 'anchor-right');
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Select anchor and show end frame in preview
-                                setSelectedAnchor(anchor.id);
-                                setHoveredAnchor(null);
-                                setPreviewAnchor(anchor);
-                                setPreviewHandle('end');
-                                if (previewVideoRef.current) {
-                                  previewVideoRef.current.currentTime = anchor.end;
-                                }
-                              }}
-                              className="absolute right-0 top-0 bottom-0 w-8 cursor-ew-resize touch-none translate-x-1/2 flex items-center justify-center"
-                              style={{ touchAction: 'none', zIndex: 100, pointerEvents: 'auto' }}
-                              title="Drag to adjust end time"
-                            >
-                              {/* Visible pill-shaped grab handle */}
-                              <div className="w-1 h-full bg-red-500 hover:bg-red-400 transition-all rounded-full relative">
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-8 bg-red-400 rounded-full shadow-lg shadow-red-500/50 border-2 border-white/30" />
-                              </div>
-                            </div>
-                            {/* Precision button */}
-                            
-                          </>
-                        )}
-                      </div>
-
-{/* Preview/Hover Panel - Positioned to avoid control overlap */}
-{(previewAnchor?.id === anchor.id || hoveredAnchor?.id === anchor.id) && (
-  <div
-    data-preview-panel="true"
-    onClick={(e) => e.stopPropagation()}
-    onMouseDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    title=""
-    className={`absolute bottom-full mb-8 sm:mb-6 bg-slate-800 rounded-lg shadow-2xl border-2 ${
-      previewAnchor?.id === anchor.id ? 'border-purple-500/80' : 'border-cyan-500/40'
-    } p-2 w-80 sm:w-64 sm:p-3 ${
-      (anchor.start / duration) < 0.3
-        ? 'left-0'
-        : (anchor.start / duration) > 0.7
-          ? 'right-0'
-          : 'left-1/2 -translate-x-1/2'
-    }`}
-    style={{ zIndex: 200 }}
-  >
-    <div className="flex justify-between items-center mb-2">
-      <div className="text-xs font-semibold">
-        Anchor {index + 1} {previewAnchor?.id === anchor.id ? 'Preview' : 'Hover'}
-      </div>
-                            <button
-                              onClick={() => setPreviewAnchor(null)}
-                              className="text-gray-400 hover:text-white transition-colors"
-                              title="Close preview"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-
-                          <div className="bg-black rounded overflow-hidden mb-2">
-                            <video
-                              ref={previewVideoRef}
-                              src={videoUrl}
-                              className="w-full h-32 object-contain"
-                              onTimeUpdate={handlePreviewTimeUpdate}
-                              loop
-                              muted={previewMuted}
-                              playsInline
-                            />
-                          </div>
-
-<div className="space-y-2">
-  <div className="flex items-center gap-2">
-    <button
-      onClick={togglePreviewPlay}
-      className="p-2 bg-gradient-to-br from-gray-700 to-gray-800 border border-cyan-500/30 rounded hover:border-cyan-500/40"
-    >
-      {previewVideoRef.current?.paused ? <Play size={14} /> : <Pause size={14} />}
-    </button>
-    <button
-      onClick={() => setPreviewMuted(!previewMuted)}
-      className="p-2 bg-slate-600 rounded hover:bg-slate-700"
-      title={previewMuted ? "Unmute" : "Mute"}
-    >
-      {previewMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-    </button>
-    <div className="text-xs text-gray-300">
-      {formatTime(anchor.end - anchor.start)} loop
-    </div>
-  </div>
-  
-  <div className="flex gap-2">
-    <button
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Detect mobile
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-        if (isMobile) {
-          openPrecisionModalMobile(anchor);
-        } else {
-          openPrecisionModal(anchor);
-        }
-      }}
-      onTouchStart={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openPrecisionModalMobile(anchor);
-      }}
-      className="flex-1 px-3 py-2 btn-accent rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold"
-      style={{ zIndex: 201 }}
-    >
-      <ZoomIn size={14} />
-      Precision
-    </button>
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        deleteAnchor(anchor.id);
-        setPreviewAnchor(null);
-        setHoveredAnchor(null);
-      }}
-      className="px-3 py-2 btn-secondary rounded-lg text-xs flex items-center justify-center gap-1.5 font-semibold hover:bg-red-600/20"
-      style={{ borderColor: 'var(--accent-hot)' }}
-      title="Delete anchor"
-    >
-      <Trash2 size={14} />
-    </button>
-  </div>
-</div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+        {/* AUDIT P2 #12: keyboard-shortcut overlay. Toggled with "?" from anywhere. */}
+        {showKeyboardHelp && (
+          <div
+            className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-[10000] p-4"
+            onClick={() => setShowKeyboardHelp(false)}
+          >
+            <div
+              className="glass-panel p-6 rounded-2xl max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label="Keyboard shortcuts"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-lg font-bold uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>Keyboard Shortcuts</div>
+                <button
+                  onClick={() => setShowKeyboardHelp(false)}
+                  className="text-gray-400 hover:text-white text-xl leading-none"
+                  aria-label="Close"
+                >×</button>
               </div>
-
-              <div className="text-xs text-gray-400 text-center mt-4">
-                {anchors.length === 0
-                  ? '💡 Double-click timeline to add anchor'
-                  : 'Click to preview • Double-click to delete • Drag handles to resize • Drag middle to move • Click "Precision" for zoom'}
+              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Main timeline</div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm mb-4">
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Space</kbd><span className="text-gray-300">Play / pause</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">← / →</kbd><span className="text-gray-300">Skip 1s</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Delete</kbd><span className="text-gray-300">Remove selected anchor</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Ctrl+Z</kbd><span className="text-gray-300">Undo</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Ctrl+Y</kbd><span className="text-gray-300">Redo</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">?</kbd><span className="text-gray-300">Toggle this overlay</span>
+              </div>
+              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Precision modal</div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm mb-4">
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">← / →</kbd><span className="text-gray-300">Nudge selected handle ±1 frame</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">,</kbd><span className="text-gray-300">Previous anchor</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">.</kbd><span className="text-gray-300">Next anchor</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">S</kbd><span className="text-gray-300">Snap start to range start</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">E</kbd><span className="text-gray-300">Snap end to range end</span>
+              </div>
+              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Loupe handles (when focused)</div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">← / →</kbd><span className="text-gray-300">Adjust clip boundary ±1 frame</span>
               </div>
             </div>
-            {/* End Main Timeline */}
           </div>
-          {/* End Connected Timelines Box */}
-
-          {/* Toolbar - Action Buttons */}
-          <div className="panel rounded-lg sm:rounded-2xl p-1 sm:p-4 w-full">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
-              {/* Left Group: Undo/Redo/Trim/Clear - moved from above */}
-              <div className="flex gap-1 justify-between sm:flex-1 sm:justify-start">
-                <button
-                  onClick={undo}
-                  disabled={historyIndex <= 0}
-                  className="px-2 py-1.5 btn-secondary rounded-lg flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm flex-shrink-0"
-                  title="Undo (Ctrl+Z)"
-                >
-                  <RotateCcw size={16} />
-                  <span className="hidden sm:inline">Undo</span>
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={historyIndex >= history.length - 1}
-                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-                  title="Redo (Ctrl+Y)"
-                >
-                  <RotateCw size={16} />
-                  <span className="hidden sm:inline">Redo</span>
-                </button>
-                <button
-                  onClick={() => setShowTrimModal(true)}
-                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm"
-                >
-                  <Scissors size={16} />
-                  <span className="hidden sm:inline">Trim</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (anchors.length > 0) {
-                      {
-                        const count = anchors.length;
-                        const emptyAnchors = [];
-                        setAnchors(emptyAnchors);
-                        saveToHistory(emptyAnchors);
-                        setSelectedAnchor(null);
-                        setPreviewAnchor(null);
-                        showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
-                      }
-                    }
-                  }}
-                  disabled={anchors.length === 0}
-                  className="px-3 py-2 btn-secondary rounded-lg flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-                  style={{ borderColor: 'var(--accent-hot)' }}
-                >
-                  <Trash2 size={16} />
-                  <span className="hidden sm:inline">Clear</span>
-                </button>
-              </div>
-
-              {/* Right Group: Auto-Gen controls - keep existing from line 4652+ */}
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3 text-sm mb-4">
-                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
-                  <div className="text-gray-400 text-xs">Total Anchors</div>
-                  <div className="text-lg font-semibold text-white">{formatTime(anchorTime)}</div>
-                </div>
-                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
-                  <div className="text-gray-400 text-xs">Video Duration</div>
-                  <div className="text-lg font-semibold text-blue-400">{formatTime(duration)}</div>
-                </div>
-                <div className="bg-slate-900/50 p-3 rounded-lg text-center">
-                  <div className="text-gray-400 text-xs">Selected</div>
-                  <div className="text-lg font-semibold text-amber-400">
-                    {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Save/Load Anchor Config */}
-              <div className="flex gap-2">
-                <button
-                  onClick={saveConfiguration}
-                  disabled={anchors.length === 0}
-                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-cyan-500/30 hover:border-cyan-500/40 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-                >
-                  <Save size={16} />
-                  <span className="hidden sm:inline">Save Anchor Config</span>
-                  <span className="sm:hidden">Save</span>
-                </button>
-                <button
-                  onClick={() => loadConfigInputRef.current?.click()}
-                  className="flex-1 px-3 py-2 bg-gradient-to-br from-gray-700 to-gray-900 border-2 border-cyan-500/30 hover:border-cyan-500/40 rounded-lg transition flex items-center justify-center gap-2 text-sm"
-                >
-                  <FolderOpen size={16} />
-                  <span className="hidden sm:inline">Load Anchor Config</span>
-                  <span className="sm:hidden">Load</span>
-                </button>
-                <input
-                  ref={loadConfigInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={loadConfiguration}
-                  className="hidden"
-                />
-              </div>
-            </div>
-            {/* Keyboard Shortcuts Help */}
-            <div className="bg-slate-800/30 rounded-lg p-4 text-xs text-gray-400">
-              <div className="font-semibold mb-2">Keyboard Shortcuts:</div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Space</kbd> Play/Pause</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">←/→</kbd> Skip 1s (or frame in precision)</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Delete</kbd> Remove selected anchor</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Z</kbd> Undo</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Y</kbd> Redo</div>
-             </div>
-             <div className="font-semibold mt-4 mb-2">In Precision Modal:</div>
-             <div className="grid grid-cols-2 gap-2">
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">,</kbd> Previous anchor</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">.</kbd> Next anchor</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">S</kbd> Snap start to range start</div>
-                <div><kbd className="bg-slate-700 px-2 py-1 rounded">E</kbd> Snap end to range end</div>
-             </div>
-          </div>
-        </div>
-      )}
+        )}
 
         {/* Trim Modal */}
         {showTrimModal && (
           <div className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-50">
             <div className="glass-panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
              <div className="space-y-2 mb-3">
-  {/* Top Row: Prev/Next Navigation */}
+  {/* Top Row: Prev/Next Navigation — AUDIT P3 #17: derive index from live anchors[] */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
-      disabled={!precisionAnchor || precisionAnchor._index === 0}
+      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) <= 0}
       className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
@@ -7939,12 +6866,12 @@ onMouseLeave={() => {
     </button>
 
     <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-      Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
+      Anchor {Math.max(0, precisionAnchor ? anchors.findIndex(a => a.id === precisionAnchor.id) : 0) + 1} of {anchors.length}
     </div>
 
     <button
       onClick={goToNextAnchor}
-      disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
+      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) >= anchors.length - 1}
       className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
@@ -8088,11 +7015,11 @@ onMouseLeave={() => {
   >
     <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
             <div className="space-y-3 mb-6">
-  {/* Top Row: Prev/Next Navigation */}
+  {/* Top Row: Prev/Next Navigation — AUDIT P3 #17: derive index from live anchors[] */}
   <div className="flex items-center justify-center gap-4">
     <button
       onClick={goToPreviousAnchor}
-      disabled={!precisionAnchor || precisionAnchor._index === 0}
+      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) <= 0}
       className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Previous Anchor"
     >
@@ -8100,12 +7027,12 @@ onMouseLeave={() => {
     </button>
 
     <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-      Anchor {(precisionAnchor?._index || 0) + 1} of {anchors.length}
+      Anchor {Math.max(0, precisionAnchor ? anchors.findIndex(a => a.id === precisionAnchor.id) : 0) + 1} of {anchors.length}
     </div>
 
     <button
       onClick={goToNextAnchor}
-      disabled={!precisionAnchor || precisionAnchor._index >= anchors.length - 1}
+      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) >= anchors.length - 1}
       className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
       title="Next Anchor"
     >
