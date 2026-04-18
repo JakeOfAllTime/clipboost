@@ -216,6 +216,27 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* AUDIT P2 #9: small controls (frame-nudge buttons, etc.) fail the 44px mobile
+   touch target on iOS. Expand the tappable area via an invisible pseudo-element
+   so the visible button stays compact for desktop but mobile taps are reliable. */
+.touch-target-min::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  z-index: 0;
+}
+.touch-target-min {
+  position: relative;
+}
+.touch-target-min > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* AUDIT #21: keyboard focus was completely invisible. Use :focus-visible so mouse
    clicks don't draw the ring but Tab navigation does. */
 button:focus-visible,

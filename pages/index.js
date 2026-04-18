@@ -4680,7 +4680,7 @@ const exportVideo = async () => {
           e.preventDefault();
           const newTime = precisionAnchor[selectedHandle] + 1/30;
           const range = getPrecisionRange(precisionAnchor);
-          
+
           if (selectedHandle === 'start') {
             const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
             setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -4692,6 +4692,30 @@ const exportVideo = async () => {
             setPrecisionTime(constrainedTime);
             precisionVideoRef.current.currentTime = constrainedTime;
           }
+        } else if (e.code === 'Comma') {
+          // AUDIT P2 #12: "," jumps to previous anchor without leaving precision mode
+          e.preventDefault();
+          goToPreviousAnchor();
+        } else if (e.code === 'Period') {
+          // AUDIT P2 #12: "." jumps to next anchor without leaving precision mode
+          e.preventDefault();
+          goToNextAnchor();
+        } else if (e.code === 'KeyS' && precisionAnchor && precisionVideoRef.current) {
+          // AUDIT P2 #12: "S" snaps the start handle to the beginning of the precision range
+          e.preventDefault();
+          const range = getPrecisionRange(precisionAnchor);
+          const newStart = Math.max(range.start, Math.min(precisionAnchor.end - 1, range.start));
+          setPrecisionAnchor(prev => ({ ...prev, start: newStart }));
+          setPrecisionTime(newStart);
+          precisionVideoRef.current.currentTime = newStart;
+        } else if (e.code === 'KeyE' && precisionAnchor && precisionVideoRef.current) {
+          // AUDIT P2 #12: "E" snaps the end handle to the end of the precision range
+          e.preventDefault();
+          const range = getPrecisionRange(precisionAnchor);
+          const newEnd = Math.max(precisionAnchor.start + 1, Math.min(range.end, range.end));
+          setPrecisionAnchor(prev => ({ ...prev, end: newEnd }));
+          setPrecisionTime(newEnd);
+          precisionVideoRef.current.currentTime = newEnd;
         }
         return;
       }
@@ -5724,13 +5748,13 @@ const exportVideo = async () => {
                                   <button
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', -1); }}
-                                    className="text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
+                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
                                     title="Start: back 1 frame"
                                   >◄1f</button>
                                   <button
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', 1); }}
-                                    className="text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
+                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
                                     title="Start: forward 1 frame"
                                   >1f►</button>
                                 </div>
@@ -5740,13 +5764,13 @@ const exportVideo = async () => {
                                   <button
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', -1); }}
-                                    className="text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
+                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
                                     title="End: back 1 frame"
                                   >◄1f</button>
                                   <button
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', 1); }}
-                                    className="text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
+                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
                                     title="End: forward 1 frame"
                                   >1f►</button>
                                 </div>
@@ -5804,14 +5828,22 @@ const exportVideo = async () => {
                                     {(anchor.end - anchor.start).toFixed(2)}s
                                   </span>
                                 </div>
-                                {/* Left handle (green = start) */}
+                                {/* Left handle (green = start) — AUDIT #22: now keyboard reachable.
+                                    Tab to focus, arrow keys nudge ±1 frame via nudgeAnchor. */}
                                 <div
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`Adjust clip start — ${formatTime(anchor.start)}`}
                                   className="absolute left-0 top-0 bottom-0 bg-green-500 hover:bg-green-400 active:bg-green-300 cursor-ew-resize rounded-l flex items-center justify-center transition-colors"
                                   style={{ zIndex: 20, width: '14px' }}
                                   onMouseDown={(e) => {
                                     e.stopPropagation();
                                     handleAnchorMouseDown(e, anchor, 'anchor-left');
                                     dragSourceRef.current = 'loupe';
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
+                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
                                   }}
                                 >
                                   <div className="flex flex-col gap-[3px] pointer-events-none">
@@ -5821,12 +5853,19 @@ const exportVideo = async () => {
                                 </div>
                                 {/* Right handle (red = end) */}
                                 <div
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`Adjust clip end — ${formatTime(anchor.end)}`}
                                   className="absolute right-0 top-0 bottom-0 bg-red-500 hover:bg-red-400 active:bg-red-300 cursor-ew-resize rounded-r flex items-center justify-center transition-colors"
                                   style={{ zIndex: 20, width: '14px' }}
                                   onMouseDown={(e) => {
                                     e.stopPropagation();
                                     handleAnchorMouseDown(e, anchor, 'anchor-right');
                                     dragSourceRef.current = 'loupe';
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
+                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
                                   }}
                                 >
                                   <div className="flex flex-col gap-[3px] pointer-events-none">
@@ -7871,6 +7910,13 @@ onMouseLeave={() => {
                 <div><kbd className="bg-slate-700 px-2 py-1 rounded">Delete</kbd> Remove selected anchor</div>
                 <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Z</kbd> Undo</div>
                 <div><kbd className="bg-slate-700 px-2 py-1 rounded">Ctrl+Y</kbd> Redo</div>
+             </div>
+             <div className="font-semibold mt-4 mb-2">In Precision Modal:</div>
+             <div className="grid grid-cols-2 gap-2">
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">,</kbd> Previous anchor</div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">.</kbd> Next anchor</div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">S</kbd> Snap start to range start</div>
+                <div><kbd className="bg-slate-700 px-2 py-1 rounded">E</kbd> Snap end to range end</div>
              </div>
           </div>
         </div>
