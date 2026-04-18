@@ -3395,9 +3395,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (previewAnchor?.id === anchorId) {
       setPreviewAnchor(null);
     }
+    // AUDIT P0 #3: without this, the precision modal would keep rendering with
+    // a stale reference after the underlying anchor was deleted.
+    if (precisionAnchor?.id === anchorId) {
+      setPrecisionAnchor(null);
+      setShowPrecisionModal(false);
+    }
     // Mark delete hint as seen
     setHasSeenDeleteHint(true);
-  }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
+  }, [anchors, saveToHistory, selectedAnchor, previewAnchor, precisionAnchor]);
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const FRAME_STEP = 1 / 30;
@@ -3757,7 +3763,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   }, [holdingAnchor]);
 
 
-  // Phase 5B: Drive card video playback — plays & loops the clip segment in the mini player
+  // Phase 5B: Drive card video playback — plays & loops the clip segment in the mini player.
+  // AUDIT P0 #4: previously, rapid anchor switching stacked play()/seeked listeners, and
+  // if the seek target matched currentTime the 'seeked' event never fired — leaving the
+  // card stuck. Use an AbortController per selection, skip the seeked wait when the video
+  // is already buffered, and fall back to a 400ms timeout so we never hang on the listener.
   useEffect(() => {
     if (dragState.active || !selectedAnchor || !videoUrl) {
       cardVideoRef.current?.pause();
@@ -3767,12 +3777,36 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (!anchor || !cardVideoRef.current) return;
 
     const vid = cardVideoRef.current;
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const startPlay = () => {
+      if (signal.aborted) return;
+      if (vid.readyState < 2) return; // HAVE_CURRENT_DATA; wait for canplay
+      vid.play().catch(() => {});
+    };
+
+    const alreadyAtTarget = Math.abs(vid.currentTime - anchor.start) < 0.05;
     vid.currentTime = anchor.start;
-    const startPlay = () => vid.play().catch(() => {});
-    vid.addEventListener('seeked', startPlay, { once: true });
+
+    if (alreadyAtTarget && vid.readyState >= 2) {
+      startPlay();
+    } else {
+      const onSeeked = () => startPlay();
+      const onCanPlay = () => startPlay();
+      vid.addEventListener('seeked', onSeeked, { once: true, signal });
+      vid.addEventListener('canplay', onCanPlay, { once: true, signal });
+
+      // Safety timeout — if neither 'seeked' nor 'canplay' fires within 400ms
+      // (common when the seek target is a keyframe already buffered), start anyway.
+      const timeoutId = setTimeout(() => {
+        if (!signal.aborted) startPlay();
+      }, 400);
+      signal.addEventListener('abort', () => clearTimeout(timeoutId));
+    }
 
     return () => {
-      vid.removeEventListener('seeked', startPlay);
+      controller.abort();
       vid.pause();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7903,7 +7937,7 @@ onMouseLeave={() => {
         )}
 
         {/* Precision Modal */}
-{showPrecisionModal && precisionAnchor && (
+{showPrecisionModal && precisionAnchor && anchors.some(a => a.id === precisionAnchor.id) && (
   <div
     className="fixed inset-0 glass-modal-overlay flex items-center justify-center p-2 sm:p-4"
     style={{ zIndex: 9999, touchAction: 'none', WebkitOverflowScrolling: 'auto' }}
