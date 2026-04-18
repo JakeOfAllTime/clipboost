@@ -1,5 +1,32 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Head from 'next/head';
+
+/**
+ * Anchor — a clip segment on the main video timeline.
+ *
+ * Core fields (persist to autosave / save-config):
+ * @typedef {Object} Anchor
+ * @property {number} id                 - Unique id (Date.now() + index at creation)
+ * @property {number} start              - Clip start in seconds, absolute video time
+ * @property {number} end                - Clip end in seconds, absolute video time
+ *
+ * Meta fields (underscore-prefixed, runtime-only, NOT guaranteed to round-trip):
+ * @property {string}  [_narrativeReason] - Human-readable "why this clip" — set by
+ *                                           Smart/Quick/Pro Gen. Shown in tooltips.
+ * @property {number}  [_importance]      - 0..1 score. Smart Gen = Claude's importance;
+ *                                           Quick Gen = normalized motion score.
+ * @property {number}  [_index]           - Cached position at the time of precision-mode
+ *                                           selection. Goes stale on reorder/delete — prefer
+ *                                           anchors.findIndex(a => a.id === anchor.id) at
+ *                                           read time (see goToPreviousAnchor/goToNextAnchor).
+ * @property {number}  [_timelineOffset]  - Cumulative duration of preceding anchors in the
+ *                                           preview timeline; set when the precision modal opens
+ *                                           and used to map precision-time → preview-time.
+ * @property {string}  [_zone]            - 'opening' | 'early' | 'middle' | 'late' | 'finale'.
+ *                                           Attached by resolveAndValidateClips during Smart Gen
+ *                                           distribution rebalancing; not written to user anchors.
+ */
+
 import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -119,6 +146,7 @@ const ReelForge = () => {
   const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
   const [hasSeenLoupeHint, setHasSeenLoupeHint] = useState(false); // AUDIT P1 #5: first-select loupe hint
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false); // AUDIT P2 #12: "?" toggles shortcut overlay
+  const storageFailedRef = useRef(false); // AUDIT P3 #19: fire the "storage unavailable" toast at most once per session
 
   // Double-tap tracking for anchor deletion on mobile
   const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
@@ -309,6 +337,12 @@ const platforms = {
           return () => clearTimeout(indicatorTimeout);
         } catch (error) {
           console.error('Error auto-saving:', error);
+          // AUDIT P3 #19: surface the first failure so users know autosave is off
+          // (private mode / quota exceeded / storage disabled).
+          if (!storageFailedRef.current) {
+            storageFailedRef.current = true;
+            showToast('Autosave disabled — browser storage is unavailable', 'warning');
+          }
         }
       }, 300); // Debounce: wait 300ms after last change
 

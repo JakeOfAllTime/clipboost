@@ -1,85 +1,100 @@
 // API Route: Server-side narrative analysis with Claude Vision API
-// Simplified two-phase architecture - No tools, just direct analysis
+// AUDIT #26, #27: per-IP rate limit (10-burst / 1-per-30s), 25MB body cap,
+// generic error envelope to the client (full detail logged server-side).
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '50mb'
+      sizeLimit: '25mb'
     },
     responseLimit: false
   }
 };
 
+// Token-bucket rate limiter. Process-local, so per-instance on Vercel. Good
+// enough to stop burst abuse from a single client; switch to an edge store
+// if horizontal scale ever matters.
+const RATE_STATE = globalThis.__clipboost_rate_state__ || (globalThis.__clipboost_rate_state__ = new Map());
+const BUCKET_SIZE = 10;           // max burst
+const REFILL_PER_MS = 1 / 30_000; // one token every 30s
+
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0].trim();
+  return req.socket?.remoteAddress || 'unknown';
+}
+
+function rateLimitAllow(ip) {
+  const now = Date.now();
+  const prev = RATE_STATE.get(ip) || { tokens: BUCKET_SIZE, last: now };
+  const elapsed = now - prev.last;
+  const tokens = Math.min(BUCKET_SIZE, prev.tokens + elapsed * REFILL_PER_MS);
+  if (tokens < 1) {
+    RATE_STATE.set(ip, { tokens, last: now });
+    return false;
+  }
+  RATE_STATE.set(ip, { tokens: tokens - 1, last: now });
+  return true;
+}
+
 export default async function handler(req, res) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const ip = clientIp(req);
+  if (!rateLimitAllow(ip)) {
+    console.warn(`🛑 Rate limit hit for ${ip}`);
+    return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
   }
 
   try {
     const { messages, videoType } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Invalid request: messages array required' });
+      return res.status(400).json({ error: 'Invalid request format.' });
     }
 
-    // Log payload size for debugging
     const payloadSize = JSON.stringify(req.body).length;
     const payloadMB = (payloadSize / (1024 * 1024)).toFixed(2);
     console.log(`📸 API: Analyzing video [${videoType || 'visual-only'}]`);
     console.log(`📦 Payload size: ${payloadMB}MB (${payloadSize} bytes)`);
 
-    // Debug: Check if API key is available
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    console.log(`🔑 API Key present: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO - MISSING!'}`);
-
     if (!apiKey) {
-      console.error('❌ ANTHROPIC_API_KEY environment variable is not set!');
-      return res.status(500).json({
-        error: 'Server configuration error',
-        details: 'API key not configured. Please check environment variables.'
-      });
+      console.error('❌ ANTHROPIC_API_KEY environment variable is not set.');
+      return res.status(500).json({ error: 'Analysis is temporarily unavailable.' });
     }
 
-    // Call Claude API with messages (no tools)
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
         temperature: 0.5,
-        messages: messages
+        messages
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API: Anthropic API error:', errorText);
-      console.error('❌ API: Status:', response.status);
-      console.error('❌ API: Request had', messages[0]?.content?.length || 0, 'content items');
-      return res.status(response.status).json({
-        error: 'API request failed',
-        details: errorText,
-        status: response.status
-      });
+      // AUDIT #27: log full upstream detail server-side, return a generic
+      // message to the client so stack traces and internal state don't leak.
+      console.error('❌ Anthropic API error:', response.status, errorText);
+      return res.status(502).json({ error: 'Analysis failed. Please try again.' });
     }
 
     const data = await response.json();
-
-    // Return the response
     console.log('✅ API: Response received');
     return res.status(200).json({ content: data.content, stop_reason: data.stop_reason });
 
   } catch (error) {
     console.error('❌ API: Narrative analysis error:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error.message
-    });
+    return res.status(500).json({ error: 'Analysis failed. Please try again.' });
   }
 }
