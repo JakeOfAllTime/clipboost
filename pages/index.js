@@ -60,14 +60,14 @@ const ReelForge = () => {
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const previewAnimationRef = useRef(null);
 
-  // Dual-video system for gapless preview (professional NLE quality)
-  const [activeVideo, setActiveVideo] = useState('A'); // 'A' or 'B'
-  const activeVideoRef = useRef('A'); // Ref version for RAF loop (prevent restarts)
-  const videoBRef = useRef(null); // Second video element for crossfade
-  const standbyReadyRef = useRef(false); // Track if standby video is seeked and ready
-  const waitingForStandbyRef = useRef(null); // Track timestamp when we started waiting for standby
-  const transitioningRef = useRef(false); // Prevent infinite loop when waiting for standby
-  const previewAnchorIndexRef = useRef(0); // Ref version for RAF loop (prevent restarts)
+  // Dual-video Play Clips system — ref-only so the hot swap doesn't wait on
+  // a React re-render. See PROJECT_PRINCIPLES.md.
+  const activeVideoRef = useRef('A');                  // 'A' | 'B' — single source of truth
+  const videoBRef = useRef(null);                      // second video element
+  const standbyReadyRef = useRef(false);               // standby has finished seeking to next clip
+  const waitingForStandbyRef = useRef(null);           // timestamp when we started waiting for a late standby
+  const transitioningRef = useRef(false);              // prevents swap re-entry
+  const previewAnchorIndexRef = useRef(0);             // ref mirror of previewAnchorIndex for RAF
 
   // Music state
   const [music, setMusic] = useState(null);
@@ -2846,7 +2846,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setPreviewAnchorIndex(0);
 
     activeVideoRef.current = 'A';
-    setActiveVideo('A');
+    // Reset opacity state — A visible, B hidden (standby)
+    if (videoRef.current) videoRef.current.style.opacity = '1';
+    if (videoBRef.current) videoBRef.current.style.opacity = '0';
 
     // Reset transition flags
     transitioningRef.current = false;
@@ -2933,6 +2935,19 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Pause BOTH video elements — active may be A or B after swaps
     if (videoRef.current) videoRef.current.pause();
     if (videoBRef.current) videoBRef.current.pause();
+
+    // Reset dual-video visual state: A visible, B hidden. Ensures the main
+    // (non-preview) video player always shows A.
+    activeVideoRef.current = 'A';
+    standbyReadyRef.current = false;
+    if (videoRef.current) {
+      videoRef.current.style.opacity = '1';
+      videoRef.current.muted = false;
+    }
+    if (videoBRef.current) {
+      videoBRef.current.style.opacity = '0';
+      videoBRef.current.muted = true;
+    }
   }, [musicStartTime]);
 
   // Toggle preview playback
@@ -3164,97 +3179,93 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         if (playheadProgressRef.current) playheadProgressRef.current.style.width = `${pct}%`;
       }
 
-      // Check if we've reached the end of current segment (skip if already transitioning)
-      if (sourceTime >= currentSegment.sourceEnd - 0.2 && !transitioningRef.current) {
+      // Reached the end of the current segment — swap if standby is pre-seeked.
+      // Previously triggered 200ms early to mask swap latency, which shortened
+      // every clip by 200ms. With direct-ref opacity flip + no pause→play
+      // setTimeout, the swap is effectively instant, so we fire 40ms early
+      // purely as a safety cushion.
+      if (sourceTime >= currentSegment.sourceEnd - 0.04 && !transitioningRef.current) {
         const nextIndex = currentIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
           const nextSegment = previewTimeline[nextIndex];
 
-          // GAPLESS SWAP: If standby is ready, instant transition
+          // GAPLESS SWAP — standby is already at nextSegment.sourceStart.
           if (standbyReadyRef.current && standbyVideoEl) {
-            // Reset waiting timer and transition flag (successful swap)
             waitingForStandbyRef.current = null;
             transitioningRef.current = false;
 
-            // Swap active video (update both ref and state)
+            // Opacity flip on the DOM refs (no React state on the hot path).
+            standbyVideoEl.style.opacity = '1';
+            activeVideoEl.style.opacity = '0';
+
+            // Ownership flips
             const newActiveVideo = activeVideoRef.current === 'A' ? 'B' : 'A';
             activeVideoRef.current = newActiveVideo;
-            setActiveVideo(newActiveVideo);
 
-            // Update clip index (update both ref and state)
+            // Audio ownership — only the active video is unmuted (music has its own element)
+            standbyVideoEl.muted = false;
+            activeVideoEl.muted = true;
+
+            // Clip index + preview-card selection track the currently-playing clip
             previewAnchorIndexRef.current = nextIndex;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
+            if (nextSegment.anchorId !== undefined) {
+              setSelectedAnchor(nextSegment.anchorId);
+            }
 
-            // Pause active video BEFORE starting standby
+            // Start new active, stop old. Play before pause so the first new
+            // frame is already rendering when the old element stops — no gap.
+            standbyVideoEl.play().catch(err => console.error('❌ Standby play failed:', err));
             activeVideoEl.pause();
 
-            // Play standby video (wait for pause to complete)
-            setTimeout(() => {
-              standbyVideoEl.play().catch(err => {
-                console.error('❌ Standby play failed:', err);
-                // Fallback: try again after brief delay
-                setTimeout(() => standbyVideoEl.play().catch(() => {}), 50);
-              });
-            }, 10);
-
-            // Pre-seek the now-standby video to the NEXT segment (if it exists)
+            // Pre-seek the now-standby to the clip after next
             const afterNextIndex = nextIndex + 1;
             if (afterNextIndex < previewTimeline.length) {
               standbyReadyRef.current = false;
-              const afterNextSegment = previewTimeline[afterNextIndex];
-              activeVideoEl.currentTime = afterNextSegment.sourceStart;
+              activeVideoEl.currentTime = previewTimeline[afterNextIndex].sourceStart;
             }
           } else if (standbyVideoEl) {
-            // WAIT FOR STANDBY: Pause and give it time to finish seeking
-
-            // Pause active video to wait for standby
+            // WAIT FOR STANDBY — typical budget ~50ms; give up after 500ms and
+            // fall back to a visible single-video seek rather than freezing.
             if (!activeVideoEl.paused) {
               activeVideoEl.pause();
             }
 
-            // Check if we've been waiting too long (timeout after 1 second)
             if (!waitingForStandbyRef.current) {
               waitingForStandbyRef.current = Date.now();
-              transitioningRef.current = true; // Prevent checking again until swap or timeout
+              transitioningRef.current = true;
             }
 
-            const waitTime = Date.now() - waitingForStandbyRef.current;
-
-            if (waitTime > 1000) {
-              // Timeout: give up and do visible seek
+            if (Date.now() - waitingForStandbyRef.current > 500) {
               waitingForStandbyRef.current = null;
               transitioningRef.current = false;
 
-              // Update index (both ref and state)
               previewAnchorIndexRef.current = nextIndex;
               setPreviewAnchorIndex(nextIndex);
               setPreviewCurrentTime(nextSegment.previewStart);
+              if (nextSegment.anchorId !== undefined) {
+                setSelectedAnchor(nextSegment.anchorId);
+              }
 
-              // Seek and play (same video, no swap)
               activeVideoEl.currentTime = nextSegment.sourceStart;
-              setTimeout(() => {
-                activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
-              }, 10);
+              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
             }
-            // Otherwise keep waiting, RAF will check again next frame
-
+            // else keep waiting; RAF will check again next frame
           } else {
-            // Fallback: no standby video, use visible seek
+            // No standby element available — single-video seek.
             transitioningRef.current = false;
-
-            // Update index (both ref and state)
             previewAnchorIndexRef.current = nextIndex;
             setPreviewAnchorIndex(nextIndex);
             setPreviewCurrentTime(nextSegment.previewStart);
+            if (nextSegment.anchorId !== undefined) {
+              setSelectedAnchor(nextSegment.anchorId);
+            }
 
-            // Seek and play
             activeVideoEl.currentTime = nextSegment.sourceStart;
             if (activeVideoEl.paused) {
-              setTimeout(() => {
-                activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
-              }, 10);
+              activeVideoEl.play().catch(err => console.error('❌ Play failed:', err));
             }
           }
 
@@ -5368,14 +5379,16 @@ const exportVideo = async () => {
                   {/* Video Player Section */}
                   <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
-                    {/* Dual-video system for gapless preview (professional NLE quality) */}
-                    {/* Video A - Primary */}
+                    {/* Dual-video Play Clips system — see PROJECT_PRINCIPLES.md
+                        ("Play Clips transition: dual-video hot swap").
+                        Both elements are absolutely stacked and swap via direct
+                        opacity manipulation on the DOM ref (no React re-render
+                        on the hot path) so transitions are truly instant. */}
                     <video
                       ref={videoRef}
                       src={videoUrl}
-                      className={`w-full h-full object-contain ${
-                        isPreviewMode && activeVideo === 'B' ? 'hidden' : 'block'
-                      }`}
+                      className="absolute inset-0 w-full h-full object-contain"
+                      style={{ opacity: 1, transition: 'opacity 60ms linear', willChange: 'opacity' }}
                       preload="auto"
                       playsInline
                       onTimeUpdate={handleTimeUpdate}
@@ -5383,23 +5396,20 @@ const exportVideo = async () => {
                       onEnded={() => setIsPlaying(false)}
                       onSeeked={() => {
                         if (isPreviewMode && activeVideoRef.current === 'B') {
-                          // Video A is standby
                           standbyReadyRef.current = true;
                         }
                       }}
                     />
-                    {/* Video B - Standby (for gapless clip transitions) */}
                     <video
                       ref={videoBRef}
                       src={videoUrl}
-                      className={`w-full h-full object-contain absolute inset-0 ${
-                        isPreviewMode && activeVideo === 'B' ? 'block' : 'hidden'
-                      }`}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      style={{ opacity: 0, transition: 'opacity 60ms linear', willChange: 'opacity' }}
                       preload="auto"
                       playsInline
+                      muted
                       onSeeked={() => {
                         if (isPreviewMode && activeVideoRef.current === 'A') {
-                          // Video B is standby
                           standbyReadyRef.current = true;
                         }
                       }}
