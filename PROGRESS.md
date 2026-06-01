@@ -54,6 +54,13 @@
 - Added resistance-based drag nudging on the Boundary/Edge Map `S` and `E` pills.
 - Turned the empty space under the Edge Map into a large two-zone hold nudge pad for finger/mouse use.
 - Browser-tested rail clicks and Edge Map pill dragging with `jubjubthai trim.mp4`; no console errors.
+- Reworked the Edge Map into a Boundary Map whose rail represents the safe span between the previous/next clip boundary (or video start/end).
+- Softened the Boundary Map focus marker so it no longer uses a glaring white line over the active pill.
+- Added hold nudge controls for `1f`, `5f`, and `10f` in both directions under the Boundary Map.
+- Made the small `S`/`E` pill in the preview-side nudge rail draggable with the same resistance-based nudge behavior as the Boundary Map pills.
+- Separated overlapping Boundary Map handles vertically when long videos make a short clip occupy only a tiny part of the safe span.
+- Verified `npm run build` succeeds after the Boundary Map/nudge refinements.
+- Browser-tested with `jubjubthai trim.mp4`: generated starter clips, opened Pro tools, verified Boundary Map controls and clicked the `±10f` nudge buttons with no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -63,7 +70,8 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
-- Have the user feel-test the compact Edge Map, rail hold behavior, and large hold nudge pad on desktop/mobile.
+- Have the user feel-test the Boundary Map, draggable rail pill, and `1f`/`5f`/`10f` hold nudge controls on desktop/mobile.
+- Consider adding a magnifying-glass timeline zoom mode for long videos, likely as a focused Pro tool that zooms around the selected clip without making the main timeline permanently busier.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

@@ -24,4 +24,5 @@ in progress
 - The inline Precision Trimmer now uses a focused frame nudge rail for Start/End edge adjustments.
 - The former oversized loupe handle bar is now a compact Edge Map for Start/End focus selection.
 - Precision controls now support hold-to-nudge on the rail, drag-to-nudge on the Edge Map pills, and a large two-zone hold nudge pad.
+- The Edge Map is now a Boundary Map spanning the safe range between neighboring clips, with softer focus markers, separated overlapping handles, `1f`/`5f`/`10f` hold controls, and a draggable `S`/`E` pill in the preview-side rail.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

@@ -6233,18 +6233,29 @@ const exportVideo = async () => {
                     const anchor = anchors.find(a => a.id === selectedAnchor);
                     const active = !!(anchor && loupeWindow);
                     const colors = active ? getAnchorColor(anchors.indexOf(anchor), true) : null;
-                    const anchorLeft = active ? ((anchor.start - loupeWindow.start) / loupeWindow.duration) * 100 : 0;
-                    const anchorWidth = active ? ((anchor.end - anchor.start) / loupeWindow.duration) * 100 : 0;
-                    const clampedLeft = active ? Math.max(0, Math.min(95, anchorLeft)) : 0;
-	                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorWidth)) : 0;
-	                    const startMarkerLeft = active ? Math.max(5, Math.min(95, clampedLeft)) : 0;
-	                    const endMarkerLeft = active ? Math.max(5, Math.min(95, clampedLeft + clampedWidth)) : 0;
+                    const sortedAnchors = active ? [...anchors].sort((a, b) => a.start - b.start) : [];
+                    const sortedAnchorIndex = active ? sortedAnchors.findIndex(a => a.id === anchor.id) : -1;
+                    const previousAnchor = sortedAnchorIndex > 0 ? sortedAnchors[sortedAnchorIndex - 1] : null;
+                    const nextAnchor = sortedAnchorIndex >= 0 && sortedAnchorIndex < sortedAnchors.length - 1 ? sortedAnchors[sortedAnchorIndex + 1] : null;
+                    const timelineEnd = active ? Math.max(duration || 0, anchor.end) : FRAME_STEP;
+                    const edgeWindowStart = active ? Math.max(0, previousAnchor ? previousAnchor.end : 0) : 0;
+                    const edgeWindowEnd = active ? Math.max(edgeWindowStart + FRAME_STEP, Math.min(timelineEnd, nextAnchor ? nextAnchor.start : timelineEnd)) : FRAME_STEP;
+                    const edgeWindowDuration = Math.max(FRAME_STEP, edgeWindowEnd - edgeWindowStart);
+                    const anchorLeft = active ? ((anchor.start - edgeWindowStart) / edgeWindowDuration) * 100 : 0;
+                    const anchorRight = active ? ((anchor.end - edgeWindowStart) / edgeWindowDuration) * 100 : 0;
+                    const clampedLeft = active ? Math.max(0, Math.min(96, anchorLeft)) : 0;
+	                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorRight - clampedLeft)) : 0;
+	                    const startMarkerLeft = active ? Math.max(4, Math.min(96, anchorLeft)) : 0;
+	                    const endMarkerLeft = active ? Math.max(4, Math.min(96, anchorRight)) : 0;
+	                    const markersOverlap = active ? Math.abs(endMarkerLeft - startMarkerLeft) < 6 : false;
+	                    const startMarkerTop = markersOverlap ? '42%' : '50%';
+	                    const endMarkerTop = markersOverlap ? '58%' : '50%';
 	                    const clipIndex = active ? anchors.findIndex(a => a.id === anchor.id) : -1;
 	                    const latestVisibleFrame = active ? Math.max(anchor.start, anchor.end - FRAME_STEP) : 0;
 	                    const focusTime = active
 	                      ? Math.max(anchor.start, Math.min(selectedClipFocusTime ?? anchor.start, latestVisibleFrame))
 	                      : null;
-	                    const focusLeft = active ? Math.max(0, Math.min(100, ((focusTime - loupeWindow.start) / loupeWindow.duration) * 100)) : 0;
+	                    const focusLeft = active ? Math.max(0, Math.min(100, ((focusTime - edgeWindowStart) / edgeWindowDuration) * 100)) : 0;
 	                    const focusHandle = active && Math.abs(focusTime - anchor.end) < Math.abs(focusTime - anchor.start) ? 'end' : 'start';
 	                    const focusHandleLabel = focusHandle === 'end' ? 'End' : 'Start';
 	                    const focusHandleClass = focusHandle === 'end' ? 'text-red-300 border-red-400/40 bg-red-500/10' : 'text-green-300 border-green-400/40 bg-green-500/10';
@@ -6423,9 +6434,15 @@ const exportVideo = async () => {
 	                                </div>
 	                                <div className="mt-2 flex items-center justify-center gap-2">
 	                                  <div className="h-px flex-1 bg-slate-700" />
-	                                  <div className={`flex h-9 w-9 items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200' : 'border-red-400/50 bg-red-500/20 text-red-200'}`}>
+	                                  <button
+	                                    type="button"
+	                                    onPointerDown={(e) => startEdgeMapNudgeDrag(e, focusHandle)}
+	                                    className={`flex h-9 w-9 cursor-ew-resize touch-none items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide transition hover:scale-105 ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
+	                                    title={`${focusHandleLabel}: drag to nudge`}
+	                                    aria-label={`${focusHandleLabel} edge drag nudge`}
+	                                  >
 	                                    {focusHandle === 'start' ? 'S' : 'E'}
-	                                  </div>
+	                                  </button>
 	                                  <div className="h-px flex-1 bg-slate-700" />
 	                                </div>
 	                                <div
@@ -6476,7 +6493,7 @@ const exportVideo = async () => {
 	                          )}
 	                        </div>
 
-                        {/* RIGHT: Edge Map — visual orientation plus Start/End focus */}
+                        {/* RIGHT: Boundary Map — visual orientation plus Start/End focus */}
 	                        <div
 	                          ref={loupeRef}
 	                          className="relative flex-1 self-start overflow-hidden rounded-lg border p-3 transition-colors"
@@ -6488,8 +6505,8 @@ const exportVideo = async () => {
                           {active ? (
                             <div className="flex min-h-32 flex-col gap-3">
                               <div className="flex items-center justify-between gap-2">
-                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">⌕ Edge map</div>
-                                <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(anchor.end - anchor.start)}</div>
+                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">⌕ Boundary map</div>
+                                <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(edgeWindowStart)} - {formatTime(edgeWindowEnd)}</div>
                               </div>
 
                               <div className="relative h-24 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-4">
@@ -6500,8 +6517,8 @@ const exportVideo = async () => {
                                 />
                                 <button
                                   type="button"
-                                  className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
-                                  style={{ left: `${startMarkerLeft}%` }}
+                                  className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
+                                  style={{ left: `${startMarkerLeft}%`, top: startMarkerTop }}
                                   aria-label={`Select start edge — ${formatTime(anchor.start)}`}
                                   onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'start')}
                                   onKeyDown={(e) => {
@@ -6513,8 +6530,8 @@ const exportVideo = async () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
-                                  style={{ left: `${endMarkerLeft}%` }}
+                                  className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
+                                  style={{ left: `${endMarkerLeft}%`, top: endMarkerTop }}
                                   aria-label={`Select end edge — ${formatTime(anchor.end)}`}
                                   onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'end')}
                                   onKeyDown={(e) => {
@@ -6525,7 +6542,7 @@ const exportVideo = async () => {
                                   E
                                 </button>
                                 <div
-                                  className="absolute top-3 bottom-3 w-0.5 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.7)] pointer-events-none"
+                                  className={`absolute top-3 bottom-3 z-[1] w-0.5 rounded-full pointer-events-none ${focusHandle === 'start' ? 'bg-green-200/40 shadow-[0_0_8px_rgba(34,197,94,0.25)]' : 'bg-red-200/40 shadow-[0_0_8px_rgba(239,68,68,0.25)]'}`}
                                   style={{ left: `${focusLeft}%` }}
                                 />
                               </div>
@@ -6552,23 +6569,29 @@ const exportVideo = async () => {
                                 </button>
                               </div>
 
-                              <div className={`grid grid-cols-2 gap-2 rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/20 bg-green-500/5' : 'border-red-400/20 bg-red-500/5'}`}>
-                                <button
-                                  type="button"
-                                  onPointerDown={(e) => startNudgeHold(e, focusHandle, -1)}
-                                  className={`min-h-14 rounded-md border px-3 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
-                                  title={`${focusHandleLabel}: hold to nudge backward`}
-                                >
-                                  ← -1f
-                                </button>
-                                <button
-                                  type="button"
-                                  onPointerDown={(e) => startNudgeHold(e, focusHandle, 1)}
-                                  className={`min-h-14 rounded-md border px-3 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
-                                  title={`${focusHandleLabel}: hold to nudge forward`}
-                                >
-                                  +1f →
-                                </button>
+                              <div className={`rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/20 bg-green-500/5' : 'border-red-400/20 bg-red-500/5'}`}>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[1, 5, 10].map((frameCount) => (
+                                    <React.Fragment key={frameCount}>
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) => startNudgeHold(e, focusHandle, -1, frameCount)}
+                                        className={`min-h-11 rounded-md border px-3 text-sm font-bold transition ${frameCount === 1 ? '' : 'text-xs'} ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+                                        title={`${focusHandleLabel}: hold to nudge backward ${frameCount} frame${frameCount === 1 ? '' : 's'}`}
+                                      >
+                                        ← -{frameCount}f
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) => startNudgeHold(e, focusHandle, 1, frameCount)}
+                                        className={`min-h-11 rounded-md border px-3 text-sm font-bold transition ${frameCount === 1 ? '' : 'text-xs'} ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+                                        title={`${focusHandleLabel}: hold to nudge forward ${frameCount} frame${frameCount === 1 ? '' : 's'}`}
+                                      >
+                                        +{frameCount}f →
+                                      </button>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           ) : (
