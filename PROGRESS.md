@@ -50,6 +50,10 @@
 - Replaced the oversized loupe handle bar with a compact Edge Map that selects Start/End focus while leaving frame movement to the nudge rail.
 - Tightened the nudge rail layout so it fits inside the narrow Precision Trimmer column.
 - Browser screenshot-checked the compact Edge Map and nudge rail with `jubjubthai trim.mp4`; no console errors.
+- Added hold-to-nudge behavior to the frame rail buttons with repeat/acceleration.
+- Added resistance-based drag nudging on the Boundary/Edge Map `S` and `E` pills.
+- Turned the empty space under the Edge Map into a large two-zone hold nudge pad for finger/mouse use.
+- Browser-tested rail clicks and Edge Map pill dragging with `jubjubthai trim.mp4`; no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -59,7 +63,7 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
-- Have the user feel-test the compact Edge Map plus nudge rail on desktop/mobile and decide whether the older precision modal should get the same treatment.
+- Have the user feel-test the compact Edge Map, rail hold behavior, and large hold nudge pad on desktop/mobile.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

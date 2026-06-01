@@ -23,4 +23,5 @@ in progress
 - Quick Gen now defaults Pace to 3 seconds.
 - The inline Precision Trimmer now uses a focused frame nudge rail for Start/End edge adjustments.
 - The former oversized loupe handle bar is now a compact Edge Map for Start/End focus selection.
+- Precision controls now support hold-to-nudge on the rail, drag-to-nudge on the Edge Map pills, and a large two-zone hold nudge pad.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

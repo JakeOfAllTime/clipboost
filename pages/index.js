@@ -152,7 +152,11 @@ const ReelForge = () => {
   const [hasSeenDeleteHint, setHasSeenDeleteHint] = useState(false); // Hint for delete functionality
   const [hasSeenLoupeHint, setHasSeenLoupeHint] = useState(false); // AUDIT P1 #5: first-select loupe hint
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false); // AUDIT P2 #12: "?" toggles shortcut overlay
+  const [nudgeActivity, setNudgeActivity] = useState({ handle: null, direction: 0, intensity: 0 });
   const storageFailedRef = useRef(false); // AUDIT P3 #19: fire the "storage unavailable" toast at most once per session
+  const anchorsRef = useRef([]);
+  const selectedAnchorRef = useRef(null);
+  const nudgeHoldRef = useRef({ intervalId: null, timeoutId: null, active: false });
 
   // Double-tap tracking for anchor deletion on mobile
   const anchorTapRef = useRef({ anchorId: null, time: 0, hasMoved: false });
@@ -448,6 +452,14 @@ const dismissRestoreToast = () => {
     const color = anchorColors[index % anchorColors.length];
     return isSelected ? { ...color, bg: color.bg.replace('/30', '/50') } : color;
   }, [anchorColors]);
+
+  useEffect(() => {
+    anchorsRef.current = anchors;
+  }, [anchors]);
+
+  useEffect(() => {
+    selectedAnchorRef.current = selectedAnchor;
+  }, [selectedAnchor]);
 
   // Undo/Redo functions (memoized)
   const saveToHistory = useCallback((newAnchors) => {
@@ -3689,26 +3701,35 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const FRAME_STEP = 1 / 30;
-  const nudgeAnchor = useCallback((handle, direction, frames = 1) => {
-    if (!selectedAnchor) return;
+  const nudgeAnchor = useCallback((handle, direction, frames = 1, options = {}) => {
+    const { commit = true } = options;
+    const activeAnchorId = selectedAnchorRef.current;
+    if (!activeAnchorId) return;
+
     let focusedTime = null;
-    const updated = anchors.map(a => {
-      if (a.id !== selectedAnchor) return a;
+    let changed = false;
+    const updated = anchorsRef.current.map(a => {
+      if (a.id !== activeAnchorId) return a;
       const delta = direction * frames * FRAME_STEP;
       if (handle === 'start') {
         const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
+        if (newStart === a.start) return a;
+        changed = true;
         focusedTime = newStart;
         return { ...a, start: newStart };
       }
       const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, duration));
+      if (newEnd === a.end) return a;
+      changed = true;
       focusedTime = newEnd;
       return { ...a, end: newEnd };
     });
 
+    if (!changed) return;
+    anchorsRef.current = updated;
     setAnchors(updated);
-    saveToHistory(updated);
     setSelectedClipFocusTime(focusedTime);
-    const updatedAnchor = updated.find(a => a.id === selectedAnchor);
+    const updatedAnchor = updated.find(a => a.id === activeAnchorId);
     if (updatedAnchor) {
       setPreviewAnchor(updatedAnchor);
       setPreviewHandle(handle);
@@ -3716,7 +3737,90 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (cardVideoRef.current && focusedTime !== null) {
       cardVideoRef.current.currentTime = focusedTime;
     }
-  }, [selectedAnchor, duration, anchors, saveToHistory]);
+    if (commit) {
+      saveToHistory(updated);
+    }
+  }, [duration, saveToHistory]);
+
+  const finishNudgeHold = useCallback(() => {
+    if (nudgeHoldRef.current.timeoutId) clearTimeout(nudgeHoldRef.current.timeoutId);
+    if (nudgeHoldRef.current.intervalId) clearInterval(nudgeHoldRef.current.intervalId);
+    if (nudgeHoldRef.current.active) {
+      saveToHistory(anchorsRef.current);
+    }
+    nudgeHoldRef.current = { intervalId: null, timeoutId: null, active: false };
+    setNudgeActivity({ handle: null, direction: 0, intensity: 0 });
+  }, [saveToHistory]);
+
+  const startNudgeHold = useCallback((event, handle, direction, frames = 1) => {
+    event.preventDefault();
+    event.stopPropagation();
+    finishNudgeHold();
+
+    let tick = 0;
+    const run = () => {
+      tick += 1;
+      const boost = tick > 24 ? 3 : tick > 10 ? 2 : 1;
+      nudgeAnchor(handle, direction, frames * boost, { commit: false });
+      setNudgeActivity({ handle, direction, intensity: boost });
+    };
+
+    nudgeHoldRef.current.active = true;
+    run();
+    nudgeHoldRef.current.timeoutId = setTimeout(() => {
+      nudgeHoldRef.current.intervalId = setInterval(run, 120);
+    }, 260);
+
+    document.addEventListener('pointerup', finishNudgeHold, { once: true });
+    document.addEventListener('pointercancel', finishNudgeHold, { once: true });
+  }, [finishNudgeHold, nudgeAnchor]);
+
+  const startEdgeMapNudgeDrag = useCallback((event, handle) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerId = event.pointerId;
+    const originTarget = event.currentTarget;
+    if (originTarget?.setPointerCapture && pointerId !== undefined) {
+      try { originTarget.setPointerCapture(pointerId); } catch (_) {}
+    }
+
+    let originX = event.clientX || 0;
+    let didMove = false;
+    setPreviewHandle(handle);
+    const selected = anchorsRef.current.find(a => a.id === selectedAnchorRef.current);
+    if (selected) {
+      const focusTime = handle === 'end' ? Math.max(selected.start, selected.end - FRAME_STEP) : selected.start;
+      setSelectedClipFocusTime(focusTime);
+      if (cardVideoRef.current) cardVideoRef.current.currentTime = focusTime;
+    }
+
+    const handleMove = (moveEvent) => {
+      const currentX = moveEvent.clientX || originX;
+      const deltaX = currentX - originX;
+      const frameDelta = Math.trunc(deltaX / 22);
+      if (frameDelta === 0) return;
+      didMove = true;
+      const direction = Math.sign(frameDelta);
+      const frames = Math.min(5, Math.abs(frameDelta));
+      nudgeAnchor(handle, direction, frames, { commit: false });
+      setNudgeActivity({ handle, direction, intensity: Math.min(3, frames) });
+      originX += frameDelta * 22;
+    };
+
+    const cleanup = () => {
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', cleanup);
+      document.removeEventListener('pointercancel', cleanup);
+      if (didMove) {
+        saveToHistory(anchorsRef.current);
+      }
+      setNudgeActivity({ handle: null, direction: 0, intensity: 0 });
+    };
+
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', cleanup, { once: true });
+    document.addEventListener('pointercancel', cleanup, { once: true });
+  }, [saveToHistory, nudgeAnchor]);
 
   const handleAnchorClick = useCallback((e, anchor) => {
     e.stopPropagation();
@@ -6144,6 +6248,10 @@ const exportVideo = async () => {
 	                    const focusHandle = active && Math.abs(focusTime - anchor.end) < Math.abs(focusTime - anchor.start) ? 'end' : 'start';
 	                    const focusHandleLabel = focusHandle === 'end' ? 'End' : 'Start';
 	                    const focusHandleClass = focusHandle === 'end' ? 'text-red-300 border-red-400/40 bg-red-500/10' : 'text-green-300 border-green-400/40 bg-green-500/10';
+	                    const railActivity = nudgeActivity.handle === focusHandle ? nudgeActivity : null;
+	                    const railActiveTick = railActivity?.direction
+	                      ? 7 + (railActivity.direction * Math.min(3, railActivity.intensity || 1))
+	                      : 7;
 	                    const setFocusToHandle = (handle) => {
 	                      if (!active) return;
 	                      const time = handle === 'end' ? latestVisibleFrame : anchor.start;
@@ -6258,7 +6366,13 @@ const exportVideo = async () => {
 	                                <div className="grid grid-cols-4 items-center gap-1.5">
 	                                  <button
 	                                    type="button"
-	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1, 5); }}
+	                                    onPointerDown={(e) => startNudgeHold(e, focusHandle, -1, 5)}
+	                                    onKeyDown={(e) => {
+	                                      if (e.key === 'Enter' || e.key === ' ') {
+	                                        e.preventDefault();
+	                                        nudgeAnchor(focusHandle, -1, 5);
+	                                      }
+	                                    }}
 	                                    className="min-h-11 rounded-md border border-slate-700 bg-slate-900/80 text-[11px] font-bold text-slate-300 transition hover:border-cyan-400/40 hover:text-white"
 	                                    title={`${focusHandleLabel}: back 5 frames`}
 	                                  >
@@ -6266,7 +6380,13 @@ const exportVideo = async () => {
 	                                  </button>
 	                                  <button
 	                                    type="button"
-	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1); }}
+	                                    onPointerDown={(e) => startNudgeHold(e, focusHandle, -1)}
+	                                    onKeyDown={(e) => {
+	                                      if (e.key === 'Enter' || e.key === ' ') {
+	                                        e.preventDefault();
+	                                        nudgeAnchor(focusHandle, -1);
+	                                      }
+	                                    }}
 	                                    className={`min-h-12 rounded-md border px-1 text-xs font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
 	                                    title={`${focusHandleLabel}: back 1 frame`}
 	                                  >
@@ -6274,7 +6394,13 @@ const exportVideo = async () => {
 	                                  </button>
 	                                  <button
 	                                    type="button"
-	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, 1); }}
+	                                    onPointerDown={(e) => startNudgeHold(e, focusHandle, 1)}
+	                                    onKeyDown={(e) => {
+	                                      if (e.key === 'Enter' || e.key === ' ') {
+	                                        e.preventDefault();
+	                                        nudgeAnchor(focusHandle, 1);
+	                                      }
+	                                    }}
 	                                    className={`min-h-12 rounded-md border px-1 text-xs font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
 	                                    title={`${focusHandleLabel}: forward 1 frame`}
 	                                  >
@@ -6282,7 +6408,13 @@ const exportVideo = async () => {
 	                                  </button>
 	                                  <button
 	                                    type="button"
-	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, 1, 5); }}
+	                                    onPointerDown={(e) => startNudgeHold(e, focusHandle, 1, 5)}
+	                                    onKeyDown={(e) => {
+	                                      if (e.key === 'Enter' || e.key === ' ') {
+	                                        e.preventDefault();
+	                                        nudgeAnchor(focusHandle, 1, 5);
+	                                      }
+	                                    }}
 	                                    className="min-h-11 rounded-md border border-slate-700 bg-slate-900/80 text-[11px] font-bold text-slate-300 transition hover:border-cyan-400/40 hover:text-white"
 	                                    title={`${focusHandleLabel}: forward 5 frames`}
 	                                  >
@@ -6304,7 +6436,15 @@ const exportVideo = async () => {
 	                                  {Array.from({ length: 15 }).map((_, tickIndex) => (
 	                                    <div
 	                                      key={tickIndex}
-	                                      className={`mx-auto rounded-full ${tickIndex === 7 ? 'h-3 w-0.5 bg-cyan-300' : tickIndex % 2 === 0 ? 'h-2 w-px bg-slate-500' : 'h-1.5 w-px bg-slate-700'}`}
+	                                      className={`mx-auto rounded-full transition-all ${
+	                                        tickIndex === railActiveTick
+	                                          ? `h-3.5 w-0.5 ${railActivity?.direction ? (focusHandle === 'start' ? 'bg-green-300 shadow-[0_0_10px_rgba(34,197,94,0.75)]' : 'bg-red-300 shadow-[0_0_10px_rgba(239,68,68,0.75)]') : 'bg-cyan-300'}`
+	                                          : tickIndex === 7
+	                                            ? 'h-3 w-0.5 bg-cyan-300/70'
+	                                            : tickIndex % 2 === 0
+	                                              ? 'h-2 w-px bg-slate-500'
+	                                              : 'h-1.5 w-px bg-slate-700'
+	                                      }`}
 	                                    />
 	                                  ))}
 	                                </div>
@@ -6363,7 +6503,11 @@ const exportVideo = async () => {
                                   className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
                                   style={{ left: `${startMarkerLeft}%` }}
                                   aria-label={`Select start edge — ${formatTime(anchor.start)}`}
-                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('start'); }}
+                                  onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'start')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
+                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
+                                  }}
                                 >
                                   S
                                 </button>
@@ -6372,7 +6516,11 @@ const exportVideo = async () => {
                                   className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
                                   style={{ left: `${endMarkerLeft}%` }}
                                   aria-label={`Select end edge — ${formatTime(anchor.end)}`}
-                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('end'); }}
+                                  onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'end')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
+                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
+                                  }}
                                 >
                                   E
                                 </button>
@@ -6401,6 +6549,25 @@ const exportVideo = async () => {
                                 >
                                   <span className="block font-bold uppercase tracking-wide">End</span>
                                   <span className="font-mono tabular-nums">{formatTime(anchor.end)}</span>
+                                </button>
+                              </div>
+
+                              <div className={`grid grid-cols-2 gap-2 rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/20 bg-green-500/5' : 'border-red-400/20 bg-red-500/5'}`}>
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => startNudgeHold(e, focusHandle, -1)}
+                                  className={`min-h-14 rounded-md border px-3 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+                                  title={`${focusHandleLabel}: hold to nudge backward`}
+                                >
+                                  ← -1f
+                                </button>
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => startNudgeHold(e, focusHandle, 1)}
+                                  className={`min-h-14 rounded-md border px-3 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+                                  title={`${focusHandleLabel}: hold to nudge forward`}
+                                >
+                                  +1f →
                                 </button>
                               </div>
                             </div>
