@@ -70,6 +70,9 @@
 - Browser-tested free dragging the Boundary Map end pill with `jubjubthai trim.mp4`; the selected clip end updated from `2:09` to `8:43`, the preview/end controls stayed in sync, and no console errors appeared.
 - Fixed frame nudge overlap: nudge buttons, hold nudges, keyboard arrows, and spring-puck nudges now clamp against previous/next clip boundaries.
 - Browser-tested the overlap regression by dragging clip 1's end to the next clip boundary (`31:55`) and clicking `+10f` ten more times; the end stayed at `31:55` and no console errors appeared.
+- Pushed the refactor branch to GitHub and promoted it to `main` for `JakeOfAllTime/clipboost`.
+- Preserved the previous GitHub `main` as `backup/pre-refactor-main-20260601-133245` before replacement.
+- Vercel production deployment for `clipboost` completed successfully; production alias `https://clipboost-ten.vercel.app` returned HTTP 200.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -80,6 +83,7 @@
 
 ## Next Logical Step
 - Have the user feel-test direct Boundary Map dragging, the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
+- Mobile Vercel feel-test is next now that production is live.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

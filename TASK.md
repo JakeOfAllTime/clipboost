@@ -28,4 +28,5 @@ in progress
 - The preview-side rail pill is now a spring nudge puck with gentle/strong pull speeds, the Boundary Map area has local `Prev clip` / `Next clip` navigation, and the Pro timeline has a magnifier toggle that zooms around the selected clip.
 - Boundary Map pills now free-drag the selected start/end boundary directly; frame nudging lives in the spring puck and nudge buttons.
 - Frame nudges now clamp against previous/next clip boundaries so adjacent clips can touch but cannot overlap by accident.
+- GitHub `main` now points at this refactor; previous GitHub `main` is backed up as `backup/pre-refactor-main-20260601-133245`; Vercel production is live at `https://clipboost-ten.vercel.app`.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
