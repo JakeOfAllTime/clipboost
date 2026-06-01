@@ -2787,6 +2787,13 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     seekPreviewTime(newTime);
   }, [previewTotalDuration, seekPreviewTime]);
 
+  const syncPreviewIndexForAnchor = useCallback((anchorId) => {
+    const segmentIndex = previewTimeline.findIndex(segment => segment.anchorId === anchorId);
+    if (segmentIndex === -1) return;
+    previewAnchorIndexRef.current = segmentIndex;
+    setPreviewAnchorIndex(segmentIndex);
+  }, [previewTimeline]);
+
   // Frame thumbnail during loupe handle drag — capture from main video at 100ms intervals
   useEffect(() => {
     // Initialise the offscreen canvas once
@@ -3566,6 +3573,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Batch state updates to reduce re-renders
     setSelectedAnchor(anchor.id);
     setSelectedClipFocusTime(anchor.start);
+    syncPreviewIndexForAnchor(anchor.id);
     setHoveredAnchor(null);
     setPreviewAnchor(anchor);
     setPreviewHandle('start'); // Default to showing start frame
@@ -3574,7 +3582,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (previewVideoRef.current) {
       previewVideoRef.current.currentTime = anchor.start;
     }
-  }, []);
+  }, [syncPreviewIndexForAnchor]);
 
   // Update preview video time when hovering/selecting different anchors or changing handle
   useEffect(() => {
@@ -3606,6 +3614,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
     setSelectedClipFocusTime(dragType === 'anchor-right' ? anchor.end : anchor.start);
+    syncPreviewIndexForAnchor(anchor.id);
     setPreviewAnchor(anchor);
     setPreviewHandle(dragType === 'anchor-right' ? 'end' : 'start');
 
@@ -3651,7 +3660,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         });
       }, HOLD_DURATION_MS);
     }
-  }, []);
+  }, [syncPreviewIndexForAnchor]);
 
   const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
@@ -3661,6 +3670,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     setSelectedAnchor(anchor.id);
     setSelectedClipFocusTime(dragType === 'anchor-right' ? anchor.end : anchor.start);
+    syncPreviewIndexForAnchor(anchor.id);
     setPreviewAnchor(anchor);
     setPreviewHandle(dragType === 'anchor-right' ? 'end' : 'start');
 
@@ -3700,7 +3710,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         });
       }, HOLD_DURATION_MS);
     }
-  }, []);
+  }, [syncPreviewIndexForAnchor]);
 
   // Persistent drag handlers with 60fps throttling (optimized)
   const rafIdRef = useRef(null);
@@ -5782,20 +5792,25 @@ const exportVideo = async () => {
                             const segmentWidth = ((segment.duration / previewTotalDuration) * 100);
                             const segmentLeft = ((segment.previewStart / previewTotalDuration) * 100);
                             const isCurrentSegment = playbackMode === 'clips' && idx === previewAnchorIndex;
-                            const colors = getAnchorColor(idx, isCurrentSegment);
+                            const isSelectedSegment = segment.anchorId === selectedAnchor;
+                            const colors = getAnchorColor(idx, isCurrentSegment || isSelectedSegment);
 
                             const thumb = clipThumbnails[segment.anchorId];
                             return (
                               <div
                                 key={idx}
-                                className={`absolute top-0 bottom-0 transition-all rounded ${isCurrentSegment ? '' : colors.border} border-2 overflow-hidden cursor-pointer`}
+                                className={`absolute top-0 bottom-0 transition-all rounded ${isCurrentSegment || isSelectedSegment ? '' : colors.border} border-2 overflow-hidden cursor-pointer`}
                                 style={{
                                   left: `${segmentLeft}%`,
                                   width: `${segmentWidth}%`,
                                   backgroundColor: thumb ? 'transparent' : undefined,
-                                  borderColor: isCurrentSegment ? 'var(--accent-cyan)' : undefined,
-                                  boxShadow: isCurrentSegment ? '0 0 18px rgba(0, 212, 255, 0.65), inset 0 0 0 1px rgba(0, 212, 255, 0.4)' : undefined,
-                                  zIndex: isCurrentSegment ? 2 : 1
+                                  borderColor: isCurrentSegment ? 'var(--accent-cyan)' : isSelectedSegment ? 'var(--accent-pink)' : undefined,
+                                  boxShadow: isCurrentSegment
+                                    ? '0 0 18px rgba(0, 212, 255, 0.65), inset 0 0 0 1px rgba(0, 212, 255, 0.4)'
+                                    : isSelectedSegment
+                                      ? '0 0 16px rgba(255, 0, 255, 0.45), inset 0 0 0 1px rgba(255, 0, 255, 0.35)'
+                                      : undefined,
+                                  zIndex: isCurrentSegment || isSelectedSegment ? 2 : 1
                                 }}
                                 title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s — click to jump`}
                                 onClick={(e) => {
@@ -5824,8 +5839,8 @@ const exportVideo = async () => {
                                 {/* Dark scrim for readability */}
                                 <div className={`absolute inset-0 ${thumb ? 'bg-black/40' : 'bg-black/20'}`} />
                                 {/* Active indicator — top edge highlight */}
-                                {isCurrentSegment && (
-                                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/90 rounded-t pointer-events-none" />
+                                {(isCurrentSegment || isSelectedSegment) && (
+                                  <div className={`absolute top-0 left-0 right-0 h-0.5 rounded-t pointer-events-none ${isCurrentSegment ? 'bg-white/90' : 'bg-pink-300/90'}`} />
                                 )}
                                 {/* Clip number */}
                                 <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none text-white drop-shadow">
@@ -5885,46 +5900,76 @@ const exportVideo = async () => {
                     const anchorLeft = active ? ((anchor.start - loupeWindow.start) / loupeWindow.duration) * 100 : 0;
                     const anchorWidth = active ? ((anchor.end - anchor.start) / loupeWindow.duration) * 100 : 0;
                     const clampedLeft = active ? Math.max(0, Math.min(95, anchorLeft)) : 0;
-                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorWidth)) : 0;
-                    // Thumbnail: left handle = near start, right handle = near end
-                    const thumbLeft = loupeDragThumb?.side === 'start' ? `${clampedLeft}%` : `${clampedLeft + clampedWidth}%`;
+	                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorWidth)) : 0;
+	                    // Thumbnail: left handle = near start, right handle = near end
+	                    const thumbLeft = loupeDragThumb?.side === 'start' ? `${clampedLeft}%` : `${clampedLeft + clampedWidth}%`;
+	                    const clipIndex = active ? anchors.findIndex(a => a.id === anchor.id) : -1;
+	                    const latestVisibleFrame = active ? Math.max(anchor.start, anchor.end - FRAME_STEP) : 0;
+	                    const focusTime = active
+	                      ? Math.max(anchor.start, Math.min(selectedClipFocusTime ?? anchor.start, latestVisibleFrame))
+	                      : null;
+	                    const focusLeft = active ? Math.max(0, Math.min(100, ((focusTime - loupeWindow.start) / loupeWindow.duration) * 100)) : 0;
+	                    const focusHandle = active && Math.abs(focusTime - anchor.end) < Math.abs(focusTime - anchor.start) ? 'end' : 'start';
+	                    const focusHandleLabel = focusHandle === 'end' ? 'End' : 'Start';
+	                    const focusHandleClass = focusHandle === 'end' ? 'text-red-300 border-red-400/40 bg-red-500/10' : 'text-green-300 border-green-400/40 bg-green-500/10';
+	                    const setFocusToHandle = (handle) => {
+	                      if (!active) return;
+	                      const time = handle === 'end' ? latestVisibleFrame : anchor.start;
+	                      setPreviewHandle(handle);
+	                      setSelectedClipFocusTime(time);
+	                      if (cardVideoRef.current) cardVideoRef.current.currentTime = time;
+	                    };
 
-                    return (
-                      <div className="mt-1 flex gap-1.5" style={{ height: '100px' }}>
+	                    return (
+	                      <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-950/30 p-2 sm:p-3">
+	                        <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+	                          <div>
+	                            <div className="text-sm font-bold text-white">Precision Trimmer</div>
+	                            <div className="text-xs text-slate-400">
+	                              {active ? `Clip ${clipIndex + 1} of ${anchors.length} • ${formatTime(anchor.end - anchor.start)}` : 'Select a clip'}
+	                            </div>
+	                          </div>
+	                          {active && (
+	                            <div className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${focusHandleClass}`}>
+	                              {focusHandleLabel} frame {formatTime(focusTime)}
+	                            </div>
+	                          )}
+	                        </div>
 
-                        {/* LEFT: Video preview card — always 144px */}
-                        <div
-                          className="flex-shrink-0 rounded-lg overflow-hidden border transition-colors"
-                          style={{
-                            width: '144px',
-                            background: 'rgba(8, 12, 28, 0.97)',
-                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
-                          }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          {active ? (
-                            <>
-                              {/* Video with play/pause */}
-                              <div className="relative" style={{ height: '56px' }}>
-                                <video
-                                  ref={cardVideoRef}
-                                  src={videoUrl}
+	                        <div className="flex flex-col gap-2 lg:flex-row">
+
+	                        {/* LEFT: Active clip preview and frame controls */}
+	                        <div
+	                          className="w-full flex-shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-64"
+	                          style={{
+	                            background: 'rgba(8, 12, 28, 0.97)',
+	                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
+	                          }}
+	                          onMouseDown={(e) => e.stopPropagation()}
+	                        >
+	                          {active ? (
+	                            <div className="p-2">
+	                              {/* Video with play/pause */}
+	                              <div className="relative aspect-video overflow-hidden rounded-md bg-black">
+	                                <video
+	                                  ref={cardVideoRef}
+	                                  src={videoUrl}
                                   muted
                                   playsInline
                                   onPlay={() => setCardVideoPlaying(true)}
                                   onPause={() => setCardVideoPlaying(false)}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                  onTimeUpdate={() => {
-                                    const vid = cardVideoRef.current;
-                                    if (!vid || !anchor) return;
+	                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+	                                  onTimeUpdate={() => {
+	                                    const vid = cardVideoRef.current;
+	                                    if (!vid || !anchor) return;
                                     if (previewCardLooping && vid.currentTime >= anchor.end) vid.currentTime = anchor.start;
                                     else if (!previewCardLooping && vid.currentTime >= anchor.end) vid.pause();
                                   }}
                                 />
-                                <button
-                                  className="absolute inset-0 flex items-center justify-center hover:bg-black/20 transition-colors"
-                                  style={{ background: 'transparent' }}
-                                  onMouseDown={(e) => e.stopPropagation()}
+	                                <button
+	                                  className="absolute inset-0 flex items-center justify-center transition-colors hover:bg-black/20"
+	                                  style={{ background: 'transparent' }}
+	                                  onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const vid = cardVideoRef.current;
@@ -5933,78 +5978,106 @@ const exportVideo = async () => {
                                     else vid.pause();
                                   }}
                                 >
-                                  <div className="w-6 h-6 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20 opacity-60 hover:opacity-100" style={{ background: 'rgba(0,0,0,0.55)' }}>
-                                    <span className="text-white text-[10px] select-none">{cardVideoPlaying ? '⏸' : '▶'}</span>
-                                  </div>
-                                </button>
-                              </div>
-                              {/* Timestamps + loop */}
-                              <div className="flex items-center justify-between px-1.5" style={{ height: '20px' }}>
-                                <span className="text-[9px] font-mono text-cyan-400 tabular-nums">{formatTime(anchor.start)}</span>
-                                <button
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide transition-all"
-                                  aria-pressed={previewCardLooping}
-                                  title={previewCardLooping ? 'Loop is ON — click to disable' : 'Loop is OFF — click to enable'}
-                                  onMouseDown={(e) => e.stopPropagation()}
+	                                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 opacity-70 backdrop-blur-sm hover:opacity-100">
+	                                    {cardVideoPlaying ? <Pause size={16} /> : <Play size={16} />}
+	                                  </div>
+	                                </button>
+	                                <div className="absolute bottom-1 left-1 rounded bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
+	                                  {formatTime(focusTime)}
+	                                </div>
+	                              </div>
+
+	                              <div className="mt-2 grid grid-cols-2 gap-2">
+	                                <button
+	                                  type="button"
+	                                  onMouseDown={(e) => e.stopPropagation()}
+	                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('start'); }}
+	                                  aria-pressed={focusHandle === 'start'}
+	                                  className={`min-h-11 rounded-md border px-2 py-1.5 text-left transition ${focusHandle === 'start' ? 'border-green-400/60 bg-green-500/15 text-green-200' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-green-400/40'}`}
+	                                >
+	                                  <div className="text-[10px] font-bold uppercase tracking-wide">Start</div>
+	                                  <div className="font-mono text-xs tabular-nums">{formatTime(anchor.start)}</div>
+	                                </button>
+	                                <button
+	                                  type="button"
+	                                  onMouseDown={(e) => e.stopPropagation()}
+	                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('end'); }}
+	                                  aria-pressed={focusHandle === 'end'}
+	                                  className={`min-h-11 rounded-md border px-2 py-1.5 text-left transition ${focusHandle === 'end' ? 'border-red-400/60 bg-red-500/15 text-red-200' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-red-400/40'}`}
+	                                >
+	                                  <div className="text-[10px] font-bold uppercase tracking-wide">End</div>
+	                                  <div className="font-mono text-xs tabular-nums">{formatTime(anchor.end)}</div>
+	                                </button>
+	                              </div>
+
+	                              {/* Frame nudge buttons */}
+	                              <div className="mt-2 grid grid-cols-2 gap-2">
+	                                <div className="rounded-md border border-green-400/20 bg-green-500/5 p-1.5">
+	                                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-green-300">Start frame</div>
+	                                  <div className="grid grid-cols-2 gap-1">
+	                                    <button
+	                                      onMouseDown={(e) => e.stopPropagation()}
+	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', -1); }}
+	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-green-200 transition hover:bg-green-500/15"
+	                                      title="Start: back 1 frame"
+	                                    >-1f</button>
+	                                    <button
+	                                      onMouseDown={(e) => e.stopPropagation()}
+	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', 1); }}
+	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-green-200 transition hover:bg-green-500/15"
+	                                      title="Start: forward 1 frame"
+	                                    >+1f</button>
+	                                  </div>
+	                                </div>
+	                                <div className="rounded-md border border-red-400/20 bg-red-500/5 p-1.5">
+	                                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-300">End frame</div>
+	                                  <div className="grid grid-cols-2 gap-1">
+	                                    <button
+	                                      onMouseDown={(e) => e.stopPropagation()}
+	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', -1); }}
+	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/15"
+	                                      title="End: back 1 frame"
+	                                    >-1f</button>
+	                                    <button
+	                                      onMouseDown={(e) => e.stopPropagation()}
+	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', 1); }}
+	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/15"
+	                                      title="End: forward 1 frame"
+	                                    >+1f</button>
+	                                  </div>
+	                                </div>
+	                              </div>
+
+	                              <div className="mt-2 flex items-center justify-between">
+	                                <span className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(anchor.start)} - {formatTime(anchor.end)}</span>
+	                                <button
+	                                  className="inline-flex min-h-9 items-center gap-1 rounded-full border px-3 text-[10px] font-bold uppercase tracking-wide transition-all"
+	                                  aria-pressed={previewCardLooping}
+	                                  title={previewCardLooping ? 'Loop is ON — click to disable' : 'Loop is OFF — click to enable'}
+	                                  onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setPreviewCardLooping(l => !l); }}
                                   style={{
                                     background: previewCardLooping ? 'rgba(0, 212, 255, 0.2)' : 'rgba(100, 116, 139, 0.2)',
                                     color: previewCardLooping ? 'var(--accent-cyan)' : 'var(--text-tertiary)',
                                     boxShadow: previewCardLooping ? '0 0 8px rgba(0, 212, 255, 0.4)' : 'none',
-                                    border: previewCardLooping ? '1px solid rgba(0, 212, 255, 0.5)' : '1px solid rgba(100, 116, 139, 0.3)'
-                                  }}
-                                >
-                                  <span>🔁</span>
-                                  <span>{previewCardLooping ? 'ON' : 'OFF'}</span>
-                                </button>
-                                <span className="text-[9px] font-mono text-red-400 tabular-nums">{formatTime(anchor.end)}</span>
-                              </div>
-                              {/* Frame nudge buttons */}
-                              <div className="flex items-center justify-between px-1 gap-1" style={{ height: '22px' }}>
-                                {/* Start nudge */}
-                                <div className="flex items-center gap-0.5">
-                                  <button
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', -1); }}
-                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
-                                    title="Start: back 1 frame"
-                                  >◄1f</button>
-                                  <button
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', 1); }}
-                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-cyan-900/50 hover:bg-cyan-700/60 text-cyan-300 transition-colors font-mono leading-none"
-                                    title="Start: forward 1 frame"
-                                  >1f►</button>
-                                </div>
-                                <span className="text-[8px] text-slate-600 select-none">S·E</span>
-                                {/* End nudge */}
-                                <div className="flex items-center gap-0.5">
-                                  <button
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', -1); }}
-                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
-                                    title="End: back 1 frame"
-                                  >◄1f</button>
-                                  <button
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', 1); }}
-                                    className="touch-target-min text-[9px] px-1 py-0.5 rounded bg-red-900/50 hover:bg-red-700/60 text-red-300 transition-colors font-mono leading-none"
-                                    title="End: forward 1 frame"
-                                  >1f►</button>
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex h-full items-center justify-center">
-                              <span className="text-slate-700 text-[9px] uppercase tracking-widest select-none">▶ preview</span>
-                            </div>
-                          )}
-                        </div>
+	                                    border: previewCardLooping ? '1px solid rgba(0, 212, 255, 0.5)' : '1px solid rgba(100, 116, 139, 0.3)'
+	                                  }}
+	                                >
+	                                  {previewCardLooping ? 'Loop on' : 'Loop off'}
+	                                </button>
+	                              </div>
+	                            </div>
+	                          ) : (
+	                            <div className="flex min-h-36 items-center justify-center">
+	                              <span className="text-slate-700 text-[10px] uppercase tracking-widest select-none">Preview</span>
+	                            </div>
+	                          )}
+	                        </div>
 
                         {/* RIGHT: Zoom Loupe — flex-1 */}
-                        <div
-                          ref={loupeRef}
-                          className="flex-1 relative rounded-lg border overflow-hidden transition-colors"
+	                        <div
+	                          ref={loupeRef}
+	                          className="relative min-h-32 flex-1 overflow-hidden rounded-lg border transition-colors"
                           style={{
                             background: 'rgba(8, 12, 28, 0.95)',
                             borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
@@ -6029,8 +6102,13 @@ const exportVideo = async () => {
                                 className="absolute top-0 bottom-0 bg-black/40 pointer-events-none"
                                 style={{ left: `${clampedLeft + clampedWidth}%`, right: 0 }}
                               />
-                              {/* Center tick */}
-                              <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
+	                              {/* Center tick */}
+	                              <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
+	                              {/* Focus frame tick */}
+	                              <div
+	                                className="absolute top-2 bottom-2 z-20 w-0.5 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.7)] pointer-events-none"
+	                                style={{ left: `${focusLeft}%` }}
+	                              />
                               {/* Anchor body */}
                               <div
                                 className={`absolute top-4 bottom-4 ${colors.bg} ${colors.border} border-2 ${colors.glow} rounded cursor-move`}
@@ -6119,8 +6197,9 @@ const exportVideo = async () => {
                           )}
                         </div>
 
-                      </div>
-                    );
+	                      </div>
+	                    </div>
+	                    );
                   })()}
                   {/* ═══ End Loupe Strip ═══ */}
 

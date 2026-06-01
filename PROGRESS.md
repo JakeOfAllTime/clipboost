@@ -21,14 +21,23 @@
 - Synced the Pro tools loupe/side preview with clips-bar selection and scrubbing, not only lower timeline anchor selection.
 - Added a shared focused-frame state so frame nudges and clips-bar seeks update the mini preview target.
 - Verified `npm run build` succeeds after the loupe/selection sync change.
+- Saved separate backups of the current refactor state before the next UI pass.
+  - Folder backup: `/Users/littlemac/Desktop/clipboost-loupe-refactor-backup-20260601-093832`
+  - Git tag: `backup-before-precision-redesign-20260601`
+- Redesigned the inline Pro tools Precision Trimmer into a larger active-clip inspector with a bigger preview, start/end frame chips, mobile-sized frame step controls, loop toggle, and a focused-frame marker in the loupe.
+- Synced lower timeline anchor selection with the upper clips bar index so both timeline views represent the same active clip.
+- Updated clips-bar styling so the selected clip remains visibly highlighted even when playback is not in clips mode.
+- Verified `npm run build` succeeds after the Precision Trimmer redesign.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
 - Chrome visual verification covered the initial app shell, but not the post-upload Workspace switch because local file chooser automation was not available.
 - The loupe/selection sync change is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
+- The Precision Trimmer redesign is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
 
 ## Next Logical Step
 - Validate the post-upload Workspace switch and loupe preview sync manually or with a browser tool that supports file chooser automation.
+- Validate the redesigned Precision Trimmer on desktop and mobile with a real uploaded video.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions
