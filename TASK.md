@@ -26,4 +26,5 @@ in progress
 - Precision controls now support hold-to-nudge on the rail, drag-to-nudge on the Edge Map pills, and a large two-zone hold nudge pad.
 - The Edge Map is now a Boundary Map spanning the safe range between neighboring clips, with softer focus markers, separated overlapping handles, `1f`/`5f`/`10f` hold controls, and a draggable `S`/`E` pill in the preview-side rail.
 - The preview-side rail pill is now a spring nudge puck with gentle/strong pull speeds, the Boundary Map area has local `Prev clip` / `Next clip` navigation, and the Pro timeline has a magnifier toggle that zooms around the selected clip.
+- Boundary Map pills now free-drag the selected start/end boundary directly; frame nudging lives in the spring puck and nudge buttons.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

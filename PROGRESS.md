@@ -66,6 +66,8 @@
 - Added a Pro timeline magnifier toggle that zooms the anchor timeline around the selected clip and keeps seek, hover, double-click creation, playhead, and drag math aligned to the zoomed window.
 - Verified `npm run build` succeeds after the spring puck and timeline zoom changes.
 - Browser-tested with `jubjubthai trim.mp4`: generated starter clips, opened Pro tools, verified spring puck/clip arrows, toggled the timeline zoom, and saw no console errors.
+- Changed the Boundary Map pills from resistance-nudge controls into direct draggable boundaries; the map now handles coarse placement while the spring puck handles playful frame nudging.
+- Browser-tested free dragging the Boundary Map end pill with `jubjubthai trim.mp4`; the selected clip end updated from `2:09` to `8:43`, the preview/end controls stayed in sync, and no console errors appeared.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -75,7 +77,7 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
-- Have the user feel-test the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
+- Have the user feel-test direct Boundary Map dragging, the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

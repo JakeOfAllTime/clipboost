@@ -3814,7 +3814,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     document.addEventListener('pointercancel', finishNudgeHold, { once: true });
   }, [finishNudgeHold, nudgeAnchor]);
 
-  const startEdgeMapNudgeDrag = useCallback((event, handle) => {
+  const startBoundaryMapHandleDrag = useCallback((event, handle, edgeWindowStart, edgeWindowEnd) => {
     event.preventDefault();
     event.stopPropagation();
     const pointerId = event.pointerId;
@@ -3823,7 +3823,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       try { originTarget.setPointerCapture(pointerId); } catch (_) {}
     }
 
-    let originX = event.clientX || 0;
+    const mapEl = originTarget.closest('[data-boundary-map]');
+    if (!mapEl) return;
+    const rect = mapEl.getBoundingClientRect();
+    const rangeDuration = Math.max(FRAME_STEP, edgeWindowEnd - edgeWindowStart);
     let didMove = false;
     setPreviewHandle(handle);
     const selected = anchorsRef.current.find(a => a.id === selectedAnchorRef.current);
@@ -3833,17 +3836,47 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       if (cardVideoRef.current) cardVideoRef.current.currentTime = focusTime;
     }
 
-    const handleMove = (moveEvent) => {
-      const currentX = moveEvent.clientX || originX;
-      const deltaX = currentX - originX;
-      const frameDelta = Math.trunc(deltaX / 22);
-      if (frameDelta === 0) return;
+    const applyDrag = (clientX) => {
+      const activeAnchorId = selectedAnchorRef.current;
+      if (!activeAnchorId) return;
+
+      const percent = Math.max(0, Math.min(1, ((clientX || rect.left) - rect.left) / rect.width));
+      const rawTime = edgeWindowStart + (percent * rangeDuration);
+      const snappedTime = Math.round(rawTime / FRAME_STEP) * FRAME_STEP;
+      let focusedTime = null;
+      let changed = false;
+
+      const updated = anchorsRef.current.map(a => {
+        if (a.id !== activeAnchorId) return a;
+
+        if (handle === 'start') {
+          const newStart = Math.max(edgeWindowStart, Math.min(snappedTime, a.end - FRAME_STEP));
+          if (newStart === a.start) return a;
+          changed = true;
+          focusedTime = newStart;
+          return { ...a, start: newStart };
+        }
+
+        const newEnd = Math.max(a.start + FRAME_STEP, Math.min(snappedTime, edgeWindowEnd));
+        if (newEnd === a.end) return a;
+        changed = true;
+        focusedTime = Math.max(a.start, newEnd - FRAME_STEP);
+        return { ...a, end: newEnd };
+      });
+
+      if (!changed) return;
       didMove = true;
-      const direction = Math.sign(frameDelta);
-      const frames = Math.min(5, Math.abs(frameDelta));
-      nudgeAnchor(handle, direction, frames, { commit: false });
-      setNudgeActivity({ handle, direction, intensity: Math.min(3, frames) });
-      originX += frameDelta * 22;
+      anchorsRef.current = updated;
+      setAnchors(updated);
+      setSelectedClipFocusTime(focusedTime);
+      const updatedAnchor = updated.find(a => a.id === activeAnchorId);
+      if (updatedAnchor) {
+        setPreviewAnchor(updatedAnchor);
+        setPreviewHandle(handle);
+      }
+      if (cardVideoRef.current && focusedTime !== null) {
+        cardVideoRef.current.currentTime = focusedTime;
+      }
     };
 
     const cleanup = () => {
@@ -3853,13 +3886,14 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       if (didMove) {
         saveToHistory(anchorsRef.current);
       }
-      setNudgeActivity({ handle: null, direction: 0, intensity: 0 });
     };
+
+    const handleMove = (moveEvent) => applyDrag(moveEvent.clientX);
 
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', cleanup, { once: true });
     document.addEventListener('pointercancel', cleanup, { once: true });
-  }, [saveToHistory, nudgeAnchor]);
+  }, [saveToHistory]);
 
   const startRailPuckDrag = useCallback((event, handle) => {
     event.preventDefault();
@@ -6654,7 +6688,7 @@ const exportVideo = async () => {
                                 <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(edgeWindowStart)} - {formatTime(edgeWindowEnd)}</div>
                               </div>
 
-                              <div className="relative h-24 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-4">
+                              <div data-boundary-map="true" className="relative h-24 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-4">
                                 <div className="absolute inset-x-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slate-800" />
                                 <div
                                   className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-full ${colors.bg} ${colors.glow}`}
@@ -6664,8 +6698,8 @@ const exportVideo = async () => {
                                   type="button"
                                   className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
                                   style={{ left: `${startMarkerLeft}%`, top: startMarkerTop }}
-                                  aria-label={`Select start edge — ${formatTime(anchor.start)}`}
-                                  onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'start')}
+                                  aria-label={`Drag start boundary — ${formatTime(anchor.start)}`}
+                                  onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'start', edgeWindowStart, edgeWindowEnd)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
                                     else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
@@ -6677,8 +6711,8 @@ const exportVideo = async () => {
                                   type="button"
                                   className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
                                   style={{ left: `${endMarkerLeft}%`, top: endMarkerTop }}
-                                  aria-label={`Select end edge — ${formatTime(anchor.end)}`}
-                                  onPointerDown={(e) => startEdgeMapNudgeDrag(e, 'end')}
+                                  aria-label={`Drag end boundary — ${formatTime(anchor.end)}`}
+                                  onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'end', edgeWindowStart, edgeWindowEnd)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
                                     else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
