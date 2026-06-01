@@ -32,4 +32,6 @@ in progress
 - The Precision Trimmer now uses one consolidated editor card: preview and frame rail on top, compact Boundary Strip below, then local Prev/Loop/Next controls before the main Timeline.
 - Export defaults to `Fast Original`, with `Draft Vertical` and polished social render options labeled by speed/format tradeoff.
 - Latest touch-up pass removed the old Trim toolbar button, shortened the mobile timeline, made manual timeline clips default to 1s, added mobile double-tap delete for clips, lowered generated clip Length minimum to 5s, and reduced Play Clips fallback pausing on slower devices.
+- Cleanup refactor removed the old global Trim modal, the older standalone Precision modal, stale precision modal state/refs/audio mixer code, and obsolete precision-modal shortcut help.
+- Manual timeline clip creation now goes through one shared helper for desktop double-click and mobile double-tap, preserving 1s defaults and overlap prevention.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

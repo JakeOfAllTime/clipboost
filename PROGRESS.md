@@ -88,6 +88,12 @@
 - Smoothed Play Clips fallback behavior by keeping the active video rolling while the hidden standby video catches up instead of pausing on slower devices.
 - Verified `npm run build` succeeds after the mobile polish and Play Clips fallback changes.
 - Browser smoke-tested with `freecompress-videoplayback.mp4`: generated clips, opened Pro tools, confirmed the Trim button is gone from the toolbar, confirmed target Length minimum is 5, and started Play Clips without runtime failure.
+- Removed dead legacy Trim modal code and the older standalone Precision modal code now superseded by the inline Precision Trimmer.
+- Removed the unused standalone precision audio mixer and stale precision modal state/refs/keyboard paths.
+- Updated shortcut help copy to describe the current inline Precision Trimmer, Boundary Strip, and timeline magnifier instead of the removed modal.
+- Consolidated manual timeline clip creation into one shared helper, preserving the 1s default and overlap prevention for desktop double-click and mobile double-tap.
+- Verified a clean `npm run build` succeeds after removing `.next`.
+- Browser smoke-tested with `freecompress-videoplayback.mp4`: generated clips, opened Pro tools, confirmed the current Precision Trimmer/Boundary Strip/Timeline render, confirmed no old Trim/Apply Trim controls or modal overlays remain, and double-clicked the timeline lane to add one manual clip with no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -109,6 +115,7 @@
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 - User feel-test needed on phone for the consolidated Boundary Strip and export defaults after the next Vercel deployment.
 - User feel-test needed on phone for the shorter mobile timeline, double-tap delete, 1s manual clip creation, and smoother Play Clips fallback.
+- Next engineering pass should focus on Story vs Deep auto-generation behavior now that the UI cleanup/refactor surface is leaner.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?

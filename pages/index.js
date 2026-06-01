@@ -15,13 +15,6 @@ import Head from 'next/head';
  *                                           Smart/Quick/Pro Gen. Shown in tooltips.
  * @property {number}  [_importance]      - 0..1 score. Smart Gen = Claude's importance;
  *                                           Quick Gen = normalized motion score.
- * @property {number}  [_index]           - Cached position at the time of precision-mode
- *                                           selection. Goes stale on reorder/delete — prefer
- *                                           anchors.findIndex(a => a.id === anchor.id) at
- *                                           read time (see goToPreviousAnchor/goToNextAnchor).
- * @property {number}  [_timelineOffset]  - Cumulative duration of preceding anchors in the
- *                                           preview timeline; set when the precision modal opens
- *                                           and used to map precision-time → preview-time.
  * @property {string}  [_zone]            - 'opening' | 'early' | 'middle' | 'late' | 'finale'.
  *                                           Attached by resolveAndValidateClips during Smart Gen
  *                                           distribution rebalancing; not written to user anchors.
@@ -84,11 +77,6 @@ const ReelForge = () => {
   const [audioBalance, setAudioBalance] = useState(70);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
 
-  // Trim state
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
-  const [showTrimModal, setShowTrimModal] = useState(false);
-
   // Anchors state
   const [anchors, setAnchors] = useState([]);
   const [selectedAnchor, setSelectedAnchor] = useState(null);
@@ -100,13 +88,6 @@ const ReelForge = () => {
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // Precision modal state
-  const [showPrecisionModal, setShowPrecisionModal] = useState(false);
-  const [precisionAnchor, setPrecisionAnchor] = useState(null);
-  const [precisionTime, setPrecisionTime] = useState(0);
-  const [precisionPlaying, setPrecisionPlaying] = useState(false);
-  const [selectedHandle, setSelectedHandle] = useState('end'); // 'start' or 'end'
-
   // Music precision modal state
   const [selectedMusicHandle, setSelectedMusicHandle] = useState(null); // 'start' | 'end' | null
 
@@ -116,14 +97,6 @@ const ReelForge = () => {
     type: null,
     startX: 0,
     anchorSnapshot: null
-  });
-
-  // Separate precision drag state
-  const [precisionDragState, setPrecisionDragState] = useState({
-    active: false,
-    type: null,
-    startX: 0,
-    startAnchor: null
   });
 
   // Processing state
@@ -282,13 +255,11 @@ const ReelForge = () => {
   // Refs
   const videoRef = useRef(null);
   const previewVideoRef = useRef(null);
-  const precisionVideoRef = useRef(null);
   const musicRef = useRef(null);
   const timelineRef = useRef(null);
   const lastTapTimeRef = useRef(0);
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
   const lastAnchorTapRef = useRef({ id: null, time: 0, x: 0, y: 0 });
-  const precisionTimelineRef = useRef(null);
   const loadConfigInputRef = useRef(null);
 
   // Magnifier lens refs (Phase 5A) — updated via direct DOM mutation inside RAF, no setState
@@ -319,11 +290,6 @@ const ReelForge = () => {
   const musicSourceRef = useRef(null);
   const videoGainRef = useRef(null);
   const musicGainRef = useRef(null);
-  const precisionAudioContextRef = useRef(null);
-  const precisionVideoSourceRef = useRef(null);
-  const precisionMusicSourceRef = useRef(null);
-  const precisionVideoGainRef = useRef(null);
-  const precisionMusicGainRef = useRef(null);
 
   // Platform configurations
 const platforms = {
@@ -564,11 +530,6 @@ const dismissRestoreToast = () => {
       previewVideoRef.current.muted = mixMutesSource || previewMuted;
     }
 
-    if (precisionVideoRef.current) {
-      precisionVideoRef.current.volume = mixMutesSource ? 0 : 1;
-      precisionVideoRef.current.muted = mixMutesSource;
-    }
-
     if (musicRef.current) {
       musicRef.current.volume = musicVolume;
     }
@@ -626,59 +587,11 @@ const dismissRestoreToast = () => {
     applyElementAudioVolumes();
   }, [applyElementAudioVolumes, getMixVolumes]);
 
-  const setupPrecisionAudioMixer = useCallback((videoElement, musicElement) => {
-    if (!videoElement || !musicElement) return;
-
-    try {
-      // Only create new context if it doesn't exist
-      if (!precisionAudioContextRef.current) {
-        precisionAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      }
-
-      const ctx = precisionAudioContextRef.current;
-
-      // Only create sources if they don't exist
-      if (!precisionVideoSourceRef.current) {
-        precisionVideoSourceRef.current = ctx.createMediaElementSource(videoElement);
-        precisionVideoGainRef.current = ctx.createGain();
-        precisionVideoSourceRef.current.connect(precisionVideoGainRef.current);
-        precisionVideoGainRef.current.connect(ctx.destination);
-      }
-
-      if (!precisionMusicSourceRef.current && musicElement.src) {
-        precisionMusicSourceRef.current = ctx.createMediaElementSource(musicElement);
-        precisionMusicGainRef.current = ctx.createGain();
-        precisionMusicSourceRef.current.connect(precisionMusicGainRef.current);
-        precisionMusicGainRef.current.connect(ctx.destination);
-      }
-
-      // Set initial volumes based on audioBalance
-      updatePrecisionAudioMixerVolumes();
-      applyElementAudioVolumes();
-
-    } catch (error) {
-      console.error('Error setting up precision audio mixer:', error);
-    }
-  }, [applyElementAudioVolumes]);
-
-  const updatePrecisionAudioMixerVolumes = useCallback(() => {
-    const { videoVolume, musicVolume } = getMixVolumes();
-
-    if (precisionVideoGainRef.current) {
-      precisionVideoGainRef.current.gain.value = videoVolume;
-    }
-    if (precisionMusicGainRef.current) {
-      precisionMusicGainRef.current.gain.value = musicVolume;
-    }
-    applyElementAudioVolumes();
-  }, [applyElementAudioVolumes, getMixVolumes]);
-
   // Update volumes when audioBalance changes
   useEffect(() => {
     updateAudioMixerVolumes();
-    updatePrecisionAudioMixerVolumes();
     applyElementAudioVolumes();
-  }, [audioBalance, music, updateAudioMixerVolumes, updatePrecisionAudioMixerVolumes, applyElementAudioVolumes]);
+  }, [audioBalance, music, updateAudioMixerVolumes, applyElementAudioVolumes]);
 
   // Save/Load functions
   const saveConfiguration = () => {
@@ -686,8 +599,6 @@ const dismissRestoreToast = () => {
       anchors: anchors,
       musicStartTime: musicStartTime,
       audioBalance: audioBalance,
-      trimStart: trimStart,
-      trimEnd: trimEnd,
       duration: duration,
       version: '1.0',
       timestamp: new Date().toISOString()
@@ -718,8 +629,6 @@ const dismissRestoreToast = () => {
         }
         if (config.musicStartTime !== undefined) setMusicStartTime(config.musicStartTime);
         if (config.audioBalance !== undefined) setAudioBalance(config.audioBalance);
-        if (config.trimStart !== undefined) setTrimStart(config.trimStart);
-        if (config.trimEnd !== undefined) setTrimEnd(config.trimEnd);
       } catch (error) {
         showToast('Error loading configuration file', 'error');
       }
@@ -2736,8 +2645,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (videoRef.current) {
       const dur = videoRef.current.duration;
       setDuration(dur);
-      setTrimStart(0);
-      setTrimEnd(dur);
       // Paint the first frame so the player isn't black on upload
       videoRef.current.currentTime = 0.1;
     }
@@ -3669,48 +3576,23 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     seekToPosition(e);
   }, [seekToPosition]);
 
-  // Handle double-tap on timeline (mobile)
-  const handleTimelineDoubleTap = useCallback((e) => {
-    if (!timelineRef.current || !duration) return;
+  const createAnchorAtTime = useCallback((time, options = {}) => {
+    const {
+      durationSeconds = 1,
+      showOverlapToast = true,
+      haptic = false
+    } = options;
 
-    const rect = timelineRef.current.getBoundingClientRect();
-    const touch = e.changedTouches[0];
-    const time = getTimelineTimeFromClientX(touch.clientX, rect);
+    if (!duration || Number.isNaN(time)) return null;
 
-    const newAnchor = {
-      id: Date.now(),
-      start: time,
-      end: Math.min(time + 1, duration)
-    };
-
-    const hasOverlap = anchors.some(a =>
-      (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-      (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-      (newAnchor.start <= a.start && newAnchor.end >= a.end)
-    );
-
-    if (!hasOverlap) {
-      const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-      setAnchors(updated);
-      saveToHistory(updated);
-      setSelectedAnchor(newAnchor.id);
-      setSelectedClipFocusTime(newAnchor.start);
-
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(30);
-      }
-    }
-  }, [duration, anchors, saveToHistory, getTimelineTimeFromClientX]);
-
-  // Anchor management (memoized)
-  const addAnchor = useCallback(() => {
-    if (!duration) return;
+    const start = Math.max(0, Math.min(time, Math.max(0, duration - FRAME_STEP)));
+    const end = Math.min(start + durationSeconds, duration);
+    if (end <= start) return null;
 
     const newAnchor = {
       id: Date.now(),
-      start: currentTimeRef.current,
-      end: Math.min(currentTime + 1, duration)
+      start,
+      end
     };
 
     const hasOverlap = anchors.some(a =>
@@ -3720,8 +3602,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     );
 
     if (hasOverlap) {
-      showToast('Clip overlaps with an existing clip — try a different position', 'warning');
-      return;
+      if (showOverlapToast) {
+        showToast('Clip overlaps with an existing clip — try a different position', 'warning');
+      }
+      return null;
     }
 
     const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
@@ -3729,7 +3613,14 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
     setSelectedClipFocusTime(newAnchor.start);
-  }, [duration, currentTime, anchors, saveToHistory]);
+    setHasCreatedFirstClip(true);
+
+    if (haptic && navigator.vibrate) {
+      navigator.vibrate(30);
+    }
+
+    return newAnchor;
+  }, [duration, anchors, saveToHistory, showToast]);
 
   const deleteAnchor = useCallback((anchorId) => {
     const updated = anchors.filter(a => a.id !== anchorId);
@@ -3742,15 +3633,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (previewAnchor?.id === anchorId) {
       setPreviewAnchor(null);
     }
-    // AUDIT P0 #3: without this, the precision modal would keep rendering with
-    // a stale reference after the underlying anchor was deleted.
-    if (precisionAnchor?.id === anchorId) {
-      setPrecisionAnchor(null);
-      setShowPrecisionModal(false);
-    }
     // Mark delete hint as seen
     setHasSeenDeleteHint(true);
-  }, [anchors, saveToHistory, selectedAnchor, previewAnchor, precisionAnchor]);
+  }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const nudgeAnchor = useCallback((handle, direction, frames = 1, options = {}) => {
@@ -4489,26 +4374,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   }, [dragState.active]);
 
-  // Lock body scroll when precision modal is open (mobile fix)
-  useEffect(() => {
-    if (showPrecisionModal) {
-      // Prevent mobile scroll/zoom when modal is open
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    }
-
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    };
-  }, [showPrecisionModal]);
-
   // Update preview anchor when anchors change
   useEffect(() => {
     if (previewAnchor && selectedAnchor) {
@@ -4569,439 +4434,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
           musicRef.current.currentTime = musicTime;
         }
       }
-    }
-  };
-
-  // Precision modal handlers
-  const openPrecisionModal = (anchor) => {
-  const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
-
-  // Stop any playing music
-  if (musicRef.current) {
-    musicRef.current.pause();
-  }
-  setIsMusicPlaying(false);
-
-  // Calculate this anchor's position in the FINAL TIMELINE
-  const timelineOffset = anchors
-    .slice(0, anchorIndex)
-    .reduce((sum, a) => sum + (a.end - a.start), 0);
-
-  setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
-  setPrecisionTime(anchor.end);
-  setSelectedHandle('end');
-  setShowPrecisionModal(true);
-  if (precisionVideoRef.current) {
-    precisionVideoRef.current.currentTime = anchor.end;
-  }
-};
-
-  // Mobile-specific precision modal handler to prevent freeze
-  const openPrecisionModalMobile = (anchor) => {
-    // Prevent scroll/interaction during transition
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${window.scrollY}px`;
-    document.body.style.width = '100%';
-
-    // Stop any playing music
-    if (musicRef.current) {
-      musicRef.current.pause();
-    }
-    setIsMusicPlaying(false);
-
-    const anchorIndex = anchors.findIndex(a => a.id === anchor.id);
-
-    // Calculate this anchor's position in the FINAL TIMELINE
-    const timelineOffset = anchors
-      .slice(0, anchorIndex)
-      .reduce((sum, a) => sum + (a.end - a.start), 0);
-
-    setPrecisionAnchor({ ...anchor, _index: anchorIndex, _timelineOffset: timelineOffset });
-    setPrecisionTime(anchor.end);
-    setSelectedHandle('end');
-
-    // Use requestAnimationFrame to ensure DOM is ready
-    requestAnimationFrame(() => {
-      setShowPrecisionModal(true);
-      if (precisionVideoRef.current) {
-        precisionVideoRef.current.currentTime = anchor.end;
-      }
-    });
-  };
-
-  // Seek the precision video AFTER the modal has mounted.
-  // The calls inside openPrecisionModal/openPrecisionModalMobile fire synchronously
-  // right after setShowPrecisionModal(true), before React commits the <video> element,
-  // so precisionVideoRef.current is still null — resulting in a black screen.
-  // This effect runs after the DOM commit and reliably seeks to the right frame.
-  useEffect(() => {
-    if (!showPrecisionModal || !precisionAnchor) return;
-
-    const seekPrecisionVideo = () => {
-      if (precisionVideoRef.current) {
-        const targetTime = selectedHandle === 'start' ? precisionAnchor.start : precisionAnchor.end;
-        precisionVideoRef.current.currentTime = targetTime;
-      }
-    };
-
-    // Try immediately (video may already be loaded if it was open before)
-    seekPrecisionVideo();
-
-    // Also seek on loadedmetadata in case the video element just mounted
-    const vid = precisionVideoRef.current;
-    if (vid) {
-      vid.addEventListener('loadedmetadata', seekPrecisionVideo, { once: true });
-      return () => vid.removeEventListener('loadedmetadata', seekPrecisionVideo);
-    }
-  }, [showPrecisionModal, precisionAnchor, selectedHandle]);
-
-// AUDIT P3 #17: mutating `_index` onto the anchor object went stale on
-// reorder/delete. Always derive the current index from the live `anchors` array.
-const goToPreviousAnchor = () => {
-  if (!precisionAnchor) return;
-  const currentIdx = anchors.findIndex(a => a.id === precisionAnchor.id);
-  if (currentIdx <= 0) return;
-  const prevIndex = currentIdx - 1;
-  const prevAnchor = anchors[prevIndex];
-
-  const timelineOffset = anchors
-    .slice(0, prevIndex)
-    .reduce((sum, a) => sum + (a.end - a.start), 0);
-
-  setPrecisionAnchor({ ...prevAnchor, _index: prevIndex, _timelineOffset: timelineOffset });
-  setPrecisionTime(prevAnchor.end);
-  setSelectedHandle('end');
-  if (precisionVideoRef.current) {
-    precisionVideoRef.current.currentTime = prevAnchor.end;
-  }
-};
-
-const goToNextAnchor = () => {
-  if (!precisionAnchor) return;
-  const currentIdx = anchors.findIndex(a => a.id === precisionAnchor.id);
-  if (currentIdx < 0 || currentIdx >= anchors.length - 1) return;
-  const nextIndex = currentIdx + 1;
-  const nextAnchor = anchors[nextIndex];
-
-  const timelineOffset = anchors
-    .slice(0, nextIndex)
-    .reduce((sum, a) => sum + (a.end - a.start), 0);
-
-  setPrecisionAnchor({ ...nextAnchor, _index: nextIndex, _timelineOffset: timelineOffset });
-  setPrecisionTime(nextAnchor.end);
-  setSelectedHandle('end');
-  if (precisionVideoRef.current) {
-    precisionVideoRef.current.currentTime = nextAnchor.end;
-  }
-};
-  const getPrecisionRange = (anchor) => {
-    const anchorDuration = anchor.end - anchor.start;
-    const viewportDuration = Math.max(60, anchorDuration + 20);
-    const anchorCenter = (anchor.start + anchor.end) / 2;
-    const viewStart = Math.max(0, anchorCenter - viewportDuration / 2);
-    const viewEnd = Math.min(duration, viewStart + viewportDuration);
-
-    return {
-      start: viewStart,
-      end: viewEnd
-    };
-  };
-
-  const seekToPrecisionPosition = (e) => {
-    if (!precisionTimelineRef.current || !precisionAnchor) return;
-    const rect = precisionTimelineRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const range = getPrecisionRange(precisionAnchor);
-    const time = range.start + (percent * (range.end - range.start));
-    setPrecisionTime(time);
-    if (precisionVideoRef.current) {
-      precisionVideoRef.current.currentTime = time;
-    }
-  };
-
-  const handlePrecisionTimelineMouseDown = (e) => {
-    if (!precisionTimelineRef.current) return;
-    setDragState({
-      active: true,
-      type: 'precision-timeline',
-      startX: e.clientX,
-      anchorSnapshot: null
-    });
-    seekToPrecisionPosition(e);
-  };
-
-  const handlePrecisionHandleMouseDown = (e, handleType) => {
-    e.stopPropagation();
-    const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
-    setPrecisionDragState({
-      active: true,
-      type: handleType,
-      startX: clientX,
-      startAnchor: { ...precisionAnchor }
-    });
-  };
-
-  const handlePrecisionHandleTouchStart = (e, handleType) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setPrecisionDragState({
-      active: true,
-      type: handleType,
-      startX: e.touches?.[0]?.clientX || 0,
-      startAnchor: { ...precisionAnchor }
-    });
-  };
-
-  // Isolated precision drag effect
-  useEffect(() => {
-    if (!precisionDragState.active || !precisionDragState.startAnchor) return;
-
-    let rafId = null;
-    let lastClientX = precisionDragState.startX;
-
-    const handleMouseMove = (e) => {
-      const clientX = e.clientX || e.touches?.[0]?.clientX;
-      if (!clientX) return;
-      lastClientX = clientX;
-
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!precisionTimelineRef.current) return;
-
-        const rect = precisionTimelineRef.current.getBoundingClientRect();
-        const deltaX = lastClientX - precisionDragState.startX;
-        const range = getPrecisionRange(precisionDragState.startAnchor);
-        const deltaTime = (deltaX / rect.width) * (range.end - range.start);
-
-        const snapshot = precisionDragState.startAnchor;
-
-        if (precisionDragState.type === 'start') {
-          let newStart = Math.max(
-            range.start,
-            Math.min(snapshot.end - 1, snapshot.start + deltaTime)
-          );
-
-          // Check for overlaps with other anchors
-          const otherAnchors = anchors.filter(a => a.id !== snapshot.id);
-          for (const other of otherAnchors) {
-            // If new start would overlap with another anchor, constrain it
-            if (newStart < other.end && snapshot.end > other.start) {
-              newStart = Math.max(newStart, other.end);
-            }
-          }
-
-          setPrecisionAnchor(prev => ({ ...snapshot, start: newStart }));
-          // Update precisionTime and video to show the start frame being dragged
-          setPrecisionTime(newStart);
-          if (precisionVideoRef.current) {
-            precisionVideoRef.current.currentTime = newStart;
-          }
-        } else if (precisionDragState.type === 'end') {
-          let newEnd = Math.max(
-            snapshot.start + 1,
-            Math.min(range.end, snapshot.end + deltaTime)
-          );
-
-          // Check for overlaps with other anchors
-          const otherAnchors = anchors.filter(a => a.id !== snapshot.id);
-          for (const other of otherAnchors) {
-            // If new end would overlap with another anchor, constrain it
-            if (snapshot.start < other.end && newEnd > other.start) {
-              newEnd = Math.min(newEnd, other.start);
-            }
-          }
-
-          setPrecisionAnchor(prev => ({ ...snapshot, end: newEnd }));
-          // Update precisionTime and video to show the end frame being dragged
-          setPrecisionTime(newEnd);
-          if (precisionVideoRef.current) {
-            precisionVideoRef.current.currentTime = newEnd;
-          }
-        }
-      });
-    };
-
-    const handleTouchMove = (e) => {
-      e.preventDefault();
-      handleMouseMove(e);
-    };
-
-    const handleMouseUp = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      setPrecisionDragState({ active: false, type: null, startX: 0, startAnchor: null });
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleMouseUp);
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleMouseUp);
-    };
-  }, [precisionDragState, duration]);
-
-  useEffect(() => {
-    if (!dragState.active || !dragState.type.startsWith('precision')) return;
-
-    const handleMouseMove = (e) => {
-      if (dragState.type === 'precision-timeline') {
-        seekToPrecisionPosition(e);
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      e.preventDefault();
-      const touch = e.touches?.[0];
-      if (touch && dragState.type === 'precision-timeline') {
-        seekToPrecisionPosition({ ...e, clientX: touch.clientX, clientY: touch.clientY });
-      }
-    };
-
-    const handleMouseUp = () => {
-      setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleMouseUp);
-    };
-  }, [dragState, precisionAnchor, duration]);
-
-  const togglePrecisionPlay = () => {
-    if (precisionVideoRef.current && precisionAnchor) {
-      if (precisionPlaying) {
-        precisionVideoRef.current.pause();
-        if (musicRef.current && music) {
-          musicRef.current.pause();
-        }
-      } else {
-        // Set up Web Audio API mixer for precision modal
-        if (precisionVideoRef.current && musicRef.current && music) {
-          setupPrecisionAudioMixer(precisionVideoRef.current, musicRef.current);
-
-          // Resume audio context if suspended
-          if (precisionAudioContextRef.current?.state === 'suspended') {
-            precisionAudioContextRef.current.resume();
-          }
-
-          // Sync music time with FINAL TIMELINE position
-          // Calculate how far into the anchor we are
-          const anchorRelativeTime = precisionTime - precisionAnchor.start;
-          // Add the anchor's timeline offset to get position in final edit
-          const timelineOffset = precisionAnchor._timelineOffset || 0;
-          const finalTimelinePosition = timelineOffset + anchorRelativeTime;
-          // Apply music start offset
-          const musicTime = musicStartTime + finalTimelinePosition;
-
-          musicRef.current.currentTime = musicTime;
-          musicRef.current.play().catch(e => console.log('Music play failed:', e));
-        }
-
-        precisionVideoRef.current.currentTime = precisionTime;
-        precisionVideoRef.current.play().catch(e => console.log('Video play failed:', e));
-      }
-      setPrecisionPlaying(!precisionPlaying);
-    }
-  };
-
-  const handlePrecisionVideoTimeUpdate = () => {
-    if (precisionVideoRef.current && precisionAnchor) {
-      const currentTime = precisionVideoRef.current.currentTime;
-      // Only loop when playing, not when manually seeking
-      if (currentTime >= precisionAnchor.end && precisionPlaying) {
-        precisionVideoRef.current.currentTime = precisionAnchor.start;
-        setPrecisionTime(precisionAnchor.start);
-
-        // Loop music as well
-        if (musicRef.current && music) {
-          const timelineOffset = precisionAnchor._timelineOffset || 0;
-          const musicTime = musicStartTime + timelineOffset;
-          musicRef.current.currentTime = musicTime;
-        }
-
-        precisionVideoRef.current.play();
-      } else {
-        setPrecisionTime(currentTime);
-
-        // Keep music in sync during playback
-        if (musicRef.current && music && precisionPlaying) {
-          const anchorRelativeTime = currentTime - precisionAnchor.start;
-          const timelineOffset = precisionAnchor._timelineOffset || 0;
-          const finalTimelinePosition = timelineOffset + anchorRelativeTime;
-          const musicTime = musicStartTime + finalTimelinePosition;
-
-          // Only update if music has drifted more than 0.1s (avoid constant seeking)
-          if (Math.abs(musicRef.current.currentTime - musicTime) > 0.1) {
-            musicRef.current.currentTime = musicTime;
-          }
-        }
-      }
-    }
-  };
-
-  const applyPrecisionChanges = () => {
-    const updated = anchors.map(a =>
-      a.id === precisionAnchor.id
-        ? { ...a, start: precisionAnchor.start, end: precisionAnchor.end }
-        : a
-    ).sort((a, b) => a.start - b.start);
-    setAnchors(updated);
-    saveToHistory(updated);
-    setShowPrecisionModal(false);
-    setPrecisionAnchor(null);
-  };
-
-  // Trim handlers
-  const applyTrim = async () => {
-    if (!ffmpegLoaded || !video) return;
-
-    setIsProcessing(true);
-    setProgress(0);
-
-    try {
-      await ffmpeg.writeFile('input.mp4', await fetchFile(video));
-
-      await ffmpeg.exec([
-        '-i', 'input.mp4',
-        '-ss', trimStart.toFixed(3),
-        '-to', trimEnd.toFixed(3),
-        '-c', 'copy',
-        'trimmed.mp4'
-      ]);
-
-      const data = await ffmpeg.readFile('trimmed.mp4');
-      const blob = new Blob([data.buffer], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-      setVideo(blob);
-      setVideoUrl(url);
-      setShowTrimModal(false);
-      setCurrentTime(0);
-      setAnchors([]);
-      setHistory([]);
-      setHistoryIndex(-1);
-
-    } catch (error) {
-      console.error('Trim error:', error);
-      showToast('Error trimming video — please try again', 'error');
-    } finally {
-      setIsProcessing(false);
-      setProgress(0);
     }
   };
 
@@ -5245,71 +4677,6 @@ const exportVideo = async () => {
       if (!video) return;
       if (e.target.tagName === 'INPUT') return;
 
-      // Check if precision modal is open
-      if (showPrecisionModal) {
-        if (e.code === 'Space') {
-          e.preventDefault();
-          togglePrecisionPlay();
-        } else if (e.code === 'ArrowLeft' && precisionVideoRef.current && precisionAnchor) {
-          e.preventDefault();
-          const newTime = precisionAnchor[selectedHandle] - 1/30;
-          const range = getPrecisionRange(precisionAnchor);
-
-          if (selectedHandle === 'start') {
-            const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-            setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-            setPrecisionTime(constrainedTime);
-            precisionVideoRef.current.currentTime = constrainedTime;
-          } else {
-            const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-            setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-            setPrecisionTime(constrainedTime);
-            precisionVideoRef.current.currentTime = constrainedTime;
-          }
-        } else if (e.code === 'ArrowRight' && precisionVideoRef.current && precisionAnchor) {
-          e.preventDefault();
-          const newTime = precisionAnchor[selectedHandle] + 1/30;
-          const range = getPrecisionRange(precisionAnchor);
-
-          if (selectedHandle === 'start') {
-            const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-            setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-            setPrecisionTime(constrainedTime);
-            precisionVideoRef.current.currentTime = constrainedTime;
-          } else {
-            const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-            setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-            setPrecisionTime(constrainedTime);
-            precisionVideoRef.current.currentTime = constrainedTime;
-          }
-        } else if (e.code === 'Comma') {
-          // AUDIT P2 #12: "," jumps to previous anchor without leaving precision mode
-          e.preventDefault();
-          goToPreviousAnchor();
-        } else if (e.code === 'Period') {
-          // AUDIT P2 #12: "." jumps to next anchor without leaving precision mode
-          e.preventDefault();
-          goToNextAnchor();
-        } else if (e.code === 'KeyS' && precisionAnchor && precisionVideoRef.current) {
-          // AUDIT P2 #12: "S" snaps the start handle to the beginning of the precision range
-          e.preventDefault();
-          const range = getPrecisionRange(precisionAnchor);
-          const newStart = Math.max(range.start, Math.min(precisionAnchor.end - 1, range.start));
-          setPrecisionAnchor(prev => ({ ...prev, start: newStart }));
-          setPrecisionTime(newStart);
-          precisionVideoRef.current.currentTime = newStart;
-        } else if (e.code === 'KeyE' && precisionAnchor && precisionVideoRef.current) {
-          // AUDIT P2 #12: "E" snaps the end handle to the end of the precision range
-          e.preventDefault();
-          const range = getPrecisionRange(precisionAnchor);
-          const newEnd = Math.max(precisionAnchor.start + 1, Math.min(range.end, range.end));
-          setPrecisionAnchor(prev => ({ ...prev, end: newEnd }));
-          setPrecisionTime(newEnd);
-          precisionVideoRef.current.currentTime = newEnd;
-        }
-        return;
-      }
-
       // AUDIT P2 #12: "?" toggles the keyboard-shortcut overlay anywhere in the app.
       if (e.key === '?' || (e.shiftKey && e.code === 'Slash')) {
         e.preventDefault();
@@ -5349,7 +4716,7 @@ const exportVideo = async () => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [video, selectedAnchor, currentTime, duration, isPlaying, showPrecisionModal, precisionPlaying, historyIndex, selectedHandle, precisionAnchor]);
+  }, [video, selectedAnchor, currentTime, duration, isPlaying, historyIndex, showKeyboardHelp, deleteAnchor, undo, redo, togglePlay]);
 
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
   const workflowSteps = [
@@ -5461,7 +4828,7 @@ const exportVideo = async () => {
   </div>
 
   {/* Mobile Bottom Navigation */}
-  <div className={`sm:hidden fixed bottom-0 left-0 right-0 panel border-t z-50 ${showPrecisionModal ? 'hidden' : ''}`} style={{ borderRadius: 0 }}>
+  <div className="sm:hidden fixed bottom-0 left-0 right-0 panel border-t z-50" style={{ borderRadius: 0 }}>
     <div className="flex">
       <button
         onClick={() => setCurrentSection('edit')}
@@ -6904,30 +6271,7 @@ const exportVideo = async () => {
                             if (!duration) return;
                             const rect = e.currentTarget.getBoundingClientRect();
                             const time = getTimelineTimeFromClientX(e.clientX, rect);
-
-                            const newAnchor = {
-                              id: Date.now(),
-                              start: time,
-                              end: Math.min(time + 1, duration)
-                            };
-
-                            const hasOverlap = anchors.some(a =>
-                              (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-                              (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-                              (newAnchor.start <= a.start && newAnchor.end >= a.end)
-                            );
-
-                            if (hasOverlap) {
-                              showToast('Clip overlaps with an existing clip — try a different position', 'warning');
-                              return;
-                            }
-
-                            const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-                            setAnchors(updated);
-                            saveToHistory(updated);
-                            setSelectedAnchor(newAnchor.id);
-                            setSelectedClipFocusTime(newAnchor.start);
-                            setHasCreatedFirstClip(true);
+                            createAnchorAtTime(time);
                           }}
                           onTouchEnd={(e) => {
                             // Handle double-tap for mobile
@@ -6944,27 +6288,7 @@ const exportVideo = async () => {
                             if (timeSinceLastTap < 300 && distance < 30) {
                               const rect = e.currentTarget.getBoundingClientRect();
                               const time = getTimelineTimeFromClientX(tapPosition.x, rect);
-
-                              const newAnchor = {
-                                id: Date.now(),
-                                start: time,
-                                end: Math.min(time + 1, duration)
-                              };
-
-                              const hasOverlap = anchors.some(a =>
-                                (newAnchor.start >= a.start && newAnchor.start < a.end) ||
-                                (newAnchor.end > a.start && newAnchor.end <= a.end) ||
-                                (newAnchor.start <= a.start && newAnchor.end >= a.end)
-                              );
-
-                              if (!hasOverlap) {
-                                const updated = [...anchors, newAnchor].sort((a, b) => a.start - b.start);
-                                setAnchors(updated);
-                                saveToHistory(updated);
-                                setSelectedAnchor(newAnchor.id);
-                                setSelectedClipFocusTime(newAnchor.start);
-                                setHasCreatedFirstClip(true);
-                              }
+                              createAnchorAtTime(time, { haptic: true });
 
                               lastTapTimeRef.current = 0;
                             } else {
@@ -7801,511 +7125,21 @@ const exportVideo = async () => {
                 <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Ctrl+Y</kbd><span className="text-gray-300">Redo</span>
                 <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">?</kbd><span className="text-gray-300">Toggle this overlay</span>
               </div>
-              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Precision modal</div>
+              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Precision trimmer</div>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm mb-4">
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">← / →</kbd><span className="text-gray-300">Nudge selected handle ±1 frame</span>
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">,</kbd><span className="text-gray-300">Previous anchor</span>
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">.</kbd><span className="text-gray-300">Next anchor</span>
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">S</kbd><span className="text-gray-300">Snap start to range start</span>
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">E</kbd><span className="text-gray-300">Snap end to range end</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">S / E</kbd><span className="text-gray-300">Choose start or end edge</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">-1f / +1f</kbd><span className="text-gray-300">Nudge the focused edge</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Boundary strip</kbd><span className="text-gray-300">Drag coarse start/end boundaries</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Prev / Next</kbd><span className="text-gray-300">Move between clips</span>
               </div>
-              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Loupe handles (when focused)</div>
+              <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Timeline</div>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">← / →</kbd><span className="text-gray-300">Adjust clip boundary ±1 frame</span>
+                <kbd className="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">Magnifier</kbd><span className="text-gray-300">Zoom around the selected clip</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Trim Modal */}
-        {showTrimModal && (
-          <div className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-50">
-            <div className="glass-panel p-6 rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
-             <div className="space-y-2 mb-3">
-  {/* Top Row: Prev/Next Navigation — AUDIT P3 #17: derive index from live anchors[] */}
-  <div className="flex items-center justify-center gap-4">
-    <button
-      onClick={goToPreviousAnchor}
-      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) <= 0}
-      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
-      title="Previous Anchor"
-    >
-      ← Prev
-    </button>
-
-    <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-      Anchor {Math.max(0, precisionAnchor ? anchors.findIndex(a => a.id === precisionAnchor.id) : 0) + 1} of {anchors.length}
-    </div>
-
-    <button
-      onClick={goToNextAnchor}
-      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) >= anchors.length - 1}
-      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
-      title="Next Anchor"
-    >
-      Next →
-    </button>
-  </div>
-
-  {/* Start/End Time Buttons */}
-  <div className="flex items-center justify-center gap-6">
-    <button
-      onClick={() => {
-        setSelectedHandle('start');
-        setPrecisionTime(precisionAnchor.start);
-        if (precisionVideoRef.current) {
-          precisionVideoRef.current.currentTime = precisionAnchor.start;
-        }
-      }}
-      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
-        selectedHandle === 'start'
-          ? 'bg-green-500 text-white shadow-lg shadow-green-500/50 scale-105'
-          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-      }`}
-    >
-      <div className="text-xs opacity-80 mb-1">START</div>
-      <div>{formatTime(precisionAnchor.start)}</div>
-    </button>
-
-    <button
-      onClick={() => {
-        setSelectedHandle('end');
-        setPrecisionTime(precisionAnchor.end);
-        if (precisionVideoRef.current) {
-          precisionVideoRef.current.currentTime = precisionAnchor.end;
-        }
-      }}
-      className={`px-8 py-4 rounded-xl font-bold text-xl transition-all ${
-        selectedHandle === 'end'
-          ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 scale-105'
-          : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-      }`}
-    >
-      <div className="text-xs opacity-80 mb-1">END</div>
-      <div>{formatTime(precisionAnchor.end)}</div>
-    </button>
-  </div>
-</div>
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-900/50 p-4 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">Start Time</div>
-                    <div className="text-2xl font-mono text-green-400">{formatTime(trimStart)}</div>
-                  </div>
-                  <div className="bg-slate-900/50 p-4 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">End Time</div>
-                    <div className="text-2xl font-mono text-red-400">{formatTime(trimEnd)}</div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                  <div className="text-sm text-gray-400 mb-1">Duration</div>
-                  <div className="text-3xl font-bold text-amber-400">{formatTime(trimEnd - trimStart)}</div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-300 mb-2 block">Start Position</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration}
-                    step="0.1"
-                    value={trimStart}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (val < trimEnd - 2) setTrimStart(val);
-                    }}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-300 mb-2 block">End Position</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration}
-                    step="0.1"
-                    value={trimEnd}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (val > trimStart + 2) setTrimEnd(val);
-                    }}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-
-                {isProcessing && (
-                  <div>
-                    <div className="text-sm text-gray-300 mb-2">Processing... {progress}%</div>
-                    <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 border-r-2 border-cyan-500/50 transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={() => setShowTrimModal(false)}
-                    disabled={isProcessing}
-                    className="px-6 py-3 btn-secondary rounded-lg font-semibold disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={applyTrim}
-                    disabled={isProcessing || (trimEnd - trimStart) < 2}
-                    className="px-6 py-3 btn-accent hover:scale-105 rounded-lg font-semibold transition disabled:opacity-50 disabled:hover:scale-100"
-                  >
-                    {isProcessing ? 'Processing...' : 'Apply Trim'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Precision Modal */}
-{showPrecisionModal && precisionAnchor && anchors.some(a => a.id === precisionAnchor.id) && (
-  <div
-    className="fixed inset-0 glass-modal-overlay flex items-center justify-center p-2 sm:p-4"
-    style={{ zIndex: 9999, touchAction: 'none', WebkitOverflowScrolling: 'auto' }}
-    onTouchMove={(e) => {
-      // Allow scrolling within modal but prevent body scroll
-      const target = e.target;
-      if (!target.closest('.modal-scroll-container')) {
-        e.preventDefault();
-      }
-    }}
-  >
-    <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-2xl max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto flex flex-col modal-scroll-container" style={{ zIndex: 10000 }}>
-            <div className="space-y-3 mb-6">
-  {/* Top Row: Prev/Next Navigation — AUDIT P3 #17: derive index from live anchors[] */}
-  <div className="flex items-center justify-center gap-4">
-    <button
-      onClick={goToPreviousAnchor}
-      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) <= 0}
-      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
-      title="Previous Anchor"
-    >
-      ← Prev
-    </button>
-
-    <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-      Anchor {Math.max(0, precisionAnchor ? anchors.findIndex(a => a.id === precisionAnchor.id) : 0) + 1} of {anchors.length}
-    </div>
-
-    <button
-      onClick={goToNextAnchor}
-      disabled={!precisionAnchor || anchors.findIndex(a => a.id === precisionAnchor.id) >= anchors.length - 1}
-      className="px-4 py-2 btn-secondary rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
-      title="Next Anchor"
-    >
-      Next →
-    </button>
-  </div>
-</div>
-
-{/* Video Preview */}
-<div className="bg-black rounded-lg overflow-hidden mb-3 flex-shrink-0">
-                <video
-                  ref={precisionVideoRef}
-                  src={videoUrl}
-                  className="w-full h-64 object-contain"
-                  onTimeUpdate={handlePrecisionVideoTimeUpdate}
-                  onEnded={() => setPrecisionPlaying(false)}
-                />
-              </div>
-
-              {/* Controls */}
-             {/* Frame Controls */}
-<div className="flex items-center justify-center gap-3 mb-4">
-  <button
-    onMouseDown={(e) => {
-      e.preventDefault();
-      if (!precisionVideoRef.current || !precisionAnchor) return;
-
-      const step = () => {
-        const newTime = precisionAnchor[selectedHandle] - 1/30;
-        const range = getPrecisionRange(precisionAnchor);
-
-        if (selectedHandle === 'start') {
-          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        } else {
-          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        }
-      };
-
-      step();
-      const interval = setInterval(step, 100);
-
-      const cleanup = () => clearInterval(interval);
-      document.addEventListener('mouseup', cleanup, { once: true });
-      document.addEventListener('touchend', cleanup, { once: true });
-    }}
-    onTouchStart={(e) => {
-      e.preventDefault();
-      if (!precisionVideoRef.current || !precisionAnchor) return;
-
-      const step = () => {
-        const newTime = precisionAnchor[selectedHandle] - 1/30;
-        const range = getPrecisionRange(precisionAnchor);
-
-        if (selectedHandle === 'start') {
-          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        } else {
-          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        }
-      };
-
-      step();
-      const interval = setInterval(step, 100);
-
-      const cleanup = () => clearInterval(interval);
-      document.addEventListener('mouseup', cleanup, { once: true });
-      document.addEventListener('touchend', cleanup, { once: true });
-    }}
-    className="px-4 py-3 btn-secondary rounded-lg font-semibold shadow-md"
-  >
-    ← Frame
-  </button>
-
-  <button
-    onClick={togglePrecisionPlay}
-    className="p-4 btn-accent rounded-full shadow-lg transition"
-  >
-    {precisionPlaying ? <Pause size={24} /> : <Play size={24} />}
-  </button>
-
-  <button
-    onMouseDown={(e) => {
-      e.preventDefault();
-      if (!precisionVideoRef.current || !precisionAnchor) return;
-
-      const step = () => {
-        const newTime = precisionAnchor[selectedHandle] + 1/30;
-        const range = getPrecisionRange(precisionAnchor);
-
-        if (selectedHandle === 'start') {
-          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        } else {
-          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        }
-      };
-
-      step();
-      const interval = setInterval(step, 100);
-
-      const cleanup = () => clearInterval(interval);
-      document.addEventListener('mouseup', cleanup, { once: true });
-      document.addEventListener('touchend', cleanup, { once: true });
-    }}
-    onTouchStart={(e) => {
-      e.preventDefault();
-      if (!precisionVideoRef.current || !precisionAnchor) return;
-
-      const step = () => {
-        const newTime = precisionAnchor[selectedHandle] + 1/30;
-        const range = getPrecisionRange(precisionAnchor);
-
-        if (selectedHandle === 'start') {
-          const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        } else {
-          const constrainedTime = Math.max(precisionAnchor.start + 1, Math.min(range.end, newTime));
-          setPrecisionAnchor(prev => ({ ...prev, end: constrainedTime }));
-          setPrecisionTime(constrainedTime);
-          precisionVideoRef.current.currentTime = constrainedTime;
-        }
-      };
-
-      step();
-      const interval = setInterval(step, 100);
-
-      const cleanup = () => clearInterval(interval);
-      document.addEventListener('mouseup', cleanup, { once: true });
-      document.addEventListener('touchend', cleanup, { once: true });
-    }}
-    className="px-4 py-3 btn-secondary rounded-lg font-semibold shadow-md"
-  >
-    Frame →
-  </button>
-</div>
-
-{/* START/END Buttons with Current Time Display */}
-<div className="flex items-center justify-center gap-3 mb-3">
-  <button
-    onClick={() => {
-      setSelectedHandle('start');
-      setPrecisionTime(precisionAnchor.start);
-      if (precisionVideoRef.current) {
-        precisionVideoRef.current.currentTime = precisionAnchor.start;
-      }
-    }}
-    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-      selectedHandle === 'start'
-        ? 'bg-green-500 text-white shadow-lg shadow-green-500/50'
-        : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-    }`}
-  >
-    START {formatTime(precisionAnchor.start)}
-  </button>
-
-  <div className="text-base font-mono bg-slate-900 rounded-lg px-3 py-2">
-    {formatTime(precisionTime)}
-  </div>
-
-  <button
-    onClick={() => {
-      setSelectedHandle('end');
-      setPrecisionTime(precisionAnchor.end);
-      if (precisionVideoRef.current) {
-        precisionVideoRef.current.currentTime = precisionAnchor.end;
-      }
-    }}
-    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-      selectedHandle === 'end'
-        ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
-        : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-    }`}
-  >
-    END {formatTime(precisionAnchor.end)}
-  </button>
-</div>
-
-{/* Precision Timeline */}
-<div className="relative mb-3 flex-shrink-0">
-  <div
-    ref={precisionTimelineRef}
-    onMouseDown={handlePrecisionTimelineMouseDown}
-    onTouchStart={(e) => {
-      const touch = e.touches?.[0];
-      if (touch) {
-        handlePrecisionTimelineMouseDown({ ...e, clientX: touch.clientX });
-      }
-    }}
-    className="relative h-24 bg-slate-900 rounded-lg cursor-pointer border-2 border-slate-600"
-  >
-                  {/* Current time indicator - Thin white line */}
-                  <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-20 pointer-events-none"
-                    style={{
-                      left: `${((precisionTime - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
-                    }}
-                  />
-
-                  {/* Anchor visualization */}
-                  <div
-                    className="absolute top-0 bottom-0 bg-cyan-500/20 border-2 border-cyan-500/50 rounded z-10"
-                    style={{
-                      left: `${((precisionAnchor.start - getPrecisionRange(precisionAnchor).start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`,
-                      width: `${((precisionAnchor.end - precisionAnchor.start) / (getPrecisionRange(precisionAnchor).end - getPrecisionRange(precisionAnchor).start)) * 100}%`
-                    }}
-                  >
-                    {/* Start handle - Green */}
-                    <div
-                      onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'start')}
-                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'start')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedHandle('start');
-                        setPrecisionTime(precisionAnchor.start);
-                        if (precisionVideoRef.current) {
-                          precisionVideoRef.current.currentTime = precisionAnchor.start;
-                        }
-                      }}
-                      className={`absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize transition touch-none rounded-full ${
-                        selectedHandle === 'start'
-                          ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.8)]'
-                          : 'bg-green-500/80 hover:bg-green-400 hover:shadow-[0_0_8px_rgba(34,197,94,0.6)]'
-                      }`}
-                      style={{ zIndex: 100 }}
-                    >
-                      {/* Pill-shaped grab handle */}
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-green-400 rounded-full shadow-lg border-2 border-white/30" />
-                    </div>
-
-                    {/* End handle - Red */}
-                    <div
-                      onMouseDown={(e) => handlePrecisionHandleMouseDown(e, 'end')}
-                      onTouchStart={(e) => handlePrecisionHandleTouchStart(e, 'end')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedHandle('end');
-                        setPrecisionTime(precisionAnchor.end);
-                        if (precisionVideoRef.current) {
-                          precisionVideoRef.current.currentTime = precisionAnchor.end;
-                        }
-                      }}
-                      className={`absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize transition touch-none rounded-full ${
-                        selectedHandle === 'end'
-                          ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]'
-                          : 'bg-red-500/80 hover:bg-red-400 hover:shadow-[0_0_8px_rgba(239,68,68,0.6)]'
-                      }`}
-                      style={{ zIndex: 100 }}
-                    >
-                      {/* Pill-shaped grab handle */}
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-6 bg-red-400 rounded-full shadow-lg border-2 border-white/30" />
-                    </div>
-
-                    {/* Duration label */}
-                    <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white pointer-events-none">
-                      {formatTime(precisionAnchor.end - precisionAnchor.start)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Time markers */}
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{formatTime(getPrecisionRange(precisionAnchor).start)}</span>
-                  <span>{formatTime((getPrecisionRange(precisionAnchor).start + getPrecisionRange(precisionAnchor).end) / 2)}</span>
-                  <span>{formatTime(getPrecisionRange(precisionAnchor).end)}</span>
-                </div>
-              </div>
-
-{/* Action Buttons */}
-<div className="flex gap-3 justify-end mt-auto pt-4 flex-shrink-0" style={{ borderTop: '2px solid var(--border)' }}>
-  <button
-    onClick={() => setShowPrecisionModal(false)}
-    className="px-4 sm:px-6 py-2 sm:py-3 btn-secondary rounded-lg font-semibold text-sm sm:text-base"
-  >
-    Cancel
-  </button>
-  <button
-    onClick={applyPrecisionChanges}
-    className="px-4 sm:px-6 py-2 sm:py-3 btn-accent hover:scale-105 rounded-lg font-semibold text-sm sm:text-base transition"
-  >
-    Apply Changes
-  </button>
-</div>
-            </div>
-          </div>
-        )}
-
-        {/* Music Precision Modal */}
         {/* EXPORT SECTION */}
         {currentSection === 'export' && video && (
           <div className="panel rounded-2xl p-2 sm:p-8">
