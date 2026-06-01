@@ -68,6 +68,8 @@
 - Browser-tested with `jubjubthai trim.mp4`: generated starter clips, opened Pro tools, verified spring puck/clip arrows, toggled the timeline zoom, and saw no console errors.
 - Changed the Boundary Map pills from resistance-nudge controls into direct draggable boundaries; the map now handles coarse placement while the spring puck handles playful frame nudging.
 - Browser-tested free dragging the Boundary Map end pill with `jubjubthai trim.mp4`; the selected clip end updated from `2:09` to `8:43`, the preview/end controls stayed in sync, and no console errors appeared.
+- Fixed frame nudge overlap: nudge buttons, hold nudges, keyboard arrows, and spring-puck nudges now clamp against previous/next clip boundaries.
+- Browser-tested the overlap regression by dragging clip 1's end to the next clip boundary (`31:55`) and clicking `+10f` ten more times; the end stayed at `31:55` and no console errors appeared.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -83,6 +85,7 @@
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.
 - Audit Story vs Deep auto-generation behavior and document the practical difference before further UX copy changes.
 - Audit the auto-generator pipeline for timestamp distribution, frame manifest usage, and how beat-sync target selection affects generated clips.
+- Consider a future finishing/effects tab between Edit and Export for explicit fades, graphics, slow motion, and any intentional transition overlap behavior.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions

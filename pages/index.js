@@ -3745,19 +3745,26 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const activeAnchorId = selectedAnchorRef.current;
     if (!activeAnchorId) return;
 
+    const sortedAnchors = [...anchorsRef.current].sort((a, b) => a.start - b.start);
+    const activeIndex = sortedAnchors.findIndex(a => a.id === activeAnchorId);
+    const previousAnchor = activeIndex > 0 ? sortedAnchors[activeIndex - 1] : null;
+    const nextAnchor = activeIndex >= 0 && activeIndex < sortedAnchors.length - 1 ? sortedAnchors[activeIndex + 1] : null;
+    const minStart = previousAnchor ? previousAnchor.end : 0;
+    const maxEnd = nextAnchor ? nextAnchor.start : duration;
+
     let focusedTime = null;
     let changed = false;
     const updated = anchorsRef.current.map(a => {
       if (a.id !== activeAnchorId) return a;
       const delta = direction * frames * FRAME_STEP;
       if (handle === 'start') {
-        const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
+        const newStart = Math.max(minStart, Math.min(a.start + delta, a.end - FRAME_STEP));
         if (newStart === a.start) return a;
         changed = true;
         focusedTime = newStart;
         return { ...a, start: newStart };
       }
-      const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, duration));
+      const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, maxEnd));
       if (newEnd === a.end) return a;
       changed = true;
       focusedTime = newEnd;
