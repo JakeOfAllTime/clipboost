@@ -41,14 +41,19 @@
 - Updated the dev test clip harness to support both `Desktop/TestClips` and `Desktop/testclips`, with the user's five preferred clips pinned first.
 - Verified the preferred test list via API, streamed `Cooking_Mushrooms.mp4`, ran `npm run build`, restarted the dev server on port 3002, and reloaded the in-app browser with no console errors.
 - Moved the active refactor repo and its timestamped backups into `/Users/littlemac/Desktop/Clipboost Refactor Work` to keep the Desktop from stacking up loose refactor folders.
+- Reduced Play Clips transition flashing by making the dual-video layer swap a true hard cut and waiting for the standby video's presented frame before marking it ready.
+- Added dev-only music loading from `Desktop/TestClips` for `vlog-beat-background-349853.mp3` and `retro-lounge-389644.mp3`.
+- Browser smoke-tested the user's reported path: loaded `jubjubthai trim.mp4`, loaded `vlog-beat-background-349853.mp3`, set Length 24s and Pace 3s, generated starter clips, played Play Clips, and saw no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
 - The local file chooser limitation was worked around with the dev-only `/Users/littlemac/Desktop/testclips` loader.
 - The Precision Trimmer redesign has been browser-tested with one real local test video; broader mobile and alternate-video testing is still useful.
 - The 100% Music audio fix is code/build/browser-smoke verified; final confirmation still needs a real music export or hands-on playback test with music selected.
+- The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
+- Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.
 - Audit Story vs Deep auto-generation behavior and document the practical difference before further UX copy changes.

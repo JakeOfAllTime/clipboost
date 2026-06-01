@@ -7,6 +7,7 @@ const TEST_CLIPS_DIRS = [
   path.join(os.homedir(), 'Desktop', 'testclips')
 ];
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg']);
 const PREFERRED_TEST_CLIPS = [
   'jubjubthai trim.mp4',
   'Cooking_Mushrooms.mp4',
@@ -14,6 +15,24 @@ const PREFERRED_TEST_CLIPS = [
   'NWT81P6YQBM.mp4',
   'freecompress-videoplayback.mp4'
 ];
+const PREFERRED_TEST_TRACKS = [
+  'vlog-beat-background-349853.mp3',
+  'retro-lounge-389644.mp3'
+];
+
+const sortPreferredFirst = (items, preferredNames) => {
+  items.sort((a, b) => {
+    const preferredDelta = Number(b.preferred) - Number(a.preferred);
+    if (preferredDelta !== 0) return preferredDelta;
+    const aPreferredIndex = preferredNames.indexOf(a.name);
+    const bPreferredIndex = preferredNames.indexOf(b.name);
+    if (aPreferredIndex !== -1 && bPreferredIndex !== -1) {
+      return aPreferredIndex - bPreferredIndex;
+    }
+    return b.updatedAt - a.updatedAt;
+  });
+  return items;
+};
 
 export default async function handler(req, res) {
   if (process.env.NODE_ENV === 'production') {
@@ -21,7 +40,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const byName = new Map();
+    const clipsByName = new Map();
+    const tracksByName = new Map();
 
     for (const clipsDir of TEST_CLIPS_DIRS) {
       let entries = [];
@@ -31,42 +51,43 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const clipsInDir = await Promise.all(
+      const mediaInDir = await Promise.all(
         entries
-          .filter(entry => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+          .filter(entry => {
+            if (!entry.isFile()) return false;
+            const ext = path.extname(entry.name).toLowerCase();
+            return VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext);
+          })
           .map(async entry => {
             const filePath = path.join(clipsDir, entry.name);
+            const ext = path.extname(entry.name).toLowerCase();
+            const isAudio = AUDIO_EXTENSIONS.has(ext);
             const stat = await fs.stat(filePath);
             return {
               name: entry.name,
               size: stat.size,
               updatedAt: stat.mtimeMs,
               directory: path.basename(clipsDir),
-              preferred: PREFERRED_TEST_CLIPS.includes(entry.name)
+              type: isAudio ? 'audio' : 'video',
+              preferred: isAudio
+                ? PREFERRED_TEST_TRACKS.includes(entry.name)
+                : PREFERRED_TEST_CLIPS.includes(entry.name)
             };
           })
       );
 
-      clipsInDir.forEach(clip => {
-        if (!byName.has(clip.name)) byName.set(clip.name, clip);
+      mediaInDir.forEach(item => {
+        const targetMap = item.type === 'audio' ? tracksByName : clipsByName;
+        if (!targetMap.has(item.name)) targetMap.set(item.name, item);
       });
     }
 
-    const clips = Array.from(byName.values());
+    const clips = sortPreferredFirst(Array.from(clipsByName.values()), PREFERRED_TEST_CLIPS);
+    const tracks = sortPreferredFirst(Array.from(tracksByName.values()), PREFERRED_TEST_TRACKS);
 
-    clips.sort((a, b) => {
-      const preferredDelta = Number(b.preferred) - Number(a.preferred);
-      if (preferredDelta !== 0) return preferredDelta;
-      const aPreferredIndex = PREFERRED_TEST_CLIPS.indexOf(a.name);
-      const bPreferredIndex = PREFERRED_TEST_CLIPS.indexOf(b.name);
-      if (aPreferredIndex !== -1 && bPreferredIndex !== -1) {
-        return aPreferredIndex - bPreferredIndex;
-      }
-      return b.updatedAt - a.updatedAt;
-    });
-    return res.status(200).json({ clips });
+    return res.status(200).json({ clips, tracks });
   } catch (error) {
     console.error('Dev testclips list failed:', error);
-    return res.status(200).json({ clips: [] });
+    return res.status(200).json({ clips: [], tracks: [] });
   }
 }

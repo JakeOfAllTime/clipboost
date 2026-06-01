@@ -10,7 +10,12 @@ const MIME_BY_EXTENSION = {
   '.mp4': 'video/mp4',
   '.mov': 'video/quicktime',
   '.m4v': 'video/x-m4v',
-  '.webm': 'video/webm'
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg'
 };
 
 export const config = {

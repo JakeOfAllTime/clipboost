@@ -189,7 +189,9 @@ const ReelForge = () => {
   const [beatSyncTarget, setBeatSyncTarget] = useState('none'); // 'none' | 'music' | 'original'
   const [userApiKey, setUserApiKey] = useState('');
   const [devTestClips, setDevTestClips] = useState([]);
+  const [devTestMusic, setDevTestMusic] = useState([]);
   const [isLoadingDevClip, setIsLoadingDevClip] = useState(false);
+  const [isLoadingDevMusic, setIsLoadingDevMusic] = useState(false);
 
   // Sidebar navigation state — start false on server, sync from localStorage after hydration
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -207,9 +209,11 @@ const ReelForge = () => {
       .then(res => (res.ok ? res.json() : { clips: [] }))
       .then(data => {
         if (!cancelled) setDevTestClips(Array.isArray(data.clips) ? data.clips : []);
+        if (!cancelled) setDevTestMusic(Array.isArray(data.tracks) ? data.tracks : []);
       })
       .catch(() => {
         if (!cancelled) setDevTestClips([]);
+        if (!cancelled) setDevTestMusic([]);
       });
     return () => { cancelled = true; };
   }, []);
@@ -2890,6 +2894,27 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setPreviewAnchorIndex(segmentIndex);
   }, [previewTimeline]);
 
+  const markStandbyReadyAfterFrame = useCallback((videoElement) => {
+    if (!videoElement || !isPreviewMode) return;
+
+    let marked = false;
+    const markReady = () => {
+      if (marked) return;
+      const currentStandby = activeVideoRef.current === 'A' ? videoBRef.current : videoRef.current;
+      if (videoElement === currentStandby) {
+        marked = true;
+        standbyReadyRef.current = true;
+      }
+    };
+
+    if (typeof videoElement.requestVideoFrameCallback === 'function') {
+      videoElement.requestVideoFrameCallback(markReady);
+      setTimeout(markReady, 120);
+    } else {
+      requestAnimationFrame(markReady);
+    }
+  }, [isPreviewMode]);
+
   // Frame thumbnail during loupe handle drag — capture from main video at 100ms intervals
   useEffect(() => {
     // Initialise the offscreen canvas once
@@ -3312,16 +3337,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             waitingForStandbyRef.current = null;
             transitioningRef.current = false;
 
-            // Opacity flip on the DOM refs (no React state on the hot path).
-            standbyVideoEl.style.opacity = '1';
-            activeVideoEl.style.opacity = '0';
-
             // Ownership flips
             const newActiveVideo = activeVideoRef.current === 'A' ? 'B' : 'A';
             activeVideoRef.current = newActiveVideo;
 
             // Audio ownership — only the active video is unmuted (music has its own element)
             applyElementAudioVolumes();
+
+            // Hard-cut the layers only after the standby has presented a frame.
+            // Fading these layers creates a visible one-frame blend between clips.
+            standbyVideoEl.style.opacity = '1';
+            activeVideoEl.style.opacity = '0';
 
             // Clip index + preview-card selection track the currently-playing clip
             previewAnchorIndexRef.current = nextIndex;
@@ -3414,17 +3440,43 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   }, [isPreviewMode, isPreviewPlaying, previewTimeline]);
 
   // Music handlers
+  const loadMusicFile = useCallback((file) => {
+    if (!file) return;
+    if (musicUrl) URL.revokeObjectURL(musicUrl);
+
+    setMusic(file);
+    setMusicAnalysis(null);
+    setMusicUrl(URL.createObjectURL(file));
+    setMusicStartTime(0);
+    setMusicEndTime(0);
+    setMusicDuration(0);
+  }, [musicUrl]);
+
   const handleMusicUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setMusic(file);
-      setMusicAnalysis(null);
-      const url = URL.createObjectURL(file);
-      setMusicUrl(url);
-      setMusicStartTime(0);
+      loadMusicFile(file);
       e.target.value = '';
     }
   };
+
+  const loadDevTestMusic = useCallback(async (trackName) => {
+    if (!trackName || isLoadingDevMusic) return;
+    try {
+      setIsLoadingDevMusic(true);
+      const response = await fetch(`/api/dev-testclip?name=${encodeURIComponent(trackName)}`);
+      if (!response.ok) throw new Error('Could not load test music');
+      const blob = await response.blob();
+      const file = new File([blob], trackName, { type: blob.type || 'audio/mpeg' });
+      loadMusicFile(file);
+      showToast(`Loaded music: ${trackName}`, 'success');
+    } catch (error) {
+      console.error('Dev test music load failed:', error);
+      showToast('Could not load that music track', 'error');
+    } finally {
+      setIsLoadingDevMusic(false);
+    }
+  }, [isLoadingDevMusic, loadMusicFile, showToast]);
 
   const handleMusicLoadedMetadata = () => {
     if (musicRef.current) {
@@ -5387,15 +5439,39 @@ const exportVideo = async () => {
                       {/* Music Section */}
                       <div className="border-t border-gray-700 pt-3">
                         {!music ? (
-                          <label className="block px-4 py-2 btn-secondary rounded-lg cursor-pointer text-center text-sm">
-                            🎵 Add Music (Optional)
-                            <input
-                              type="file"
-                              accept="audio/*"
-                              onChange={handleMusicUpload}
-                              className="hidden"
-                            />
-                          </label>
+                          <div className="space-y-2">
+                            <label className="block px-4 py-2 btn-secondary rounded-lg cursor-pointer text-center text-sm">
+                              🎵 Add Music (Optional)
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                onChange={handleMusicUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            {isLocalDev && devTestMusic.length > 0 && (
+                              <div className="rounded-lg border border-slate-700/70 bg-slate-950/35 p-2">
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-green-300">Dev music</span>
+                                  {isLoadingDevMusic && <span className="text-[10px] text-slate-400">Loading...</span>}
+                                </div>
+                                <div className="grid gap-1 sm:grid-cols-2">
+                                  {devTestMusic.slice(0, 4).map(track => (
+                                    <button
+                                      key={track.name}
+                                      type="button"
+                                      onClick={() => loadDevTestMusic(track.name)}
+                                      disabled={isLoadingDevMusic}
+                                      className="min-h-9 truncate rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5 text-left text-[11px] font-semibold text-slate-200 transition hover:border-green-400/60 hover:text-white disabled:opacity-50"
+                                      title={track.name}
+                                    >
+                                      {track.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
@@ -5703,7 +5779,7 @@ const exportVideo = async () => {
                       ref={videoRef}
                       src={videoUrl}
                       className="absolute inset-0 w-full h-full object-contain"
-                      style={{ opacity: 1, transition: 'opacity 60ms linear', willChange: 'opacity' }}
+                      style={{ opacity: 1, transition: 'none', willChange: 'opacity' }}
                       preload="auto"
                       playsInline
                       onTimeUpdate={handleTimeUpdate}
@@ -5711,7 +5787,7 @@ const exportVideo = async () => {
                       onEnded={() => setIsPlaying(false)}
                       onSeeked={() => {
                         if (isPreviewMode && activeVideoRef.current === 'B') {
-                          standbyReadyRef.current = true;
+                          markStandbyReadyAfterFrame(videoRef.current);
                         }
                       }}
                     />
@@ -5719,13 +5795,13 @@ const exportVideo = async () => {
                       ref={videoBRef}
                       src={videoUrl}
                       className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                      style={{ opacity: 0, transition: 'opacity 60ms linear', willChange: 'opacity' }}
+                      style={{ opacity: 0, transition: 'none', willChange: 'opacity' }}
                       preload="auto"
                       playsInline
                       muted
                       onSeeked={() => {
                         if (isPreviewMode && activeVideoRef.current === 'A') {
-                          standbyReadyRef.current = true;
+                          markStandbyReadyAfterFrame(videoBRef.current);
                         }
                       }}
                     />

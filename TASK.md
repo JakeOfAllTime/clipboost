@@ -18,4 +18,6 @@ in progress
 - Fixed the Music 100% audio-balance path so source audio is hard-muted in preview and not mapped into exports.
 - The dev test clip panel now reads `Desktop/TestClips` and pins the five preferred test files first.
 - The active refactor repo and backups now live under `/Users/littlemac/Desktop/Clipboost Refactor Work`.
+- Play Clips now hard-cuts between dual video layers and waits for the standby frame to be presented before swapping, reducing the brief flash between clips.
+- Dev music buttons now load `vlog-beat-background-349853.mp3` and `retro-lounge-389644.mp3` from `Desktop/TestClips`.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
