@@ -170,6 +170,7 @@ const ReelForge = () => {
   // Tab navigation state
   const [currentTab, setCurrentTab] = useState('materials');
   // Possible values: 'materials', 'forge', 'ship'
+  const [workspaceMode, setWorkspaceMode] = useState('simple'); // 'simple' | 'pro'
 
   // Timeline zoom state
   const [timelineZoom, setTimelineZoom] = useState(1);
@@ -2530,6 +2531,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setMusic(null);
     setMusicUrl(null);
     setMediaCenterCollapsed(true);
+    setWorkspaceMode('simple');
 
     // OPTIMIZATION TEMPORARILY DISABLED (takes several minutes)
     // Testing dual-video system with original video first
@@ -4838,6 +4840,7 @@ const exportVideo = async () => {
     : autoGenMode === 'smart'
       ? 'Find story moments'
       : 'Build best cut';
+  const isProMode = workspaceMode === 'pro';
 
   return (
 <>
@@ -5076,8 +5079,8 @@ const exportVideo = async () => {
             ) : (
               <div className="h-full flex flex-col">
                 {/* Optimization Progress Indicator */}
-                {isOptimizingVideo && (
-                  <div className="mb-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+	                {isOptimizingVideo && (
+	                  <div className="mb-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm font-semibold text-cyan-400">Optimizing for editing...</span>
@@ -5089,11 +5092,59 @@ const exportVideo = async () => {
                       />
                     </div>
                     <p className="text-xs text-gray-400 mt-2">Adding keyframes for instant seeking (professional NLE quality)</p>
-                  </div>
-                )}
+	                  </div>
+	                )}
 
-                {/* MEDIA CENTER - Collapsible */}
-                <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full border-0 sm:border">
+	                <div className="mb-2 sm:mb-4 rounded-xl border border-slate-700/60 bg-slate-950/30 p-2 sm:p-3">
+	                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	                    <div>
+	                      <div className="text-sm font-bold text-white">Workspace</div>
+	                      <div className="text-xs text-slate-400">
+	                        {isProMode ? 'Exact timeline tools are visible.' : 'Simple view keeps only the main editing loop in front.'}
+	                      </div>
+	                      <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-cyan-400/50 hover:text-white">
+	                        <Upload size={12} />
+	                        Change video
+	                        <input
+	                          type="file"
+	                          accept="video/*"
+	                          onChange={handleVideoUpload}
+	                          className="hidden"
+	                        />
+	                      </label>
+	                    </div>
+	                    <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-900/80 p-1 text-sm">
+	                      <button
+	                        type="button"
+	                        onClick={() => setWorkspaceMode('simple')}
+	                        aria-pressed={!isProMode}
+	                        className={`min-h-11 rounded-md px-4 py-2 font-semibold transition ${
+	                          !isProMode
+	                            ? 'bg-cyan-400 text-slate-950 shadow-[0_0_14px_rgba(0,212,255,0.32)]'
+	                            : 'text-slate-300 hover:bg-slate-800'
+	                        }`}
+	                      >
+	                        Simple
+	                      </button>
+	                      <button
+	                        type="button"
+	                        onClick={() => setWorkspaceMode('pro')}
+	                        aria-pressed={isProMode}
+	                        className={`min-h-11 rounded-md px-4 py-2 font-semibold transition ${
+	                          isProMode
+	                            ? 'bg-pink-400 text-slate-950 shadow-[0_0_14px_rgba(255,0,255,0.28)]'
+	                            : 'text-slate-300 hover:bg-slate-800'
+	                        }`}
+	                      >
+	                        Pro tools
+	                      </button>
+	                    </div>
+	                  </div>
+	                </div>
+
+		                {/* MEDIA CENTER - Collapsible */}
+		                {isProMode && (
+		                  <div className="panel rounded-none sm:rounded-xl mb-2 sm:mb-4 w-full border-0 sm:border">
                   <button
                     onClick={() => setMediaCenterCollapsed(!mediaCenterCollapsed)}
                     className="w-full flex items-center justify-between p-2 sm:p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
@@ -5105,7 +5156,7 @@ const exportVideo = async () => {
                       <span className="text-xs text-gray-400">
                         {video.name} • {formatTime(duration)}
                       </span>
-                    </div>
+		                </div>
                     <ChevronDown
                       className={`transition-transform ${mediaCenterCollapsed ? '' : 'rotate-180'}`}
                       size={20}
@@ -5159,7 +5210,7 @@ const exportVideo = async () => {
                               >
                                 <X size={14} />
                               </button>
-                            </div>
+		                </div>
 
                             <audio
                               ref={musicRef}
@@ -5173,10 +5224,10 @@ const exportVideo = async () => {
                             <div>
                               <div className="flex justify-between items-center mb-1">
                                 <label className="text-xs text-gray-400">Music Range</label>
-                                <span className="text-xs text-gray-500">
-                                  {formatTime(musicEndTime - musicStartTime)} selected
-                                </span>
-                              </div>
+	                                <span className="text-xs text-gray-500">
+	                                  {formatTime(musicEndTime - musicStartTime)} selected
+	                                </span>
+		                </div>
 
                               {/* Visual range selector */}
                               <div
@@ -5422,13 +5473,14 @@ const exportVideo = async () => {
                                   }}
                                 />
                               </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+	                      </div>
+	                    </div>
+	                  )}
+	                </div>
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Video Editor - Unified Panel */}
                 <div
@@ -5590,14 +5642,18 @@ const exportVideo = async () => {
                   </div>
                   {/* End Video Player Section */}
 
-                  {/* Contextual Hints - Progressive Disclosure */}
-                  {!hasCreatedFirstClip && anchors.length === 0 && (
-                    <div className="hint-toast mb-2">
-                      💡 <strong>Get started:</strong> Double-tap the timeline below to mark moments you want to keep
-                    </div>
-                  )}
-                  {anchors.length > 0 && anchors.length <= 3 && (!hasSeenDeleteHint || !hasSeenPrecisionHint) && (
-                    <div className="hint-toast mb-2">
+	                  {/* Contextual Hints - Progressive Disclosure */}
+	                  {!hasCreatedFirstClip && anchors.length === 0 && (
+	                    <div className="hint-toast mb-2">
+	                      {isProMode ? (
+	                        <><strong>Pro tip:</strong> Double-tap the timeline below to mark exact moments yourself</>
+	                      ) : (
+	                        <><strong>Get started:</strong> create starter clips, then preview and adjust only what needs it</>
+	                      )}
+	                    </div>
+	                  )}
+	                  {isProMode && anchors.length > 0 && anchors.length <= 3 && (!hasSeenDeleteHint || !hasSeenPrecisionHint) && (
+	                    <div className="hint-toast mb-2">
                       {!hasSeenDeleteHint && <span>🗑️ Double-tap clips to delete</span>}
                       {!hasSeenDeleteHint && !hasSeenPrecisionHint && <span className="mx-2">•</span>}
                       {!hasSeenPrecisionHint && selectedAnchor && <span>✨ Try <strong>Precision Edit</strong> for frame-perfect trimming</span>}
@@ -5781,8 +5837,10 @@ const exportVideo = async () => {
                   </div>
                   {/* End Playback Controls + Clips Preview Section */}
 
-                  {/* ═══ Loupe Strip — always visible, no layout pop ═══ */}
-                  {(() => {
+	                  {isProMode ? (
+	                    <>
+	                  {/* ═══ Loupe Strip — always visible, no layout pop ═══ */}
+	                  {(() => {
                     const anchor = anchors.find(a => a.id === selectedAnchor);
                     const active = !!(anchor && loupeWindow);
                     const colors = active ? getAnchorColor(anchors.indexOf(anchor), true) : null;
@@ -6337,12 +6395,28 @@ const exportVideo = async () => {
                       </div>
                     </div>
                   </div>
-                  {/* End Timeline Section */}
+	                  {/* End Timeline Section */}
+	                    </>
+	                  ) : (
+	                    <div className="mb-1 sm:mb-4 rounded-lg border border-slate-700/60 bg-slate-900/30 p-3 text-center">
+	                      <div className="text-sm font-semibold text-white">Need exact cuts?</div>
+	                      <div className="mt-1 text-xs text-slate-400">Switch to Pro tools for manual timeline clips, handle dragging, loupe trimming, undo history, and source/music controls.</div>
+	                      <button
+	                        type="button"
+	                        onClick={() => setWorkspaceMode('pro')}
+	                        className="mt-3 min-h-11 rounded-lg border border-pink-400/40 bg-pink-500/10 px-4 py-2 text-sm font-semibold text-pink-200 transition hover:bg-pink-500/20"
+	                      >
+	                        Open Pro Tools
+	                      </button>
+	                    </div>
+	                  )}
 
-                  {/* Action Toolbar Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3">
-                    {/* Toolbar Buttons Row */}
-                    <div className="flex flex-wrap gap-2 mb-3">
+	                  {/* Action Toolbar Section */}
+	                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3">
+	                    {isProMode && (
+	                      <>
+	                    {/* Toolbar Buttons Row */}
+	                    <div className="flex flex-wrap gap-2 mb-3">
                       <button
                         onClick={undo}
                         disabled={historyIndex <= 0}
@@ -6405,10 +6479,12 @@ const exportVideo = async () => {
                         <div className="font-semibold text-amber-400">
                           {selectedAnchor ? anchors.findIndex(a => a.id === selectedAnchor) + 1 : '-'}
                         </div>
-                      </div>
-                    </div>
+	                      </div>
+	                    </div>
+	                      </>
+	                    )}
 
-                    {/* Auto-Generator Controls */}
+	                    {/* Auto-Generator Controls */}
 	                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-slate-700/60">
 	                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 	                        <div>

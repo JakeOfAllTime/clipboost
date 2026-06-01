@@ -8,4 +8,5 @@ in progress
 - Working copy: `/Users/littlemac/Desktop/clipboost-loupe-refactor`
 - Original folder remains untouched at `/Users/littlemac/Desktop/clipboost-loupe`.
 - First pass focused on the upload/start flow, guided workflow state, simpler auto-generation controls, and trust-critical bug fixes.
+- Added a Simple/Pro tools Workspace switch for the loaded-video editor. Simple is the default; Pro tools reveals the manual timeline, loupe, source/music controls, and other advanced controls.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

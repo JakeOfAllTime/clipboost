@@ -12,13 +12,20 @@
 - Fixed Smart/Pro final clip selection to pass story type instead of the zones array.
 - Verified `npm run build` succeeds.
 - Visually checked the initial screen at `http://localhost:3002`.
+- Added a loaded-editor Workspace switch with Simple as the default and Pro tools as the opt-in mode.
+- Hid source/music controls, the manual timeline, loupe trimming, undo/redo, trim, clear, and clip stats from Simple mode.
+- Kept the main player, clips preview, and Make Clips generator visible in Simple mode so beginner users stay on the core loop.
+- Added an inline "Open Pro Tools" prompt for users who need exact manual cuts.
+- Verified `npm run build` succeeds after the Simple/Pro mode change.
+- Rechecked the initial screen in Chrome at `http://localhost:3002`.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
+- Chrome visual verification covered the initial app shell, but not the post-upload Workspace switch because local file chooser automation was not available.
 
 ## Next Logical Step
-- Validate the post-upload editor manually or with a browser tool that supports file chooser automation, then continue simplifying the loaded-video state.
-- Next high-impact UX pass: make the post-upload editor lead with a single "Create starter clips" action, then reveal timeline controls after clips exist.
+- Validate the post-upload Workspace switch manually or with a browser tool that supports file chooser automation.
+- Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
