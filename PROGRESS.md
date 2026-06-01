@@ -18,13 +18,17 @@
 - Added an inline "Open Pro Tools" prompt for users who need exact manual cuts.
 - Verified `npm run build` succeeds after the Simple/Pro mode change.
 - Rechecked the initial screen in Chrome at `http://localhost:3002`.
+- Synced the Pro tools loupe/side preview with clips-bar selection and scrubbing, not only lower timeline anchor selection.
+- Added a shared focused-frame state so frame nudges and clips-bar seeks update the mini preview target.
+- Verified `npm run build` succeeds after the loupe/selection sync change.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
 - Chrome visual verification covered the initial app shell, but not the post-upload Workspace switch because local file chooser automation was not available.
+- The loupe/selection sync change is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
 
 ## Next Logical Step
-- Validate the post-upload Workspace switch manually or with a browser tool that supports file chooser automation.
+- Validate the post-upload Workspace switch and loupe preview sync manually or with a browser tool that supports file chooser automation.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions

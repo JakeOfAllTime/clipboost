@@ -86,6 +86,7 @@ const ReelForge = () => {
   // Anchors state
   const [anchors, setAnchors] = useState([]);
   const [selectedAnchor, setSelectedAnchor] = useState(null);
+  const [selectedClipFocusTime, setSelectedClipFocusTime] = useState(null);
   const [previewAnchor, setPreviewAnchor] = useState(null);
   const [previewHandle, setPreviewHandle] = useState('start'); // 'start' or 'end' - which handle to show
 
@@ -2526,6 +2527,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setHistory([]);
     setHistoryIndex(-1);
     setSelectedAnchor(null);
+    setSelectedClipFocusTime(null);
     setPreviewAnchor(null);
     setCurrentTime(0);
     setMusic(null);
@@ -2726,6 +2728,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     const offset = previewTime - segment.previewStart;
     const sourceTime = segment.sourceStart + offset;
+    if (segment.anchorId !== undefined) {
+      const activeAnchor = anchors.find(a => a.id === segment.anchorId);
+      setSelectedAnchor(segment.anchorId);
+      setSelectedClipFocusTime(sourceTime);
+      if (activeAnchor) {
+        setPreviewAnchor(activeAnchor);
+        setPreviewHandle(sourceTime > (activeAnchor.start + activeAnchor.end) / 2 ? 'end' : 'start');
+      }
+    }
 
     // Always clear stuck-transition state on any manual seek
     transitioningRef.current = false;
@@ -2764,7 +2775,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const musicTime = (segment.musicTime ?? 0) + offset;
       musicRef.current.currentTime = Math.max(0, musicTime);
     }
-  }, [findSegmentAtTime, music, previewTimeline, previewTotalDuration, duration]);
+  }, [findSegmentAtTime, music, previewTimeline, previewTotalDuration, duration, anchors]);
 
   // Scrub clips bar by clientX — called during drag
   const scrubClipsBar = useCallback((clientX) => {
@@ -3216,6 +3227,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             setPreviewCurrentTime(nextSegment.previewStart);
             if (nextSegment.anchorId !== undefined) {
               setSelectedAnchor(nextSegment.anchorId);
+              setSelectedClipFocusTime(nextSegment.sourceStart);
             }
 
             // Start new active, stop old. Play before pause so the first new
@@ -3250,6 +3262,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               setPreviewCurrentTime(nextSegment.previewStart);
               if (nextSegment.anchorId !== undefined) {
                 setSelectedAnchor(nextSegment.anchorId);
+                setSelectedClipFocusTime(nextSegment.sourceStart);
               }
 
               activeVideoEl.currentTime = nextSegment.sourceStart;
@@ -3264,6 +3277,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             setPreviewCurrentTime(nextSegment.previewStart);
             if (nextSegment.anchorId !== undefined) {
               setSelectedAnchor(nextSegment.anchorId);
+              setSelectedClipFocusTime(nextSegment.sourceStart);
             }
 
             activeVideoEl.currentTime = nextSegment.sourceStart;
@@ -3459,6 +3473,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       setAnchors(updated);
       saveToHistory(updated);
       setSelectedAnchor(newAnchor.id);
+      setSelectedClipFocusTime(newAnchor.start);
 
       // Haptic feedback
       if (navigator.vibrate) {
@@ -3492,6 +3507,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setAnchors(updated);
     saveToHistory(updated);
     setSelectedAnchor(newAnchor.id);
+    setSelectedClipFocusTime(newAnchor.start);
   }, [duration, currentTime, anchors, saveToHistory]);
 
   const deleteAnchor = useCallback((anchorId) => {
@@ -3500,6 +3516,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     saveToHistory(updated);
     if (selectedAnchor === anchorId) {
       setSelectedAnchor(null);
+      setSelectedClipFocusTime(null);
     }
     if (previewAnchor?.id === anchorId) {
       setPreviewAnchor(null);
@@ -3518,22 +3535,29 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const FRAME_STEP = 1 / 30;
   const nudgeAnchor = useCallback((handle, direction) => {
     if (!selectedAnchor) return;
-    setAnchors(prev => {
-      const updated = prev.map(a => {
-        if (a.id !== selectedAnchor) return a;
-        const delta = direction * FRAME_STEP;
-        if (handle === 'start') {
-          const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
-          return { ...a, start: newStart };
-        } else {
-          const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, duration));
-          return { ...a, end: newEnd };
-        }
-      });
-      saveToHistory(updated);
-      return updated;
+    let focusedTime = null;
+    const updated = anchors.map(a => {
+      if (a.id !== selectedAnchor) return a;
+      const delta = direction * FRAME_STEP;
+      if (handle === 'start') {
+        const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
+        focusedTime = newStart;
+        return { ...a, start: newStart };
+      }
+      const newEnd = Math.max(a.start + FRAME_STEP, Math.min(a.end + delta, duration));
+      focusedTime = newEnd;
+      return { ...a, end: newEnd };
     });
-  }, [selectedAnchor, duration, saveToHistory]);
+
+    setAnchors(updated);
+    saveToHistory(updated);
+    setSelectedClipFocusTime(focusedTime);
+    const updatedAnchor = updated.find(a => a.id === selectedAnchor);
+    if (updatedAnchor) {
+      setPreviewAnchor(updatedAnchor);
+      setPreviewHandle(handle);
+    }
+  }, [selectedAnchor, duration, anchors, saveToHistory]);
 
   const handleAnchorClick = useCallback((e, anchor) => {
     e.stopPropagation();
@@ -3541,6 +3565,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     // Batch state updates to reduce re-renders
     setSelectedAnchor(anchor.id);
+    setSelectedClipFocusTime(anchor.start);
     setHoveredAnchor(null);
     setPreviewAnchor(anchor);
     setPreviewHandle('start'); // Default to showing start frame
@@ -3580,6 +3605,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const handleAnchorMouseDown = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     setSelectedAnchor(anchor.id);
+    setSelectedClipFocusTime(dragType === 'anchor-right' ? anchor.end : anchor.start);
+    setPreviewAnchor(anchor);
+    setPreviewHandle(dragType === 'anchor-right' ? 'end' : 'start');
 
     const startX = e.clientX || e.touches?.[0]?.clientX || 0;
 
@@ -3632,6 +3660,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (navigator.vibrate) navigator.vibrate(10);
 
     setSelectedAnchor(anchor.id);
+    setSelectedClipFocusTime(dragType === 'anchor-right' ? anchor.end : anchor.start);
+    setPreviewAnchor(anchor);
+    setPreviewHandle(dragType === 'anchor-right' ? 'end' : 'start');
 
     const startX = e.touches?.[0]?.clientX || 0;
 
@@ -3896,6 +3927,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const vid = cardVideoRef.current;
     const controller = new AbortController();
     const { signal } = controller;
+    const latestVisibleFrame = Math.max(anchor.start, anchor.end - FRAME_STEP);
+    const focusTime = selectedClipFocusTime == null
+      ? anchor.start
+      : Math.max(anchor.start, Math.min(selectedClipFocusTime, latestVisibleFrame));
 
     const startPlay = () => {
       if (signal.aborted) return;
@@ -3903,8 +3938,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       vid.play().catch(() => {});
     };
 
-    const alreadyAtTarget = Math.abs(vid.currentTime - anchor.start) < 0.05;
-    vid.currentTime = anchor.start;
+    const alreadyAtTarget = Math.abs(vid.currentTime - focusTime) < 0.05;
+    vid.currentTime = focusTime;
 
     if (alreadyAtTarget && vid.readyState >= 2) {
       startPlay();
@@ -3927,7 +3962,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       vid.pause();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAnchor, videoUrl, dragState.active]);
+  }, [selectedAnchor, selectedClipFocusTime, videoUrl, dragState.active, anchors]);
 
   // Persistent event listeners (only attach/detach once)
   useEffect(() => {
@@ -5174,6 +5209,9 @@ const exportVideo = async () => {
                           setAnchors([]);
                           setHistory([]);
                           setHistoryIndex(-1);
+                          setSelectedAnchor(null);
+                          setSelectedClipFocusTime(null);
+                          setPreviewAnchor(null);
                           setMusic(null);
                           setMusicUrl(null);
                           setPlaybackMode('full');
@@ -6201,6 +6239,7 @@ const exportVideo = async () => {
                             setAnchors(updated);
                             saveToHistory(updated);
                             setSelectedAnchor(newAnchor.id);
+                            setSelectedClipFocusTime(newAnchor.start);
                             setHasCreatedFirstClip(true);
                           }}
                           onTouchEnd={(e) => {
@@ -6238,6 +6277,7 @@ const exportVideo = async () => {
                                 setAnchors(updated);
                                 saveToHistory(updated);
                                 setSelectedAnchor(newAnchor.id);
+                                setSelectedClipFocusTime(newAnchor.start);
                                 setHasCreatedFirstClip(true);
                               }
 
@@ -6451,6 +6491,7 @@ const exportVideo = async () => {
                               setAnchors(emptyAnchors);
                               saveToHistory(emptyAnchors);
                               setSelectedAnchor(null);
+                              setSelectedClipFocusTime(null);
                               setPreviewAnchor(null);
                               showToast(`Cleared ${count} clip${count === 1 ? '' : 's'}`, 'success', { label: 'Undo', onClick: undo });
                             }
