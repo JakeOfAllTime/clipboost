@@ -1,7 +1,7 @@
 # Progress
 
 ## Completed
-- Duplicated the original folder to `/Users/littlemac/Desktop/clipboost-loupe-refactor`.
+- Duplicated the original folder to `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-loupe-refactor`.
 - Installed dependencies in the duplicate.
 - Added a clearer three-step workflow strip for upload, clip selection, and export readiness.
 - Reworked the empty upload state around one primary action.
@@ -22,7 +22,7 @@
 - Added a shared focused-frame state so frame nudges and clips-bar seeks update the mini preview target.
 - Verified `npm run build` succeeds after the loupe/selection sync change.
 - Saved separate backups of the current refactor state before the next UI pass.
-  - Folder backup: `/Users/littlemac/Desktop/clipboost-loupe-refactor-backup-20260601-093832`
+  - Folder backup: `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-loupe-refactor-backup-20260601-093832`
   - Git tag: `backup-before-precision-redesign-20260601`
 - Redesigned the inline Pro tools Precision Trimmer into a larger active-clip inspector with a bigger preview, start/end frame chips, mobile-sized frame step controls, loop toggle, and a focused-frame marker in the loupe.
 - Synced lower timeline anchor selection with the upper clips bar index so both timeline views represent the same active clip.
@@ -40,6 +40,7 @@
 - Updated export so 100% Music does not map the original audio stream at all, and 0% Music ignores the music file.
 - Updated the dev test clip harness to support both `Desktop/TestClips` and `Desktop/testclips`, with the user's five preferred clips pinned first.
 - Verified the preferred test list via API, streamed `Cooking_Mushrooms.mp4`, ran `npm run build`, restarted the dev server on port 3002, and reloaded the in-app browser with no console errors.
+- Moved the active refactor repo and its timestamped backups into `/Users/littlemac/Desktop/Clipboost Refactor Work` to keep the Desktop from stacking up loose refactor folders.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
