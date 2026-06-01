@@ -27,7 +27,7 @@ import Head from 'next/head';
  *                                           distribution rebalancing; not written to user anchors.
  */
 
-import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Download, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -287,6 +287,7 @@ const ReelForge = () => {
   const timelineRef = useRef(null);
   const lastTapTimeRef = useRef(0);
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
+  const lastAnchorTapRef = useRef({ id: null, time: 0, x: 0, y: 0 });
   const precisionTimelineRef = useRef(null);
   const loadConfigInputRef = useRef(null);
 
@@ -3396,7 +3397,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       // every clip by 200ms. With direct-ref opacity flip + no pause→play
       // setTimeout, the swap is effectively instant, so we fire 40ms early
       // purely as a safety cushion.
-      if (sourceTime >= currentSegment.sourceEnd - 0.04 && !transitioningRef.current) {
+      const shouldTransition = sourceTime >= currentSegment.sourceEnd - 0.04 || transitioningRef.current;
+      if (shouldTransition) {
         const nextIndex = currentIndex + 1;
 
         if (nextIndex < previewTimeline.length) {
@@ -3440,12 +3442,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
               activeVideoEl.currentTime = previewTimeline[afterNextIndex].sourceStart;
             }
           } else if (standbyVideoEl) {
-            // WAIT FOR STANDBY — typical budget ~50ms; give up after 500ms and
-            // fall back to a visible single-video seek rather than freezing.
-            if (!activeVideoEl.paused) {
-              activeVideoEl.pause();
-            }
-
+            // WAIT FOR STANDBY — keep the visible video rolling while the hidden
+            // element catches up. On slower/mobile devices this feels smoother
+            // than freezing on the last frame, and exports remain unaffected.
             if (!waitingForStandbyRef.current) {
               waitingForStandbyRef.current = Date.now();
               transitioningRef.current = true;
@@ -3681,7 +3680,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const newAnchor = {
       id: Date.now(),
       start: time,
-      end: Math.min(time + 5, duration)
+      end: Math.min(time + 1, duration)
     };
 
     const hasOverlap = anchors.some(a =>
@@ -3711,7 +3710,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const newAnchor = {
       id: Date.now(),
       start: currentTimeRef.current,
-      end: Math.min(currentTime + 2, duration)
+      end: Math.min(currentTime + 1, duration)
     };
 
     const hasOverlap = anchors.some(a =>
@@ -4114,6 +4113,25 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     e.stopPropagation();
     e.preventDefault();
 
+    const touch = e.touches?.[0];
+    if (dragType === 'anchor-move' && touch) {
+      const now = Date.now();
+      const previousTap = lastAnchorTapRef.current;
+      const distance = Math.sqrt(
+        Math.pow(touch.clientX - previousTap.x, 2) +
+        Math.pow(touch.clientY - previousTap.y, 2)
+      );
+
+      if (previousTap.id === anchor.id && now - previousTap.time < 350 && distance < 40) {
+        lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+        deleteAnchor(anchor.id);
+        if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+        return;
+      }
+
+      lastAnchorTapRef.current = { id: anchor.id, time: now, x: touch.clientX, y: touch.clientY };
+    }
+
     if (navigator.vibrate) navigator.vibrate(10);
 
     setSelectedAnchor(anchor.id);
@@ -4158,7 +4176,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         });
       }, HOLD_DURATION_MS);
     }
-  }, [syncPreviewIndexForAnchor]);
+  }, [deleteAnchor, syncPreviewIndexForAnchor]);
 
   // Persistent drag handlers with 60fps throttling (optimized)
   const rafIdRef = useRef(null);
@@ -6803,7 +6821,7 @@ const exportVideo = async () => {
                       </div>
 
                       {/* Layered Timeline: Top = Playhead Track, Bottom = Clips Lane */}
-                      <div className="relative bg-gradient-to-b from-slate-800/60 to-slate-900/80 rounded-lg border border-slate-700/50 overflow-visible" style={{ height: '160px' }}>
+                      <div className="relative h-[124px] overflow-visible rounded-lg border border-slate-700/50 bg-gradient-to-b from-slate-800/60 to-slate-900/80 sm:h-[160px]">
 
                         {/* Top Layer: Playhead Track (30% height) - Click to seek */}
                         <div
@@ -6849,11 +6867,10 @@ const exportVideo = async () => {
                           {/* Playhead - spans full height of timeline */}
                           <div
                             ref={playheadRef}
-                            className="absolute top-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none"
+                            className="absolute top-0 h-[124px] w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none sm:h-[160px]"
                             style={{
                               display: currentTime >= timelineView.start && currentTime <= timelineView.end ? 'block' : 'none',
                               left: `${getTimelinePercent(currentTime)}%`,
-                              height: '160px',
                               zIndex: 50,
                             }}
                           >
@@ -6891,7 +6908,7 @@ const exportVideo = async () => {
                             const newAnchor = {
                               id: Date.now(),
                               start: time,
-                              end: Math.min(time + 5, duration)
+                              end: Math.min(time + 1, duration)
                             };
 
                             const hasOverlap = anchors.some(a =>
@@ -6931,7 +6948,7 @@ const exportVideo = async () => {
                               const newAnchor = {
                                 id: Date.now(),
                                 start: time,
-                                end: Math.min(time + 5, duration)
+                                end: Math.min(time + 1, duration)
                               };
 
                               const hasOverlap = anchors.some(a =>
@@ -6955,8 +6972,7 @@ const exportVideo = async () => {
                               lastTapPositionRef.current = tapPosition;
                             }
                           }}
-                          className="absolute bottom-0 left-0 right-0 cursor-crosshair hover:bg-slate-800/20 transition-colors"
-                          style={{ height: 'calc(160px - 48px)', top: '48px' }}
+                          className="absolute bottom-0 left-0 right-0 top-10 cursor-crosshair transition-colors hover:bg-slate-800/20 sm:top-12"
                           title="Double-click to create clip"
                         >
                           {/* === Phase 5A: Magnifier Lens — floats above cursor during anchor drag === */}
@@ -7095,7 +7111,7 @@ const exportVideo = async () => {
                             </>
                           )}
                         </div>{/* end clips lane */}
-                      </div>{/* end 160px timeline container */}
+                      </div>{/* end timeline container */}
 
                       {/* Loupe strip moved above main timeline — see "Loupe Strip" section above */}
 
@@ -7146,13 +7162,6 @@ const exportVideo = async () => {
                       >
                         <RotateCw size={14} />
                         <span>Redo</span>
-                      </button>
-                      <button
-                        onClick={() => setShowTrimModal(true)}
-                        className="px-3 py-1.5 btn-secondary rounded-lg flex items-center gap-1 text-xs"
-                      >
-                        <Scissors size={14} />
-                        <span>Trim</span>
                       </button>
                       <button
                         onClick={() => {
@@ -7236,10 +7245,10 @@ const exportVideo = async () => {
 	                            <label htmlFor="target-duration" className="w-24 text-gray-300">
 	                              Length: {targetDuration}s
 	                            </label>
-	                            <input
-	                              type="range"
-	                              id="target-duration"
-	                              min="15"
+	                              <input
+	                                type="range"
+	                                id="target-duration"
+	                              min="5"
 	                              max="180"
 	                              step="1"
 	                              value={targetDuration}

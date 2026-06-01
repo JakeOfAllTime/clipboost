@@ -31,4 +31,5 @@ in progress
 - GitHub `main` now points at this refactor; previous GitHub `main` is backed up as `backup/pre-refactor-main-20260601-133245`; Vercel production is live at `https://clipboost-ten.vercel.app`.
 - The Precision Trimmer now uses one consolidated editor card: preview and frame rail on top, compact Boundary Strip below, then local Prev/Loop/Next controls before the main Timeline.
 - Export defaults to `Fast Original`, with `Draft Vertical` and polished social render options labeled by speed/format tradeoff.
+- Latest touch-up pass removed the old Trim toolbar button, shortened the mobile timeline, made manual timeline clips default to 1s, added mobile double-tap delete for clips, lowered generated clip Length minimum to 5s, and reduced Play Clips fallback pausing on slower devices.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

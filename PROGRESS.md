@@ -80,6 +80,14 @@
 - Verified `npm run build` succeeds after the mobile/desktop trimmer and export changes.
 - Browser-checked the refactored Pro Precision Trimmer with `Cooking_Mushrooms.mp4`: generated 8 starter clips at the 3s default pace, opened Pro tools, confirmed one consolidated trimmer, compact Boundary Strip, local clip navigation, and timeline ordering.
 - Browser-checked the Export section: `Fast Original` is selected by default and the Draft/Polished render choices communicate their speed/format tradeoff.
+- Removed the old global Trim toolbar button from Pro tools; clip-level trimming now stays in the Precision Trimmer.
+- Shortened the Pro anchor timeline on mobile from 160px to 124px while preserving the 160px desktop timeline.
+- Changed manual timeline clip creation defaults to 1 second for double-click/double-tap and the add-anchor helper.
+- Added mobile double-tap delete on existing timeline clips.
+- Lowered the Make Clips Length slider minimum from 15s to 5s for tiny simple clips.
+- Smoothed Play Clips fallback behavior by keeping the active video rolling while the hidden standby video catches up instead of pausing on slower devices.
+- Verified `npm run build` succeeds after the mobile polish and Play Clips fallback changes.
+- Browser smoke-tested with `freecompress-videoplayback.mp4`: generated clips, opened Pro tools, confirmed the Trim button is gone from the toolbar, confirmed target Length minimum is 5, and started Play Clips without runtime failure.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -100,6 +108,7 @@
 - Consider a future finishing/effects tab between Edit and Export for explicit fades, graphics, slow motion, and any intentional transition overlap behavior.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 - User feel-test needed on phone for the consolidated Boundary Strip and export defaults after the next Vercel deployment.
+- User feel-test needed on phone for the shorter mobile timeline, double-tap delete, 1s manual clip creation, and smoother Play Clips fallback.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
