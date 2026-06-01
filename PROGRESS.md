@@ -28,16 +28,23 @@
 - Synced lower timeline anchor selection with the upper clips bar index so both timeline views represent the same active clip.
 - Updated clips-bar styling so the selected clip remains visibly highlighted even when playback is not in clips mode.
 - Verified `npm run build` succeeds after the Precision Trimmer redesign.
+- Added a local-dev-only test clip harness that lists videos from `/Users/littlemac/Desktop/testclips` and loads them without using the macOS file picker.
+- Added API routes for local test clip listing/streaming; these return 404 in production.
+- Replaced the old beat-sync checkbox with mutually exclusive sync targets: Music or Original sound.
+- Fixed beat-sync analysis so music/original audio beat grids are generated lazily when auto-generation runs.
+- Auto-generation now selects the first generated clip immediately, so the Precision Trimmer is active as soon as clips are created.
+- Browser smoke test passed with `d79mAGVzZVM.mp4`: loaded via dev harness, generated Quick clips with Original sound sync, opened Pro tools, and verified Precision Trimmer active with no browser console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
 - Chrome visual verification covered the initial app shell, but not the post-upload Workspace switch because local file chooser automation was not available.
 - The loupe/selection sync change is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
-- The Precision Trimmer redesign is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
+- The Precision Trimmer redesign has been browser-tested with one real local test video; broader mobile and alternate-video testing is still useful.
 
 ## Next Logical Step
 - Validate the post-upload Workspace switch and loupe preview sync manually or with a browser tool that supports file chooser automation.
-- Validate the redesigned Precision Trimmer on desktop and mobile with a real uploaded video.
+- Validate the redesigned Precision Trimmer on mobile with a real uploaded video.
+- Audit Story vs Deep auto-generation behavior and document the practical difference before further UX copy changes.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions

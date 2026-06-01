@@ -31,6 +31,10 @@ import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
+const isLocalDev =
+  process.env.NODE_ENV !== 'production' ||
+  (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
+
 const ReelForge = () => {
   // Core video state
   const [video, setVideo] = useState(null);
@@ -132,6 +136,7 @@ const ReelForge = () => {
   const [targetDuration, setTargetDuration] = useState(20);
   const [maxClipLength, setMaxClipLength] = useState(8); // 2-15s per clip (Quick Gen)
   const [musicAnalysis, setMusicAnalysis] = useState(null);
+  const [originalSoundAnalysis, setOriginalSoundAnalysis] = useState(null);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
   // Auto-save state
   const [showRestoreToast, setShowRestoreToast] = useState(false);
@@ -181,8 +186,10 @@ const ReelForge = () => {
 
   // Auto-generate V3 state
   const [autoGenMode, setAutoGenMode] = useState('quick'); // 'quick' | 'smart' | 'pro'
-  const [enableBeatSync, setEnableBeatSync] = useState(false);
+  const [beatSyncTarget, setBeatSyncTarget] = useState('none'); // 'none' | 'music' | 'original'
   const [userApiKey, setUserApiKey] = useState('');
+  const [devTestClips, setDevTestClips] = useState([]);
+  const [isLoadingDevClip, setIsLoadingDevClip] = useState(false);
 
   // Sidebar navigation state — start false on server, sync from localStorage after hydration
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -192,6 +199,21 @@ const ReelForge = () => {
       if (saved === 'true') setSidebarCollapsed(true);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!isLocalDev) return;
+    let cancelled = false;
+    fetch('/api/dev-testclips')
+      .then(res => (res.ok ? res.json() : { clips: [] }))
+      .then(data => {
+        if (!cancelled) setDevTestClips(Array.isArray(data.clips) ? data.clips : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDevTestClips([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const [currentSection, setCurrentSection] = useState('edit'); // 'edit' | 'export'
 
   // Playback mode state
@@ -2505,9 +2527,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
   };
 
-  // Video handlers
-  const handleVideoUpload = async (e) => {
-    const file = e.target.files[0];
+  const loadVideoFile = useCallback(async (file) => {
     if (!file) return;
 
     const maxSize = 500 * 1024 * 1024;
@@ -2530,8 +2550,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setSelectedClipFocusTime(null);
     setPreviewAnchor(null);
     setCurrentTime(0);
+    setOriginalSoundAnalysis(null);
+    setMusicAnalysis(null);
     setMusic(null);
     setMusicUrl(null);
+    setBeatSyncTarget('none');
     setMediaCenterCollapsed(true);
     setWorkspaceMode('simple');
 
@@ -2569,7 +2592,32 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   } catch (error) {
     console.error('Error checking autosave:', error);
   }
+  }, [showToast]);
+
+  // Video handlers
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files[0];
+    await loadVideoFile(file);
+    e.target.value = '';
   };
+
+  const loadDevTestClip = useCallback(async (clipName) => {
+    if (!clipName || isLoadingDevClip) return;
+    try {
+      setIsLoadingDevClip(true);
+      const response = await fetch(`/api/dev-testclip?name=${encodeURIComponent(clipName)}`);
+      if (!response.ok) throw new Error('Could not load test clip');
+      const blob = await response.blob();
+      const file = new File([blob], clipName, { type: blob.type || 'video/mp4' });
+      await loadVideoFile(file);
+      showToast(`Loaded test clip: ${clipName}`, 'success');
+    } catch (error) {
+      console.error('Dev test clip load failed:', error);
+      showToast('Could not load that test clip', 'error');
+    } finally {
+      setIsLoadingDevClip(false);
+    }
+  }, [isLoadingDevClip, loadVideoFile, showToast]);
 
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
@@ -3323,9 +3371,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     const file = e.target.files[0];
     if (file) {
       setMusic(file);
+      setMusicAnalysis(null);
       const url = URL.createObjectURL(file);
       setMusicUrl(url);
       setMusicStartTime(0);
+      e.target.value = '';
     }
   };
 
@@ -5115,12 +5165,37 @@ const exportVideo = async () => {
 	                    className="hidden"
 	                  />
 	                </label>
-	                <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs text-slate-300">
-	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Up to 500 MB</span>
-	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Private in your browser</span>
-	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Export for social formats</span>
-	                </div>
-	              </div>
+		                <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs text-slate-300">
+		                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Up to 500 MB</span>
+		                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Private in your browser</span>
+		                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Export for social formats</span>
+		                </div>
+		                {isLocalDev && devTestClips.length > 0 && (
+		                  <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-slate-700/70 bg-slate-950/35 p-3 text-left">
+		                    <div className="mb-2 flex items-center justify-between gap-3">
+		                      <div>
+		                        <div className="text-xs font-bold uppercase tracking-wide text-cyan-300">Dev test clips</div>
+		                        <div className="text-xs text-slate-500">Loaded from Desktop/testclips</div>
+		                      </div>
+		                      {isLoadingDevClip && <div className="text-xs text-slate-400">Loading...</div>}
+		                    </div>
+		                    <div className="grid gap-2 sm:grid-cols-2">
+		                      {devTestClips.slice(0, 6).map(clip => (
+		                        <button
+		                          key={clip.name}
+		                          type="button"
+		                          onClick={() => loadDevTestClip(clip.name)}
+		                          disabled={isLoadingDevClip}
+		                          className="min-h-10 truncate rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-left text-xs font-semibold text-slate-200 transition hover:border-cyan-400/60 hover:text-white disabled:opacity-50"
+		                          title={clip.name}
+		                        >
+		                          {clip.name}
+		                        </button>
+		                      ))}
+		                    </div>
+		                  </div>
+		                )}
+		              </div>
             ) : (
               <div className="h-full flex flex-col">
                 {/* Optimization Progress Indicator */}
@@ -5221,10 +5296,13 @@ const exportVideo = async () => {
                           setHistoryIndex(-1);
                           setSelectedAnchor(null);
                           setSelectedClipFocusTime(null);
-                          setPreviewAnchor(null);
-                          setMusic(null);
-                          setMusicUrl(null);
-                          setPlaybackMode('full');
+	                          setPreviewAnchor(null);
+	                          setMusic(null);
+	                          setMusicUrl(null);
+	                          setMusicAnalysis(null);
+	                          setOriginalSoundAnalysis(null);
+	                          setBeatSyncTarget('none');
+	                          setPlaybackMode('full');
                         }}
                         className="w-full px-4 py-2 btn-secondary rounded-lg flex items-center justify-center gap-2 text-sm"
                         title="Change Video"
@@ -5250,10 +5328,12 @@ const exportVideo = async () => {
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-gray-300 truncate">🎵 {music.name}</span>
                               <button
-                                onClick={() => {
-                                  setMusic(null);
-                                  setMusicUrl(null);
-                                }}
+	                                onClick={() => {
+	                                  setMusic(null);
+	                                  setMusicUrl(null);
+	                                  setMusicAnalysis(null);
+	                                  if (beatSyncTarget === 'music') setBeatSyncTarget('none');
+	                                }}
                                 className="text-gray-400 hover:text-white ml-2"
                               >
                                 <X size={14} />
@@ -6673,18 +6753,43 @@ const exportVideo = async () => {
 	                            </div>
 	                          )}
 
-	                          <label className={`flex items-center gap-2 text-xs ${music ? 'text-gray-300' : 'text-slate-500'}`}>
-	                            <input
-	                              type="checkbox"
-	                              id="beat-sync-toggle"
-	                              checked={enableBeatSync}
-	                              onChange={(e) => setEnableBeatSync(e.target.checked)}
-	                              disabled={!music}
-	                              className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
-	                            />
-	                            Align cuts to music beats
-	                          </label>
-	                        </div>
+		                          <div className="rounded-lg border border-slate-700/60 bg-slate-950/30 p-2">
+		                            <div className="mb-2 text-xs font-semibold text-slate-300">Sync cuts to</div>
+		                            <div className="grid gap-2 sm:grid-cols-2">
+		                              <label className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs transition ${
+		                                music
+		                                  ? beatSyncTarget === 'music'
+		                                    ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-100'
+		                                    : 'border-slate-700 bg-slate-900/50 text-gray-300'
+		                                  : 'border-slate-800 bg-slate-900/30 text-slate-600'
+		                              }`}>
+		                                <input
+		                                  type="checkbox"
+		                                  id="beat-sync-music"
+		                                  checked={beatSyncTarget === 'music'}
+		                                  onChange={(e) => setBeatSyncTarget(e.target.checked ? 'music' : 'none')}
+		                                  disabled={!music}
+		                                  className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed"
+		                                />
+		                                Music
+		                              </label>
+		                              <label className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-xs transition ${
+		                                beatSyncTarget === 'original'
+		                                  ? 'border-pink-400/60 bg-pink-500/10 text-pink-100'
+		                                  : 'border-slate-700 bg-slate-900/50 text-gray-300'
+		                              }`}>
+		                                <input
+		                                  type="checkbox"
+		                                  id="beat-sync-original"
+		                                  checked={beatSyncTarget === 'original'}
+		                                  onChange={(e) => setBeatSyncTarget(e.target.checked ? 'original' : 'none')}
+		                                  className="h-4 w-4 cursor-pointer"
+		                                />
+		                                Original sound
+		                              </label>
+		                            </div>
+		                          </div>
+		                        </div>
 
                       {/* Auto-Generate Button */}
                       <button
@@ -6692,11 +6797,34 @@ const exportVideo = async () => {
                           if (!video || isAnalyzing) return;
 
                           try {
-                            setIsAnalyzing(true);
+	                            setIsAnalyzing(true);
 
-                            console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
+	                            console.log(`🎬 AUTO-GENERATE V3 STARTING - Mode: ${autoGenMode.toUpperCase()}`);
+	                            let beatSyncAnalysisForRun = null;
+	                            if (beatSyncTarget === 'music') {
+	                              if (!music) {
+	                                showToast('Add music before syncing cuts to music beats', 'warning');
+	                                return;
+	                              }
+	                              setAnalysisPhase('Reading music beats...');
+	                              beatSyncAnalysisForRun = musicAnalysis;
+	                              if (!beatSyncAnalysisForRun?.beatGrid?.length) {
+	                                const selectedMusicDuration = (musicEndTime || musicDuration || null)
+	                                  ? (musicEndTime || musicDuration) - musicStartTime
+	                                  : null;
+	                                beatSyncAnalysisForRun = await analyzeMusicStructure(music, musicStartTime, selectedMusicDuration);
+	                                setMusicAnalysis(beatSyncAnalysisForRun);
+	                              }
+	                            } else if (beatSyncTarget === 'original') {
+	                              setAnalysisPhase('Reading original sound beats...');
+	                              beatSyncAnalysisForRun = originalSoundAnalysis;
+	                              if (!beatSyncAnalysisForRun?.beatGrid?.length) {
+	                                beatSyncAnalysisForRun = await analyzeMusicStructure(video, 0, duration);
+	                                setOriginalSoundAnalysis(beatSyncAnalysisForRun);
+	                              }
+	                            }
 
-                            // === MODE 1: QUICK GEN (FREE - Motion Only, Variable Lengths) ===
+	                            // === MODE 1: QUICK GEN (FREE - Motion Only, Variable Lengths) ===
                             if (autoGenMode === 'quick') {
                               console.log('⚡ Quick Gen: Motion detection only (FREE)');
                               setAnalysisPhase('Detecting motion...');
@@ -6805,9 +6933,9 @@ const exportVideo = async () => {
 
                               // Step 4: Apply gentle beat-sync if enabled
                               let finalCuts = chronoCuts;
-                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-                                console.log('🎵 Applying gentle beat-sync...');
-                                finalCuts = applyGentleBeatSync(chronoCuts, musicAnalysis);
+	                              if (beatSyncAnalysisForRun?.beatGrid?.length) {
+	                                console.log(`🎵 Applying gentle beat-sync to ${beatSyncTarget}...`);
+	                                finalCuts = applyGentleBeatSync(chronoCuts, beatSyncAnalysisForRun);
                               }
 
                               // Step 5: Create anchors
@@ -6825,9 +6953,16 @@ const exportVideo = async () => {
                                 target: targetDuration + 's'
                               });
 
-                              setAnchors(finalAnchors);
-                              saveToHistory(finalAnchors);
-                            }
+	                              setAnchors(finalAnchors);
+	                              saveToHistory(finalAnchors);
+	                              if (finalAnchors[0]) {
+	                                setSelectedAnchor(finalAnchors[0].id);
+	                                setSelectedClipFocusTime(finalAnchors[0].start);
+	                                setPreviewAnchorIndex(0);
+	                                previewAnchorIndexRef.current = 0;
+	                                setPlaybackMode('clips');
+	                              }
+	                            }
 
                             // === MODE 2: SMART GEN (V5 - Five-Phase: Gather → Analyze → Seek → Supplement → Select) ===
                             else if (autoGenMode === 'smart') {
@@ -6944,8 +7079,8 @@ const exportVideo = async () => {
 
                               // Apply beat-sync if enabled
                               let selectedClips = finalSelection.selectedClips;
-                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-                                selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
+	                              if (beatSyncAnalysisForRun?.beatGrid?.length) {
+	                                selectedClips = applyGentleBeatSync(selectedClips, beatSyncAnalysisForRun);
                               }
 
                               // Resolve timestamps via moment inventory (fixes 0:00 clustering)
@@ -6966,9 +7101,16 @@ const exportVideo = async () => {
                                 totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
                               });
 
-                              setAnchors(newAnchors);
-                              saveToHistory(newAnchors);
-                            }
+	                              setAnchors(newAnchors);
+	                              saveToHistory(newAnchors);
+	                              if (newAnchors[0]) {
+	                                setSelectedAnchor(newAnchors[0].id);
+	                                setSelectedClipFocusTime(newAnchors[0].start);
+	                                setPreviewAnchorIndex(0);
+	                                previewAnchorIndexRef.current = 0;
+	                                setPlaybackMode('clips');
+	                              }
+	                            }
 
                             // === MODE 3: PRO GEN (Full Narrative Analysis) ===
                             else if (autoGenMode === 'pro') {
@@ -7051,8 +7193,8 @@ const exportVideo = async () => {
                               }
 
                               let selectedClips = finalSelection.selectedClips;
-                              if (enableBeatSync && musicAnalysis?.beatGrid && music) {
-                                selectedClips = applyGentleBeatSync(selectedClips, musicAnalysis);
+	                              if (beatSyncAnalysisForRun?.beatGrid?.length) {
+	                                selectedClips = applyGentleBeatSync(selectedClips, beatSyncAnalysisForRun);
                               }
 
                               const resolvedClips = resolveAndValidateClips(selectedClips, allMoments, duration);
@@ -7069,9 +7211,16 @@ const exportVideo = async () => {
                                 totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
                               });
 
-                              setAnchors(newAnchors);
-                              saveToHistory(newAnchors);
-                            }
+	                              setAnchors(newAnchors);
+	                              saveToHistory(newAnchors);
+	                              if (newAnchors[0]) {
+	                                setSelectedAnchor(newAnchors[0].id);
+	                                setSelectedClipFocusTime(newAnchors[0].start);
+	                                setPreviewAnchorIndex(0);
+	                                previewAnchorIndexRef.current = 0;
+	                                setPlaybackMode('clips');
+	                              }
+	                            }
 
                           } catch (error) {
                             console.error('❌ Auto-generate error:', error);

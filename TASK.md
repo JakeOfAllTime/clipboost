@@ -12,4 +12,7 @@ in progress
 - Synced clips-bar selection/scrubbing with the Pro tools loupe and mini preview so the active clip/frame has one source of truth.
 - Backed up the current refactor state separately before continuing: `/Users/littlemac/Desktop/clipboost-loupe-refactor-backup-20260601-093832` and git tag `backup-before-precision-redesign-20260601`.
 - Redesigned the inline Pro tools Precision Trimmer as a larger active-clip inspector with clearer start/end frame controls and synced clips-bar highlighting.
+- Added a local-dev-only test clip loader for `/Users/littlemac/Desktop/testclips`.
+- Added exclusive beat-sync targets for Music vs Original sound and fixed lazy beat-grid analysis for both.
+- Browser smoke-tested Quick Gen with Original sound sync using `d79mAGVzZVM.mp4`; Pro tools opened with the Precision Trimmer active.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
