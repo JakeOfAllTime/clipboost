@@ -3623,19 +3623,53 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   }, [duration, anchors, saveToHistory, showToast]);
 
   const deleteAnchor = useCallback((anchorId) => {
+    const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (upgradeTimerRef.current) {
+      clearTimeout(upgradeTimerRef.current);
+      upgradeTimerRef.current = null;
+    }
+    lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+    setHoldingAnchor(null);
+    setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
+
+    const sortedAnchors = [...anchors].sort((a, b) => a.start - b.start);
+    const removedIndex = sortedAnchors.findIndex(a => a.id === anchorId);
     const updated = anchors.filter(a => a.id !== anchorId);
+    const sortedUpdated = sortedAnchors.filter(a => a.id !== anchorId);
+    const replacementIndex = Math.max(0, Math.min(removedIndex, sortedUpdated.length - 1));
+    const replacementAnchor = sortedUpdated[replacementIndex] || null;
+
     setAnchors(updated);
     saveToHistory(updated);
-    if (selectedAnchor === anchorId) {
-      setSelectedAnchor(null);
-      setSelectedClipFocusTime(null);
+
+    if (selectedAnchor === anchorId || previewAnchor?.id === anchorId) {
+      if (replacementAnchor) {
+        setSelectedAnchor(replacementAnchor.id);
+        setSelectedClipFocusTime(replacementAnchor.start);
+        setPreviewAnchor(replacementAnchor);
+        setPreviewHandle('start');
+        syncPreviewIndexForAnchor(replacementAnchor.id);
+        if (previewVideoRef.current) previewVideoRef.current.currentTime = replacementAnchor.start;
+        if (cardVideoRef.current) cardVideoRef.current.currentTime = replacementAnchor.start;
+      } else {
+        setSelectedAnchor(null);
+        setSelectedClipFocusTime(null);
+        setPreviewAnchor(null);
+      }
     }
-    if (previewAnchor?.id === anchorId) {
-      setPreviewAnchor(null);
+
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+      setTimeout(() => window.scrollTo(0, scrollY), 0);
     }
+
     // Mark delete hint as seen
     setHasSeenDeleteHint(true);
-  }, [anchors, saveToHistory, selectedAnchor, previewAnchor]);
+  }, [anchors, saveToHistory, selectedAnchor, previewAnchor, syncPreviewIndexForAnchor]);
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const nudgeAnchor = useCallback((handle, direction, frames = 1, options = {}) => {
@@ -6354,6 +6388,7 @@ const exportVideo = async () => {
                                       onClick={(e) => handleAnchorClick(e, anchor)}
                                       onDoubleClick={(e) => {
                                         e.stopPropagation();
+                                        e.preventDefault();
                                         deleteAnchor(anchor.id);
                                       }}
                                       onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}

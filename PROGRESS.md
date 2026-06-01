@@ -94,6 +94,8 @@
 - Consolidated manual timeline clip creation into one shared helper, preserving the 1s default and overlap prevention for desktop double-click and mobile double-tap.
 - Verified a clean `npm run build` succeeds after removing `.next`.
 - Browser smoke-tested with `freecompress-videoplayback.mp4`: generated clips, opened Pro tools, confirmed the current Precision Trimmer/Boundary Strip/Timeline render, confirmed no old Trim/Apply Trim controls or modal overlays remain, and double-clicked the timeline lane to add one manual clip with no console errors.
+- Fixed repeated anchor deletion on phone/desktop by clearing pending hold-to-drag timers, resetting double-tap state, auto-selecting the nearest remaining clip, and restoring scroll position after delete.
+- Browser-tested repeated timeline anchor deletion with `freecompress-videoplayback.mp4`: 7 clips deleted down to 4 in sequence, the Precision Trimmer stayed active on the next clip, scroll stayed stable, and no console errors appeared.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -116,6 +118,7 @@
 - User feel-test needed on phone for the consolidated Boundary Strip and export defaults after the next Vercel deployment.
 - User feel-test needed on phone for the shorter mobile timeline, double-tap delete, 1s manual clip creation, and smoother Play Clips fallback.
 - Next engineering pass should focus on Story vs Deep auto-generation behavior now that the UI cleanup/refactor surface is leaner.
+- User phone re-test needed for repeated double-tap anchor deletion after the timer/selection fix.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
