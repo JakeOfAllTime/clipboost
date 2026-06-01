@@ -196,7 +196,7 @@ const ReelForge = () => {
   const [playbackMode, setPlaybackMode] = useState('full'); // 'full' | 'clips'
 
   // Media Center collapse state
-  const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(false);
+  const [mediaCenterCollapsed, setMediaCenterCollapsed] = useState(true);
   const [previewCardLooping, setPreviewCardLooping] = useState(true); // Phase 5B: clip loop in preview card
   const [cardVideoPlaying, setCardVideoPlaying] = useState(false);   // tracks play/pause for overlay button
 
@@ -555,7 +555,7 @@ const dismissRestoreToast = () => {
       version: '1.0',
       timestamp: new Date().toISOString()
     };
-    
+
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1347,7 +1347,7 @@ const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) =
   try {
     // Build frame manifest with exact timestamps
     const frameManifest = allFrames.map((frame, idx) =>
-      `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.zone} zone)`
+      `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.timestamp.toFixed(2)}s) - ${frame.zone} zone`
     ).join('\n');
 
     // Build zone summary for Claude
@@ -2529,6 +2529,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     setCurrentTime(0);
     setMusic(null);
     setMusicUrl(null);
+    setMediaCenterCollapsed(true);
 
     // OPTIMIZATION TEMPORARILY DISABLED (takes several minutes)
     // Testing dual-video system with original video first
@@ -4187,7 +4188,7 @@ const goToNextAnchor = () => {
     const anchorCenter = (anchor.start + anchor.end) / 2;
     const viewStart = Math.max(0, anchorCenter - viewportDuration / 2);
     const viewEnd = Math.min(duration, viewStart + viewportDuration);
-    
+
     return {
       start: viewStart,
       end: viewEnd
@@ -4255,7 +4256,7 @@ const goToNextAnchor = () => {
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         if (!precisionTimelineRef.current) return;
-        
+
         const rect = precisionTimelineRef.current.getBoundingClientRect();
         const deltaX = lastClientX - precisionDragState.startX;
         const range = getPrecisionRange(precisionDragState.startAnchor);
@@ -4611,11 +4612,11 @@ const exportVideo = async () => {
       const musicVolume = audioBalance / 100;
 
       // Trim music with stream copy
-      const musicDuration = (musicEndTime || musicDuration) - musicStartTime;
+      const selectedMusicDuration = (musicEndTime || musicDuration) - musicStartTime;
 
       await ffmpeg.exec([
         '-ss', musicStartTime.toFixed(3),
-        '-t', musicDuration.toFixed(3),
+        '-t', selectedMusicDuration.toFixed(3),
         '-i', 'music.mp3',
         '-c:a', 'copy',
         'trimmed_music.mp3'
@@ -4714,7 +4715,7 @@ const exportVideo = async () => {
           e.preventDefault();
           const newTime = precisionAnchor[selectedHandle] - 1/30;
           const range = getPrecisionRange(precisionAnchor);
-          
+
           if (selectedHandle === 'start') {
             const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
             setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -4812,6 +4813,31 @@ const exportVideo = async () => {
   }, [video, selectedAnchor, currentTime, duration, isPlaying, showPrecisionModal, precisionPlaying, historyIndex, selectedHandle, precisionAnchor]);
 
   const anchorTime = anchors.reduce((sum, a) => sum + (a.end - a.start), 0);
+  const workflowSteps = [
+    {
+      label: 'Add video',
+      value: video ? video.name : 'Waiting for a file',
+      done: !!video,
+      active: !video
+    },
+    {
+      label: 'Choose moments',
+      value: anchors.length > 0 ? `${anchors.length} clip${anchors.length === 1 ? '' : 's'} selected` : 'Make clips automatically or mark your own',
+      done: anchors.length > 0,
+      active: !!video && anchors.length === 0
+    },
+    {
+      label: 'Preview and export',
+      value: anchors.length > 0 ? `${formatTime(anchorTime)} ready` : 'Unlocked after clips exist',
+      done: currentSection === 'export' && anchors.length > 0,
+      active: anchors.length > 0
+    }
+  ];
+  const activeAutoGenLabel = autoGenMode === 'quick'
+    ? 'Create starter clips'
+    : autoGenMode === 'smart'
+      ? 'Find story moments'
+      : 'Build best cut';
 
   return (
 <>
@@ -4823,7 +4849,7 @@ const exportVideo = async () => {
   {/* Animated Hero Gradient Background */}
   <div className="hero-gradient">
     <div className="hero-particles" />
-  </div>
+		                      </div>
 
   {/* Sidebar Navigation */}
   <div
@@ -4850,7 +4876,7 @@ const exportVideo = async () => {
       >
         {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </button>
-    </div>
+		                          </div>
 
     {/* Navigation Items */}
     <nav className="flex-1 p-2">
@@ -4923,17 +4949,43 @@ const exportVideo = async () => {
   <div className="flex-1 overflow-y-auto pb-20 sm:pb-0 relative z-10">
     <div className="px-0 py-1 sm:p-8 w-full sm:max-w-7xl sm:mx-auto">
       {/* Header */}
-      <div className="mb-2 sm:mb-6 px-2 sm:px-0">
-        <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
-          {currentSection === 'edit' ? 'EDIT VIDEO' : 'EXPORT VIDEO'}
-        </h2>
-        <p className="text-sm sm:text-base mt-2" style={{ color: 'var(--text-secondary)' }}>
-          {currentSection === 'edit'
-            ? 'Upload, trim, and add music to your video'
-            : 'Choose platforms and export your final video'
-          }
-        </p>
-      </div>
+	      <div className="mb-2 sm:mb-6 px-2 sm:px-0">
+	        <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: 'var(--text-primary)', letterSpacing: '0.5px', fontWeight: 800 }}>
+	          {currentSection === 'edit' ? 'MAKE YOUR REEL' : 'EXPORT YOUR REEL'}
+	        </h2>
+	        <p className="text-sm sm:text-base mt-2" style={{ color: 'var(--text-secondary)' }}>
+	          {currentSection === 'edit'
+	            ? 'Start with a draft, keep the best moments, then polish only what needs it.'
+	            : 'Choose the formats you need and download the finished edit.'
+	          }
+	        </p>
+	      </div>
+	      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 sm:mb-6 px-2 sm:px-0">
+	        {workflowSteps.map((step, index) => (
+	          <div
+	            key={step.label}
+	            className={`rounded-lg border p-3 transition-all ${
+	              step.active
+	                ? 'border-cyan-400/60 bg-cyan-500/10 shadow-[0_0_18px_rgba(0,212,255,0.18)]'
+	                : step.done
+	                  ? 'border-emerald-400/40 bg-emerald-500/10'
+	                  : 'border-slate-700/70 bg-slate-900/30'
+	            }`}
+	          >
+	            <div className="flex items-center gap-2">
+	              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+	                step.done ? 'bg-emerald-400 text-slate-950' : step.active ? 'bg-cyan-400 text-slate-950' : 'bg-slate-700 text-slate-300'
+	              }`}>
+	                {step.done ? 'OK' : index + 1}
+	              </div>
+	              <div className="min-w-0">
+	                <div className="text-sm font-semibold text-white">{step.label}</div>
+	                <div className="truncate text-xs text-slate-400">{step.value}</div>
+	              </div>
+	            </div>
+	          </div>
+	        ))}
+	      </div>
 {/* Restore Toast Notification */}
         {showRestoreToast && (
           <div className="fixed top-4 right-4 bg-slate-800 border-2 border-cyan-500/40 rounded-lg shadow-2xl p-4 z-50 max-w-sm">
@@ -4972,7 +5024,7 @@ const exportVideo = async () => {
               </button>
             </div>
           </div>
-        )}
+		                          )}
 
         {/* Analysis Progress Indicator */}
         {isAnalyzing && (
@@ -4996,21 +5048,31 @@ const exportVideo = async () => {
         {/* EDIT SECTION (combines Materials + Forge) */}
         {currentSection === 'edit' && (
           <div className="panel rounded-2xl p-2 sm:p-12">
-            {!video ? (
-              <div className="text-center">
-                <Upload className="w-16 h-16 mx-auto mb-4" style={{ color: 'var(--accent-warm)' }} />
-                <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Upload Your Video</h2>
-                <p className="mb-6" style={{ color: 'var(--text-dim)' }}>Maximum file size: 500 MB</p>
-                <label className="inline-block px-8 py-4 btn-primary rounded-lg font-semibold cursor-pointer hover:scale-105 transition-transform">
-                  Choose Video
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleVideoUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+	            {!video ? (
+	              <div className="mx-auto max-w-3xl text-center py-8 sm:py-12">
+	                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-400/30 shadow-[0_0_28px_rgba(0,212,255,0.18)]">
+	                  <Upload className="w-10 h-10" style={{ color: 'var(--accent-cyan)' }} />
+	                </div>
+	                <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Start With One Video</h2>
+	                <p className="mx-auto mb-6 max-w-xl text-sm sm:text-base" style={{ color: 'var(--text-secondary)' }}>
+	                  Drop in raw footage and create a first cut before touching any advanced controls.
+	                </p>
+	                <label className="inline-flex items-center gap-2 px-8 py-4 btn-primary rounded-xl font-bold cursor-pointer hover:scale-105 transition-transform">
+	                  <Upload size={18} />
+	                  Choose Video
+	                  <input
+	                    type="file"
+	                    accept="video/*"
+	                    onChange={handleVideoUpload}
+	                    className="hidden"
+	                  />
+	                </label>
+	                <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs text-slate-300">
+	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Up to 500 MB</span>
+	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Private in your browser</span>
+	                  <span className="rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1">Export for social formats</span>
+	                </div>
+	              </div>
             ) : (
               <div className="h-full flex flex-col">
                 {/* Optimization Progress Indicator */}
@@ -5037,9 +5099,9 @@ const exportVideo = async () => {
                     className="w-full flex items-center justify-between p-2 sm:p-4 hover:bg-slate-800/30 transition-colors rounded-t-xl"
                   >
                     <div className="flex items-center gap-2">
-                      <h3 className="text-base sm:text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        🎬 Media Center
-                      </h3>
+	                      <h3 className="text-base sm:text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+	                        Source and Music
+	                      </h3>
                       <span className="text-xs text-gray-400">
                         {video.name} • {formatTime(duration)}
                       </span>
@@ -6347,108 +6409,86 @@ const exportVideo = async () => {
                     </div>
 
                     {/* Auto-Generator Controls */}
-                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3">
-                      {/* Mode Selection + Beat-Sync */}
-                      <div className="flex flex-wrap items-center gap-3 text-xs">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            id="mode-quick"
-                            name="autoGenMode"
-                            value="quick"
-                            checked={autoGenMode === 'quick'}
-                            onChange={(e) => setAutoGenMode(e.target.value)}
-                            className="w-3 h-3"
-                          />
-                          <label htmlFor="mode-quick" className="cursor-pointer" title="Motion detection — instant, no API cost">
-                            <span className="text-gray-300">Quick</span> <span className="text-green-400">(FREE)</span>
-                            <span className="hidden sm:inline text-gray-500 ml-1">· motion detection</span>
-                          </label>
-                        </div>
+	                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-slate-700/60">
+	                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	                        <div>
+	                          <div className="text-sm font-bold text-white">Make Clips</div>
+	                          <div className="text-xs text-slate-400">
+	                            {anchors.length > 0 ? 'Replace the current draft or keep trimming by hand.' : 'Create a first draft, then adjust the timeline.'}
+	                          </div>
+	                        </div>
+	                        <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-950/50 p-1 text-xs">
+	                          {[
+	                            { id: 'quick', label: 'Fast', note: 'free' },
+	                            { id: 'smart', label: 'Story', note: '$0.60' },
+	                            { id: 'pro', label: 'Deep', note: '$1.20' }
+	                          ].map(mode => (
+	                            <button
+	                              key={mode.id}
+	                              type="button"
+	                              onClick={() => setAutoGenMode(mode.id)}
+	                              aria-pressed={autoGenMode === mode.id}
+	                              className={`min-h-11 rounded-md px-3 py-2 font-semibold transition ${
+	                                autoGenMode === mode.id
+	                                  ? 'bg-cyan-400 text-slate-950 shadow-[0_0_14px_rgba(0,212,255,0.35)]'
+	                                  : 'text-slate-300 hover:bg-slate-800'
+	                              }`}
+	                            >
+	                              <span className="block leading-tight">{mode.label}</span>
+	                              <span className={`block text-[10px] leading-tight ${autoGenMode === mode.id ? 'text-slate-700' : 'text-slate-500'}`}>{mode.note}</span>
+	                            </button>
+	                          ))}
+	                        </div>
+	                      </div>
 
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            id="mode-smart"
-                            name="autoGenMode"
-                            value="smart"
-                            checked={autoGenMode === 'smart'}
-                            onChange={(e) => setAutoGenMode(e.target.value)}
-                            className="w-3 h-3"
-                          />
-                          <label htmlFor="mode-smart" className="cursor-pointer" title="AI narrative analysis — understands story structure">
-                            <span className="text-gray-300">Smart</span> <span className="text-blue-400">($0.60)</span>
-                            <span className="hidden sm:inline text-gray-500 ml-1">· AI narrative</span>
-                          </label>
-                        </div>
+	                      <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+	                        <div className="space-y-3">
+	                          <div className="flex items-center gap-3 text-xs">
+	                            <label htmlFor="target-duration" className="w-24 text-gray-300">
+	                              Length: {targetDuration}s
+	                            </label>
+	                            <input
+	                              type="range"
+	                              id="target-duration"
+	                              min="15"
+	                              max="180"
+	                              step="1"
+	                              value={targetDuration}
+	                              onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+	                              className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-cyan-300 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-400 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+	                            />
+	                          </div>
 
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            id="mode-pro"
-                            name="autoGenMode"
-                            value="pro"
-                            checked={autoGenMode === 'pro'}
-                            onChange={(e) => setAutoGenMode(e.target.value)}
-                            className="w-3 h-3"
-                          />
-                          <label htmlFor="mode-pro" className="cursor-pointer" title="Deep AI analysis — best results for complex videos">
-                            <span className="text-gray-300">Pro</span> <span className="text-purple-400">($1.20)</span>
-                            <span className="hidden sm:inline text-gray-500 ml-1">· deep analysis</span>
-                          </label>
-                        </div>
+	                          {autoGenMode === 'quick' && (
+	                            <div className="flex items-center gap-3 text-xs">
+	                              <label htmlFor="max-clip-length" className="w-24 text-gray-300">
+	                                Pace: {maxClipLength}s
+	                              </label>
+	                              <input
+	                                type="range"
+	                                id="max-clip-length"
+	                                min="2"
+	                                max="15"
+	                                step="1"
+	                                value={maxClipLength}
+	                                onChange={(e) => setMaxClipLength(parseInt(e.target.value))}
+	                                className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-pink-400 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-pink-300 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-pink-400 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+	                              />
+	                            </div>
+	                          )}
 
-                        <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-600">
-                          <input
-                            type="checkbox"
-                            id="beat-sync-toggle"
-                            checked={enableBeatSync}
-                            onChange={(e) => setEnableBeatSync(e.target.checked)}
-                            disabled={!music}
-                            className="w-3 h-3 cursor-pointer"
-                          />
-                          <label htmlFor="beat-sync-toggle" className="cursor-pointer text-gray-300">
-                            Beat-Sync
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Target Duration Slider */}
-                      <div className="flex items-center gap-3 text-xs">
-                        <label htmlFor="target-duration" className="text-gray-300 whitespace-nowrap">
-                          Target: {targetDuration}s
-                        </label>
-                        <input
-                          type="range"
-                          id="target-duration"
-                          min="15"
-                          max="180"
-                          step="1"
-                          value={targetDuration}
-                          onChange={(e) => setTargetDuration(parseInt(e.target.value))}
-                          className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-amber-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-amber-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
-                        />
-                        <span className="text-gray-500 text-xs">180s</span>
-                      </div>
-
-                      {/* Max Clip Length Slider (Quick Gen only) */}
-                      {autoGenMode === 'quick' && (
-                        <div className="flex items-center gap-3 text-xs">
-                          <label className="text-gray-300 whitespace-nowrap">
-                            Max clip: {maxClipLength}s
-                          </label>
-                          <input
-                            type="range"
-                            min="2"
-                            max="15"
-                            step="1"
-                            value={maxClipLength}
-                            onChange={(e) => setMaxClipLength(parseInt(e.target.value))}
-                            className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-cyan-400 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
-                          />
-                          <span className="text-gray-500 text-xs">15s</span>
-                        </div>
-                      )}
+	                          <label className={`flex items-center gap-2 text-xs ${music ? 'text-gray-300' : 'text-slate-500'}`}>
+	                            <input
+	                              type="checkbox"
+	                              id="beat-sync-toggle"
+	                              checked={enableBeatSync}
+	                              onChange={(e) => setEnableBeatSync(e.target.checked)}
+	                              disabled={!music}
+	                              className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+	                            />
+	                            Align cuts to music beats
+	                          </label>
+	                        </div>
 
                       {/* Auto-Generate Button */}
                       <button
@@ -6622,10 +6662,18 @@ const exportVideo = async () => {
                               // Build initial moment inventory with zone enrichment
                               const enrichMomentsWithZones = (moments, zones) => {
                                 return moments.map(moment => {
+                                  const frameIndex = Number(moment.frameReference);
+                                  const referencedFrame = Number.isFinite(frameIndex)
+                                    ? allFrames[frameIndex - 1]
+                                    : null;
+                                  const timestamp = Number.isFinite(referencedFrame?.timestamp)
+                                    ? referencedFrame.timestamp
+                                    : moment.timestamp;
                                   // Find which zone this timestamp falls into
-                                  const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
+                                  const zone = zones.find(z => timestamp >= z.start && timestamp <= z.end);
                                   return {
                                     ...moment,
+                                    timestamp,
                                     zone: zone?.name || 'unknown',
                                     zoneIndex: zones.indexOf(zone)
                                   };
@@ -6691,7 +6739,7 @@ const exportVideo = async () => {
                               // PHASE 5: Final selection
                               setAnalysisProgress(85);
                               setAnalysisPhase('Selecting best clips...');
-                              const finalSelection = await selectFinalClips(allMoments, targetDuration, zones);
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType || 'video');
 
                               if (!finalSelection || !finalSelection.selectedClips) {
                                 showToast('Clip selection failed — please try again', 'error');
@@ -6748,9 +6796,17 @@ const exportVideo = async () => {
 
                               const enrichMomentsWithZones = (moments, zones) => {
                                 return moments.map(moment => {
-                                  const zone = zones.find(z => moment.timestamp >= z.start && moment.timestamp <= z.end);
+                                  const frameIndex = Number(moment.frameReference);
+                                  const referencedFrame = Number.isFinite(frameIndex)
+                                    ? allFrames[frameIndex - 1]
+                                    : null;
+                                  const timestamp = Number.isFinite(referencedFrame?.timestamp)
+                                    ? referencedFrame.timestamp
+                                    : moment.timestamp;
+                                  const zone = zones.find(z => timestamp >= z.start && timestamp <= z.end);
                                   return {
                                     ...moment,
+                                    timestamp,
                                     zone: zone?.name || 'unknown',
                                     zoneIndex: zones.indexOf(zone)
                                   };
@@ -6791,7 +6847,7 @@ const exportVideo = async () => {
                               }
 
                               // Final selection with pro quality
-                              const finalSelection = await selectFinalClips(allMoments, targetDuration, zones, { mode: 'pro' });
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video');
 
                               if (!finalSelection || !finalSelection.selectedClips) {
                                 showToast('Clip selection failed — please try again', 'error');
@@ -6829,14 +6885,15 @@ const exportVideo = async () => {
                             setAnalysisProgress(0);
                             setAnalysisPhase('');
                           }
-                        }}
-                        disabled={!duration || isAnalyzing}
-                        className="w-full px-4 py-2 bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500 hover:shadow-[0_0_25px_rgba(255,0,255,0.5)] rounded-xl flex items-center justify-center gap-2 font-bold uppercase shadow-lg transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-                      >
-                        <Sparkles size={18} className="animate-pulse" />
-                        <span>{isAnalyzing ? 'ANALYZING...' : 'AUTO-GEN ✨'}</span>
-                      </button>
-                    </div>
+	                        }}
+	                        disabled={!duration || isAnalyzing}
+	                        className="w-full min-h-12 px-5 py-3 bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500 hover:shadow-[0_0_25px_rgba(255,0,255,0.5)] rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] lg:w-56"
+	                      >
+	                        <Sparkles size={18} className="animate-pulse" />
+	                        <span>{isAnalyzing ? 'Working...' : activeAutoGenLabel}</span>
+	                      </button>
+	                      </div>
+	                    </div>
                   </div>
                   {/* End Action Toolbar Section */}
 
@@ -7103,11 +7160,11 @@ const exportVideo = async () => {
     onMouseDown={(e) => {
       e.preventDefault();
       if (!precisionVideoRef.current || !precisionAnchor) return;
-      
+
       const step = () => {
         const newTime = precisionAnchor[selectedHandle] - 1/30;
         const range = getPrecisionRange(precisionAnchor);
-        
+
         if (selectedHandle === 'start') {
           const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
           setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -7120,10 +7177,10 @@ const exportVideo = async () => {
           precisionVideoRef.current.currentTime = constrainedTime;
         }
       };
-      
+
       step();
       const interval = setInterval(step, 100);
-      
+
       const cleanup = () => clearInterval(interval);
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
@@ -7131,11 +7188,11 @@ const exportVideo = async () => {
     onTouchStart={(e) => {
       e.preventDefault();
       if (!precisionVideoRef.current || !precisionAnchor) return;
-      
+
       const step = () => {
         const newTime = precisionAnchor[selectedHandle] - 1/30;
         const range = getPrecisionRange(precisionAnchor);
-        
+
         if (selectedHandle === 'start') {
           const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
           setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -7148,10 +7205,10 @@ const exportVideo = async () => {
           precisionVideoRef.current.currentTime = constrainedTime;
         }
       };
-      
+
       step();
       const interval = setInterval(step, 100);
-      
+
       const cleanup = () => clearInterval(interval);
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
@@ -7172,11 +7229,11 @@ const exportVideo = async () => {
     onMouseDown={(e) => {
       e.preventDefault();
       if (!precisionVideoRef.current || !precisionAnchor) return;
-      
+
       const step = () => {
         const newTime = precisionAnchor[selectedHandle] + 1/30;
         const range = getPrecisionRange(precisionAnchor);
-        
+
         if (selectedHandle === 'start') {
           const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
           setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -7189,10 +7246,10 @@ const exportVideo = async () => {
           precisionVideoRef.current.currentTime = constrainedTime;
         }
       };
-      
+
       step();
       const interval = setInterval(step, 100);
-      
+
       const cleanup = () => clearInterval(interval);
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
@@ -7200,11 +7257,11 @@ const exportVideo = async () => {
     onTouchStart={(e) => {
       e.preventDefault();
       if (!precisionVideoRef.current || !precisionAnchor) return;
-      
+
       const step = () => {
         const newTime = precisionAnchor[selectedHandle] + 1/30;
         const range = getPrecisionRange(precisionAnchor);
-        
+
         if (selectedHandle === 'start') {
           const constrainedTime = Math.max(range.start, Math.min(precisionAnchor.end - 1, newTime));
           setPrecisionAnchor(prev => ({ ...prev, start: constrainedTime }));
@@ -7217,10 +7274,10 @@ const exportVideo = async () => {
           precisionVideoRef.current.currentTime = constrainedTime;
         }
       };
-      
+
       step();
       const interval = setInterval(step, 100);
-      
+
       const cleanup = () => clearInterval(interval);
       document.addEventListener('mouseup', cleanup, { once: true });
       document.addEventListener('touchend', cleanup, { once: true });
