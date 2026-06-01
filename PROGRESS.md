@@ -34,17 +34,18 @@
 - Fixed beat-sync analysis so music/original audio beat grids are generated lazily when auto-generation runs.
 - Auto-generation now selects the first generated clip immediately, so the Precision Trimmer is active as soon as clips are created.
 - Browser smoke test passed with `d79mAGVzZVM.mp4`: loaded via dev harness, generated Quick clips with Original sound sync, opened Pro tools, and verified Precision Trimmer active with no browser console errors.
+- `npm run build` passes after the dev test harness and beat-sync target changes.
+- Restarted the dev server cleanly on port 3002 after clearing `.next`; `curl` returns 200 and the in-app browser reports no console errors on the loaded app.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
-- Chrome visual verification covered the initial app shell, but not the post-upload Workspace switch because local file chooser automation was not available.
-- The loupe/selection sync change is build-verified and app-shell verified, but still needs hands-on post-upload testing with a real video.
+- The local file chooser limitation was worked around with the dev-only `/Users/littlemac/Desktop/testclips` loader.
 - The Precision Trimmer redesign has been browser-tested with one real local test video; broader mobile and alternate-video testing is still useful.
 
 ## Next Logical Step
-- Validate the post-upload Workspace switch and loupe preview sync manually or with a browser tool that supports file chooser automation.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.
 - Audit Story vs Deep auto-generation behavior and document the practical difference before further UX copy changes.
+- Audit the auto-generator pipeline for timestamp distribution, frame manifest usage, and how beat-sync target selection affects generated clips.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
 
 ## Open Questions
