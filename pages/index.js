@@ -27,7 +27,7 @@ import Head from 'next/head';
  *                                           distribution rebalancing; not written to user anchors.
  */
 
-import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Upload, Play, Pause, Trash2, Sparkles, Download, Scissors, X, RotateCcw, RotateCw, Edit, ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
@@ -36,6 +36,8 @@ const isLocalDev =
   (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
 
 const ReelForge = () => {
+  const FRAME_STEP = 1 / 30;
+
   // Core video state
   const [video, setVideo] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -184,6 +186,38 @@ const ReelForge = () => {
 
   // Timeline zoom state
   const [timelineZoom, setTimelineZoom] = useState(1);
+
+  const selectedTimelineAnchor = useMemo(
+    () => anchors.find(a => a.id === selectedAnchor) || null,
+    [anchors, selectedAnchor]
+  );
+
+  const timelineView = useMemo(() => {
+    if (!duration || timelineZoom <= 1 || !selectedTimelineAnchor) {
+      return { start: 0, end: duration || 0, duration: duration || 1, zoomed: false };
+    }
+
+    const anchorDuration = Math.max(FRAME_STEP, selectedTimelineAnchor.end - selectedTimelineAnchor.start);
+    const windowDuration = Math.min(
+      duration,
+      Math.max(90, anchorDuration + 30, anchorDuration * 1.8)
+    );
+    const focusTime = selectedClipFocusTime ?? ((selectedTimelineAnchor.start + selectedTimelineAnchor.end) / 2);
+    const start = Math.max(0, Math.min(duration - windowDuration, focusTime - (windowDuration / 2)));
+    const end = Math.min(duration, start + windowDuration);
+
+    return { start, end, duration: Math.max(FRAME_STEP, end - start), zoomed: true };
+  }, [duration, selectedTimelineAnchor, selectedClipFocusTime, timelineZoom]);
+
+  const getTimelineTimeFromClientX = useCallback((clientX, rect) => {
+    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return timelineView.start + (percent * timelineView.duration);
+  }, [timelineView]);
+
+  const getTimelinePercent = useCallback((time) => {
+    if (!timelineView.duration) return 0;
+    return ((time - timelineView.start) / timelineView.duration) * 100;
+  }, [timelineView]);
 
   // Clip thumbnails: Map<anchorId, dataURL> — captured from video midpoint
   const [clipThumbnails, setClipThumbnails] = useState({});
@@ -2712,9 +2746,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     currentTimeRef.current = time;
 
     // Direct DOM updates - no React re-render (60fps optimization)
-    const percent = (time / duration) * 100;
+    const percent = Math.max(0, Math.min(100, getTimelinePercent(time)));
+    const isInTimelineView = time >= timelineView.start && time <= timelineView.end;
 
     if (playheadRef.current) {
+      playheadRef.current.style.display = isInTimelineView ? 'block' : 'none';
       playheadRef.current.style.left = `${percent}%`;
     }
     if (playheadProgressRef.current) {
@@ -2723,7 +2759,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (timeDisplayRef.current) {
       timeDisplayRef.current.textContent = `${formatTime(time)} / ${formatTime(duration)}`;
     }
-  }, [duration]);
+  }, [duration, getTimelinePercent, timelineView]);
 
   // Preview mode functions
   const startPreviewMode = () => {
@@ -2877,8 +2913,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
     // Update main timeline playhead to the source position
     if (duration > 0) {
-      const pct = (sourceTime / duration) * 100;
-      if (playheadRef.current) playheadRef.current.style.left = `${pct}%`;
+      const pct = Math.max(0, Math.min(100, getTimelinePercent(sourceTime)));
+      const isInTimelineView = sourceTime >= timelineView.start && sourceTime <= timelineView.end;
+      if (playheadRef.current) {
+        playheadRef.current.style.display = isInTimelineView ? 'block' : 'none';
+        playheadRef.current.style.left = `${pct}%`;
+      }
       if (playheadProgressRef.current) playheadProgressRef.current.style.width = `${pct}%`;
     }
 
@@ -2887,7 +2927,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       const musicTime = (segment.musicTime ?? 0) + offset;
       musicRef.current.currentTime = Math.max(0, musicTime);
     }
-  }, [findSegmentAtTime, music, previewTimeline, previewTotalDuration, duration, anchors]);
+  }, [findSegmentAtTime, music, previewTimeline, previewTotalDuration, duration, anchors, getTimelinePercent, timelineView]);
 
   // Scrub clips bar by clientX — called during drag
   const scrubClipsBar = useCallback((clientX) => {
@@ -3328,8 +3368,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
       // Also keep the main timeline playhead in sync with the source position
       if (duration > 0) {
-        const pct = (sourceTime / duration) * 100;
-        if (playheadRef.current) playheadRef.current.style.left = `${pct}%`;
+        const pct = Math.max(0, Math.min(100, getTimelinePercent(sourceTime)));
+        const isInTimelineView = sourceTime >= timelineView.start && sourceTime <= timelineView.end;
+        if (playheadRef.current) {
+          playheadRef.current.style.display = isInTimelineView ? 'block' : 'none';
+          playheadRef.current.style.left = `${pct}%`;
+        }
         if (playheadProgressRef.current) playheadProgressRef.current.style.width = `${pct}%`;
       }
 
@@ -3449,7 +3493,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewMode, isPreviewPlaying, previewTimeline]);
+  }, [isPreviewMode, isPreviewPlaying, previewTimeline, getTimelinePercent, timelineView]);
 
   // Music handlers
   const loadMusicFile = useCallback((file) => {
@@ -3595,13 +3639,11 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const seekToPosition = useCallback((e) => {
     if (!timelineRef.current || !videoRef.current) return;
     const rect = timelineRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const time = percent * duration;
+    const time = getTimelineTimeFromClientX(e.clientX, rect);
     videoRef.current.currentTime = time;
     currentTimeRef.current = time;
     setCurrentTime(time); // Update state for initial render
-  }, [duration]);
+  }, [getTimelineTimeFromClientX]);
 
   const handleTimelineMouseDown = useCallback((e) => {
     if (!timelineRef.current || !videoRef.current) return;
@@ -3620,9 +3662,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     const rect = timelineRef.current.getBoundingClientRect();
     const touch = e.changedTouches[0];
-    const x = touch.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const time = percent * duration;
+    const time = getTimelineTimeFromClientX(touch.clientX, rect);
 
     const newAnchor = {
       id: Date.now(),
@@ -3648,7 +3688,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         navigator.vibrate(30);
       }
     }
-  }, [duration, anchors, saveToHistory]);
+  }, [duration, anchors, saveToHistory, getTimelineTimeFromClientX]);
 
   // Anchor management (memoized)
   const addAnchor = useCallback(() => {
@@ -3700,7 +3740,6 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   }, [anchors, saveToHistory, selectedAnchor, previewAnchor, precisionAnchor]);
 
   // Nudge selected anchor start or end by one video frame (1/30s)
-  const FRAME_STEP = 1 / 30;
   const nudgeAnchor = useCallback((handle, direction, frames = 1, options = {}) => {
     const { commit = true } = options;
     const activeAnchorId = selectedAnchorRef.current;
@@ -3822,23 +3861,121 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     document.addEventListener('pointercancel', cleanup, { once: true });
   }, [saveToHistory, nudgeAnchor]);
 
+  const startRailPuckDrag = useCallback((event, handle) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointerId = event.pointerId;
+    const originTarget = event.currentTarget;
+    if (originTarget?.setPointerCapture && pointerId !== undefined) {
+      try { originTarget.setPointerCapture(pointerId); } catch (_) {}
+    }
+
+    const originX = event.clientX || 0;
+    let pullState = { direction: 0, frames: 0, offset: 0 };
+    let didNudge = false;
+    let lastImmediateNudge = 0;
+
+    setPreviewHandle(handle);
+    const selected = anchorsRef.current.find(a => a.id === selectedAnchorRef.current);
+    if (selected) {
+      const focusTime = handle === 'end' ? Math.max(selected.start, selected.end - FRAME_STEP) : selected.start;
+      setSelectedClipFocusTime(focusTime);
+      if (cardVideoRef.current) cardVideoRef.current.currentTime = focusTime;
+    }
+
+    const run = () => {
+      if (!pullState.direction || !pullState.frames) return;
+      didNudge = true;
+      nudgeAnchor(handle, pullState.direction, pullState.frames, { commit: false });
+      setNudgeActivity({
+        handle,
+        direction: pullState.direction,
+        intensity: pullState.frames >= 5 ? 3 : 1,
+        frames: pullState.frames,
+        offset: pullState.offset,
+      });
+    };
+
+    const intervalId = setInterval(run, 130);
+
+    const handleMove = (moveEvent) => {
+      const deltaX = (moveEvent.clientX || originX) - originX;
+      const offset = Math.max(-42, Math.min(42, deltaX));
+      const abs = Math.abs(deltaX);
+
+      if (abs < 12) {
+        pullState = { direction: 0, frames: 0, offset };
+        setNudgeActivity({ handle, direction: 0, intensity: 0, frames: 0, offset });
+        return;
+      }
+
+      const direction = Math.sign(deltaX);
+      const frames = abs >= 32 ? 5 : 1;
+      pullState = { direction, frames, offset };
+      setNudgeActivity({
+        handle,
+        direction,
+        intensity: frames >= 5 ? 3 : 1,
+        frames,
+        offset,
+      });
+
+      const now = Date.now();
+      if (now - lastImmediateNudge > 120) {
+        lastImmediateNudge = now;
+        run();
+      }
+    };
+
+    const cleanup = () => {
+      clearInterval(intervalId);
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', cleanup);
+      document.removeEventListener('pointercancel', cleanup);
+      if (didNudge) {
+        saveToHistory(anchorsRef.current);
+      }
+      setNudgeActivity({ handle: null, direction: 0, intensity: 0, frames: 0, offset: 0 });
+    };
+
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', cleanup, { once: true });
+    document.addEventListener('pointercancel', cleanup, { once: true });
+  }, [saveToHistory, nudgeAnchor]);
+
+  const focusInlineAnchor = useCallback((anchor, handle = 'start') => {
+    if (!anchor) return;
+    const focusTime = handle === 'end'
+      ? Math.max(anchor.start, anchor.end - FRAME_STEP)
+      : anchor.start;
+
+    setSelectedAnchor(anchor.id);
+    setSelectedClipFocusTime(focusTime);
+    syncPreviewIndexForAnchor(anchor.id);
+    setHoveredAnchor(null);
+    setPreviewAnchor(anchor);
+    setPreviewHandle(handle);
+
+    if (videoRef.current) {
+      videoRef.current.currentTime = focusTime;
+      currentTimeRef.current = focusTime;
+      setCurrentTime(focusTime);
+    }
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = focusTime;
+    }
+    if (cardVideoRef.current) {
+      cardVideoRef.current.currentTime = focusTime;
+    }
+  }, [syncPreviewIndexForAnchor]);
+
   const handleAnchorClick = useCallback((e, anchor) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent mobile tap delay
 
-    // Batch state updates to reduce re-renders
-    setSelectedAnchor(anchor.id);
-    setSelectedClipFocusTime(anchor.start);
-    syncPreviewIndexForAnchor(anchor.id);
-    setHoveredAnchor(null);
-    setPreviewAnchor(anchor);
-    setPreviewHandle('start'); // Default to showing start frame
-
-    // Set video to start frame when clicking
-    if (previewVideoRef.current) {
-      previewVideoRef.current.currentTime = anchor.start;
-    }
-  }, [syncPreviewIndexForAnchor]);
+    focusInlineAnchor(anchor, 'start');
+  }, [focusInlineAnchor]);
 
   // Update preview video time when hovering/selecting different anchors or changing handle
   useEffect(() => {
@@ -3970,15 +4107,15 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Persistent drag handlers with 60fps throttling (optimized)
   const rafIdRef = useRef(null);
-  const dragDataRef = useRef({ anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow: null });
+  const dragDataRef = useRef({ anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow: null, timelineView });
 
   // Keep refs in sync without recreating handlers
   useEffect(() => {
-    dragDataRef.current = { anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow };
-  }, [anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow]);
+    dragDataRef.current = { anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow, timelineView };
+  }, [anchors, duration, selectedAnchor, dragState, previewAnchor, saveToHistory, loupeWindow, timelineView]);
 
   const processMouseMove = useCallback((clientX) => {
-    const { dragState, anchors, duration, selectedAnchor, previewAnchor } = dragDataRef.current;
+    const { dragState, anchors, duration, selectedAnchor, previewAnchor, timelineView } = dragDataRef.current;
     dragLiveXRef.current = clientX; // Track for handle upgrade timer
 
     // Cancel handle→move upgrade the moment the user actually drags (> 5px).
@@ -3997,7 +4134,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         const rect = timelineRef.current.getBoundingClientRect();
         const x = clientX - rect.left;
         const percent = Math.max(0, Math.min(1, x / rect.width));
-        const time = percent * duration;
+        const time = timelineView.start + (percent * timelineView.duration);
         videoRef.current.currentTime = time;
         setCurrentTime(time);
       }
@@ -4014,7 +4151,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
       // loupe shows a sub-window of the full video, so time-per-pixel is different
       const { loupeWindow } = dragDataRef.current;
-      const effectiveDuration = isLoupeDrag && loupeWindow ? loupeWindow.duration : duration;
+      const effectiveDuration = isLoupeDrag && loupeWindow ? loupeWindow.duration : timelineView.duration;
 
       const deltaX = clientX - dragState.startX;
       const deltaTime = (deltaX / rect.width) * effectiveDuration;
@@ -6263,6 +6400,8 @@ const exportVideo = async () => {
 	                    const railActiveTick = railActivity?.direction
 	                      ? 7 + (railActivity.direction * Math.min(3, railActivity.intensity || 1))
 	                      : 7;
+	                    const railPuckOffset = railActivity?.offset || 0;
+	                    const railPullFrames = railActivity?.frames || (railActivity?.intensity >= 3 ? 5 : 1);
 	                    const setFocusToHandle = (handle) => {
 	                      if (!active) return;
 	                      const time = handle === 'end' ? latestVisibleFrame : anchor.start;
@@ -6436,12 +6575,18 @@ const exportVideo = async () => {
 	                                  <div className="h-px flex-1 bg-slate-700" />
 	                                  <button
 	                                    type="button"
-	                                    onPointerDown={(e) => startEdgeMapNudgeDrag(e, focusHandle)}
-	                                    className={`flex h-9 w-9 cursor-ew-resize touch-none items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide transition hover:scale-105 ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
-	                                    title={`${focusHandleLabel}: drag to nudge`}
-	                                    aria-label={`${focusHandleLabel} edge drag nudge`}
+	                                    onPointerDown={(e) => startRailPuckDrag(e, focusHandle)}
+	                                    className={`relative flex h-9 w-9 cursor-ew-resize touch-none items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide transition-transform duration-150 hover:scale-105 ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'} ${railActivity?.direction ? 'shadow-[0_0_14px_rgba(0,212,255,0.3)]' : ''}`}
+	                                    style={{ transform: `translateX(${railPuckOffset}px)` }}
+	                                    title={`${focusHandleLabel}: pull to nudge 1 or 5 frames`}
+	                                    aria-label={`${focusHandleLabel} spring nudge puck`}
 	                                  >
 	                                    {focusHandle === 'start' ? 'S' : 'E'}
+	                                    {railActivity?.direction ? (
+	                                      <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-cyan-400/40 bg-slate-950 px-1.5 py-0.5 font-mono text-[9px] text-cyan-200">
+	                                        {railPullFrames}f
+	                                      </span>
+	                                    ) : null}
 	                                  </button>
 	                                  <div className="h-px flex-1 bg-slate-700" />
 	                                </div>
@@ -6592,6 +6737,34 @@ const exportVideo = async () => {
                                     </React.Fragment>
                                   ))}
                                 </div>
+                                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-700/60 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      focusInlineAnchor(previousAnchor, 'end');
+                                    }}
+                                    disabled={!previousAnchor}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+                                    title="Previous clip"
+                                  >
+                                    <ChevronLeft size={14} />
+                                    Prev clip
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      focusInlineAnchor(nextAnchor, 'start');
+                                    }}
+                                    disabled={!nextAnchor}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+                                    title="Next clip"
+                                  >
+                                    Next clip
+                                    <ChevronRight size={14} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ) : (
@@ -6611,10 +6784,25 @@ const exportVideo = async () => {
                   <div className="mb-1 sm:mb-4">
                     {/* Unified Timeline Container - Layered Design (Option B) */}
                     <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
-                        <div className="text-xs text-gray-400">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">Timeline</h3>
+                          <button
+                            type="button"
+                            onClick={() => setTimelineZoom(z => (z > 1 ? 1 : 8))}
+                            disabled={!selectedAnchor}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${timelineView.zoomed ? 'border-cyan-400/60 bg-cyan-500/15 text-cyan-200 shadow-[0_0_12px_rgba(0,212,255,0.25)]' : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-cyan-400/40 hover:text-cyan-200 disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:text-slate-400'}`}
+                            title={timelineView.zoomed ? 'Zoom out timeline' : 'Zoom to selected clip'}
+                            aria-label={timelineView.zoomed ? 'Zoom out timeline' : 'Zoom to selected clip'}
+                          >
+                            {timelineView.zoomed ? <ZoomOut size={15} /> : <ZoomIn size={15} />}
+                          </button>
+                        </div>
+                        <div className="text-right text-xs text-gray-400">
                           <span ref={timeDisplayRef}>{formatTime(currentTime)} / {formatTime(duration)}</span> • {anchors.length} clip{anchors.length === 1 ? '' : 's'} • {formatTime(anchorTime)}
+                          {timelineView.zoomed && (
+                            <span className="ml-2 font-mono text-cyan-300/80">{formatTime(timelineView.start)} - {formatTime(timelineView.end)}</span>
+                          )}
                         </div>
                       </div>
 
@@ -6630,7 +6818,7 @@ const exportVideo = async () => {
                             const rect = e.currentTarget.getBoundingClientRect();
                             const x = e.clientX - rect.left;
                             const percent = Math.max(0, Math.min(1, x / rect.width));
-                            const time = percent * duration;
+                            const time = timelineView.start + (percent * timelineView.duration);
                             setHoverTime(time);
                           }}
                           onMouseLeave={() => setHoverTime(null)}
@@ -6655,18 +6843,23 @@ const exportVideo = async () => {
                         >
                           {/* Time markers at top */}
                           <div className="absolute top-1 left-0 right-0 flex justify-between px-2 text-[10px] text-gray-500 pointer-events-none">
-                            <span>0:00</span>
-                            <span>{formatTime(duration / 4)}</span>
-                            <span>{formatTime(duration / 2)}</span>
-                            <span>{formatTime(3 * duration / 4)}</span>
-                            <span>{formatTime(duration)}</span>
+                            <span>{formatTime(timelineView.start)}</span>
+                            <span>{formatTime(timelineView.start + (timelineView.duration / 4))}</span>
+                            <span>{formatTime(timelineView.start + (timelineView.duration / 2))}</span>
+                            <span>{formatTime(timelineView.start + (3 * timelineView.duration / 4))}</span>
+                            <span>{formatTime(timelineView.end)}</span>
                           </div>
 
                           {/* Playhead - spans full height of timeline */}
                           <div
                             ref={playheadRef}
                             className="absolute top-0 w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none"
-                            style={{ left: `${(currentTime / duration) * 100}%`, height: '160px', zIndex: 50 }}
+                            style={{
+                              display: currentTime >= timelineView.start && currentTime <= timelineView.end ? 'block' : 'none',
+                              left: `${getTimelinePercent(currentTime)}%`,
+                              height: '160px',
+                              zIndex: 50,
+                            }}
                           >
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
                           </div>
@@ -6675,14 +6868,14 @@ const exportVideo = async () => {
                           <div
                             ref={playheadProgressRef}
                             className="absolute bottom-0 left-0 h-1 bg-cyan-500/30 pointer-events-none"
-                            style={{ width: `${(currentTime / duration) * 100}%` }}
+                            style={{ width: `${Math.max(0, Math.min(100, getTimelinePercent(currentTime)))}%` }}
                           />
 
                           {/* Hover preview tooltip */}
                           {hoverTime !== null && (
                             <div
                               className="absolute top-0 -translate-y-8 pointer-events-none z-30"
-                              style={{ left: `${(hoverTime / duration) * 100}%`, transform: 'translateX(-50%) translateY(-100%)' }}
+                              style={{ left: `${getTimelinePercent(hoverTime)}%`, transform: 'translateX(-50%) translateY(-100%)' }}
                             >
                               <div className="bg-slate-900 px-2 py-1 rounded text-xs text-cyan-400 border border-cyan-500/50 shadow-lg">
                                 {formatTime(hoverTime)}
@@ -6697,9 +6890,7 @@ const exportVideo = async () => {
                             // Double-click clips lane to create anchor
                             if (!duration) return;
                             const rect = e.currentTarget.getBoundingClientRect();
-                            const x = e.clientX - rect.left;
-                            const percent = Math.max(0, Math.min(1, x / rect.width));
-                            const time = percent * duration;
+                            const time = getTimelineTimeFromClientX(e.clientX, rect);
 
                             const newAnchor = {
                               id: Date.now(),
@@ -6739,9 +6930,7 @@ const exportVideo = async () => {
 
                             if (timeSinceLastTap < 300 && distance < 30) {
                               const rect = e.currentTarget.getBoundingClientRect();
-                              const x = tapPosition.x - rect.left;
-                              const percent = Math.max(0, Math.min(1, x / rect.width));
-                              const time = percent * duration;
+                              const time = getTimelineTimeFromClientX(tapPosition.x, rect);
 
                               const newAnchor = {
                                 id: Date.now(),
@@ -6806,14 +6995,18 @@ const exportVideo = async () => {
                               {anchors.map((anchor, index) => {
                                 const isSelected = selectedAnchor === anchor.id;
                                 const colors = getAnchorColor(index, isSelected);
-                                const width = ((anchor.end - anchor.start) / duration) * 100;
+                                const visibleStart = Math.max(anchor.start, timelineView.start);
+                                const visibleEnd = Math.min(anchor.end, timelineView.end);
+                                if (visibleEnd <= visibleStart) return null;
+                                const left = ((visibleStart - timelineView.start) / timelineView.duration) * 100;
+                                const width = ((visibleEnd - visibleStart) / timelineView.duration) * 100;
 
                                 return (
                                   <div
                                     key={anchor.id}
                                     className="absolute top-0 bottom-0"
                                     style={{
-                                      left: `${(anchor.start / duration) * 100}%`,
+                                      left: `${left}%`,
                                       width: `${width}%`,
                                       zIndex: isSelected ? 50 : 30
                                     }}

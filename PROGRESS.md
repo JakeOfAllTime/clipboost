@@ -61,6 +61,11 @@
 - Separated overlapping Boundary Map handles vertically when long videos make a short clip occupy only a tiny part of the safe span.
 - Verified `npm run build` succeeds after the Boundary Map/nudge refinements.
 - Browser-tested with `jubjubthai trim.mp4`: generated starter clips, opened Pro tools, verified Boundary Map controls and clicked the `±10f` nudge buttons with no console errors.
+- Turned the preview-side `S`/`E` rail pill into a spring nudge puck: it visually pulls left/right, repeats nudges while held, uses `1f` for gentle pulls and `5f` for stronger pulls, then snaps back on release.
+- Added inline `Prev clip` / `Next clip` buttons under the Boundary Map nudge controls so users can move between clips without leaving the precision area.
+- Added a Pro timeline magnifier toggle that zooms the anchor timeline around the selected clip and keeps seek, hover, double-click creation, playhead, and drag math aligned to the zoomed window.
+- Verified `npm run build` succeeds after the spring puck and timeline zoom changes.
+- Browser-tested with `jubjubthai trim.mp4`: generated starter clips, opened Pro tools, verified spring puck/clip arrows, toggled the timeline zoom, and saw no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -70,8 +75,7 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
-- Have the user feel-test the Boundary Map, draggable rail pill, and `1f`/`5f`/`10f` hold nudge controls on desktop/mobile.
-- Consider adding a magnifying-glass timeline zoom mode for long videos, likely as a focused Pro tool that zooms around the selected clip without making the main timeline permanently busier.
+- Have the user feel-test the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.
