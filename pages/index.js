@@ -6133,8 +6133,8 @@ const exportVideo = async () => {
                     const anchorWidth = active ? ((anchor.end - anchor.start) / loupeWindow.duration) * 100 : 0;
                     const clampedLeft = active ? Math.max(0, Math.min(95, anchorLeft)) : 0;
 	                    const clampedWidth = active ? Math.max(2, Math.min(100 - clampedLeft, anchorWidth)) : 0;
-	                    // Thumbnail: left handle = near start, right handle = near end
-	                    const thumbLeft = loupeDragThumb?.side === 'start' ? `${clampedLeft}%` : `${clampedLeft + clampedWidth}%`;
+	                    const startMarkerLeft = active ? Math.max(5, Math.min(95, clampedLeft)) : 0;
+	                    const endMarkerLeft = active ? Math.max(5, Math.min(95, clampedLeft + clampedWidth)) : 0;
 	                    const clipIndex = active ? anchors.findIndex(a => a.id === anchor.id) : -1;
 	                    const latestVisibleFrame = active ? Math.max(anchor.start, anchor.end - FRAME_STEP) : 0;
 	                    const focusTime = active
@@ -6255,7 +6255,7 @@ const exportVideo = async () => {
 	                                    1 frame = 0.03s
 	                                  </div>
 	                                </div>
-	                                <div className="grid grid-cols-[44px_1fr_44px_44px_1fr_44px] items-center gap-1.5">
+	                                <div className="grid grid-cols-4 items-center gap-1.5">
 	                                  <button
 	                                    type="button"
 	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1, 5); }}
@@ -6267,22 +6267,18 @@ const exportVideo = async () => {
 	                                  <button
 	                                    type="button"
 	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1); }}
-	                                    className={`min-h-12 rounded-md border px-2 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+	                                    className={`min-h-12 rounded-md border px-1 text-xs font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
 	                                    title={`${focusHandleLabel}: back 1 frame`}
 	                                  >
-	                                    -1 frame
+	                                    -1f
 	                                  </button>
-	                                  <div className="h-px bg-slate-700" />
-	                                  <div className={`flex h-10 items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200' : 'border-red-400/50 bg-red-500/20 text-red-200'}`}>
-	                                    {focusHandle === 'start' ? 'S' : 'E'}
-	                                  </div>
 	                                  <button
 	                                    type="button"
 	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, 1); }}
-	                                    className={`min-h-12 rounded-md border px-2 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+	                                    className={`min-h-12 rounded-md border px-1 text-xs font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
 	                                    title={`${focusHandleLabel}: forward 1 frame`}
 	                                  >
-	                                    +1 frame
+	                                    +1f
 	                                  </button>
 	                                  <button
 	                                    type="button"
@@ -6292,6 +6288,13 @@ const exportVideo = async () => {
 	                                  >
 	                                    +5
 	                                  </button>
+	                                </div>
+	                                <div className="mt-2 flex items-center justify-center gap-2">
+	                                  <div className="h-px flex-1 bg-slate-700" />
+	                                  <div className={`flex h-9 w-9 items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200' : 'border-red-400/50 bg-red-500/20 text-red-200'}`}>
+	                                    {focusHandle === 'start' ? 'S' : 'E'}
+	                                  </div>
+	                                  <div className="h-px flex-1 bg-slate-700" />
 	                                </div>
 	                                <div
 	                                  className="mt-2 grid gap-px"
@@ -6333,125 +6336,77 @@ const exportVideo = async () => {
 	                          )}
 	                        </div>
 
-                        {/* RIGHT: Zoom Loupe — flex-1 */}
+                        {/* RIGHT: Edge Map — visual orientation plus Start/End focus */}
 	                        <div
 	                          ref={loupeRef}
-	                          className="relative min-h-32 flex-1 overflow-hidden rounded-lg border transition-colors"
+	                          className="relative flex-1 self-start overflow-hidden rounded-lg border p-3 transition-colors"
                           style={{
                             background: 'rgba(8, 12, 28, 0.95)',
                             borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
                           }}
                         >
                           {active ? (
-                            <>
-                              {/* Loupe label */}
-                              <div className="absolute top-0.5 left-2 text-[9px] font-semibold text-slate-500 pointer-events-none z-10 uppercase tracking-wider">⌕ Zoom</div>
-                              {/* Time range labels */}
-                              <div className="absolute bottom-0.5 left-0 right-0 flex justify-between px-2 text-[9px] font-mono text-slate-600 pointer-events-none">
-                                <span>{formatTime(loupeWindow.start)}</span>
-                                <span>{formatTime((loupeWindow.start + loupeWindow.end) / 2)}</span>
-                                <span>{formatTime(loupeWindow.end)}</span>
+                            <div className="flex min-h-32 flex-col gap-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">⌕ Edge map</div>
+                                <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(anchor.end - anchor.start)}</div>
                               </div>
-                              {/* Excluded footage zones — darker scrim outside the anchor handles */}
-                              <div
-                                className="absolute top-0 bottom-0 bg-black/40 pointer-events-none"
-                                style={{ left: 0, width: `${clampedLeft}%` }}
-                              />
-                              <div
-                                className="absolute top-0 bottom-0 bg-black/40 pointer-events-none"
-                                style={{ left: `${clampedLeft + clampedWidth}%`, right: 0 }}
-                              />
-	                              {/* Center tick */}
-	                              <div className="absolute top-0 bottom-0 w-px bg-slate-700/60 pointer-events-none" style={{ left: '50%' }} />
-	                              {/* Focus frame tick */}
-	                              <div
-	                                className="absolute top-2 bottom-2 z-20 w-0.5 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.7)] pointer-events-none"
-	                                style={{ left: `${focusLeft}%` }}
-	                              />
-                              {/* Anchor body */}
-                              <div
-                                className={`absolute top-4 bottom-4 ${colors.bg} ${colors.border} border-2 ${colors.glow} rounded cursor-move`}
-                                style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%`, zIndex: 10 }}
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  handleAnchorMouseDown(e, anchor, 'anchor-move');
-                                  dragSourceRef.current = 'loupe';
-                                }}
-                              >
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  <span className={`font-mono tabular-nums transition-all ${dragState.active && dragSourceRef.current === 'loupe' ? 'text-white text-[11px] font-bold drop-shadow' : 'text-white/70 text-[9px]'}`}>
-                                    {(anchor.end - anchor.start).toFixed(2)}s
-                                  </span>
-                                </div>
-                                {/* Left handle (green = start) — AUDIT #22: now keyboard reachable.
-                                    Tab to focus, arrow keys nudge ±1 frame via nudgeAnchor. */}
+
+                              <div className="relative h-24 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-4">
+                                <div className="absolute inset-x-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slate-800" />
                                 <div
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-label={`Adjust clip start — ${formatTime(anchor.start)}`}
-                                  className="absolute left-0 top-0 bottom-0 bg-green-500 hover:bg-green-400 active:bg-green-300 cursor-ew-resize rounded-l flex items-center justify-center transition-colors"
-                                  style={{ zIndex: 20, width: '14px' }}
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    handleAnchorMouseDown(e, anchor, 'anchor-left');
-                                    dragSourceRef.current = 'loupe';
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
-                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
-                                  }}
+                                  className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-full ${colors.bg} ${colors.glow}`}
+                                  style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%` }}
+                                />
+                                <button
+                                  type="button"
+                                  className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
+                                  style={{ left: `${startMarkerLeft}%` }}
+                                  aria-label={`Select start edge — ${formatTime(anchor.start)}`}
+                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('start'); }}
                                 >
-                                  <div className="flex flex-col gap-[3px] pointer-events-none">
-                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
-                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
-                                  </div>
-                                </div>
-                                {/* Right handle (red = end) */}
+                                  S
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`absolute top-1/2 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
+                                  style={{ left: `${endMarkerLeft}%` }}
+                                  aria-label={`Select end edge — ${formatTime(anchor.end)}`}
+                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('end'); }}
+                                >
+                                  E
+                                </button>
                                 <div
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-label={`Adjust clip end — ${formatTime(anchor.end)}`}
-                                  className="absolute right-0 top-0 bottom-0 bg-red-500 hover:bg-red-400 active:bg-red-300 cursor-ew-resize rounded-r flex items-center justify-center transition-colors"
-                                  style={{ zIndex: 20, width: '14px' }}
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    handleAnchorMouseDown(e, anchor, 'anchor-right');
-                                    dragSourceRef.current = 'loupe';
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
-                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
-                                  }}
-                                >
-                                  <div className="flex flex-col gap-[3px] pointer-events-none">
-                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
-                                    <div className="w-[2px] h-3 bg-white/60 rounded-full" />
-                                  </div>
-                                </div>
+                                  className="absolute top-3 bottom-3 w-0.5 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.7)] pointer-events-none"
+                                  style={{ left: `${focusLeft}%` }}
+                                />
                               </div>
-                              {/* Floating frame thumbnail — appears only while dragging a handle */}
-                              {loupeDragThumb && (
-                                <div
-                                  className="absolute z-30 pointer-events-none"
-                                  style={{
-                                    left: thumbLeft,
-                                    bottom: '100%',
-                                    transform: 'translateX(-50%) translateY(-4px)',
-                                    marginBottom: '4px',
-                                  }}
+
+                              <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('start'); }}
+                                  className={`min-h-10 rounded-md border px-2 text-left transition ${focusHandle === 'start' ? 'border-green-400/60 bg-green-500/15 text-green-200' : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-green-400/40'}`}
                                 >
-                                  <div className="rounded-md overflow-hidden border-2 border-white/40 shadow-2xl" style={{ width: '120px', height: '68px' }}>
-                                    <img src={loupeDragThumb.dataUrl} alt="frame" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                  </div>
-                                  <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] font-mono text-white/80 drop-shadow">
-                                    {formatTime(loupeDragThumb.side === 'start' ? anchor.start : anchor.end)}
-                                  </div>
+                                  <span className="block font-bold uppercase tracking-wide">Start</span>
+                                  <span className="font-mono tabular-nums">{formatTime(anchor.start)}</span>
+                                </button>
+                                <div className="flex min-h-10 items-center justify-center rounded-md border border-slate-700 bg-slate-900/40 px-2 text-center font-mono text-slate-300 tabular-nums">
+                                  {formatTime(focusTime)}
                                 </div>
-                              )}
-                            </>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('end'); }}
+                                  className={`min-h-10 rounded-md border px-2 text-left transition ${focusHandle === 'end' ? 'border-red-400/60 bg-red-500/15 text-red-200' : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-red-400/40'}`}
+                                >
+                                  <span className="block font-bold uppercase tracking-wide">End</span>
+                                  <span className="font-mono tabular-nums">{formatTime(anchor.end)}</span>
+                                </button>
+                              </div>
+                            </div>
                           ) : (
-                            <div className="flex h-full items-center justify-center">
-                              <span className="text-slate-700 text-[10px] uppercase tracking-widest pointer-events-none select-none">⌕ select a clip to zoom</span>
+                            <div className="flex h-full min-h-32 items-center justify-center">
+                              <span className="text-slate-700 text-[10px] uppercase tracking-widest pointer-events-none select-none">⌕ select a clip</span>
                             </div>
                           )}
                         </div>

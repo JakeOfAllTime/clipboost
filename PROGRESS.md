@@ -47,6 +47,9 @@
 - Changed Quick Gen's default Pace to 3 seconds.
 - Reworked the inline Precision Trimmer frame controls into a focused nudge rail with active Start/End edge selection, one-frame buttons, five-frame jump buttons, and a tick strip.
 - Browser smoke-tested the nudge rail: loaded `jubjubthai trim.mp4`, opened Pro tools, confirmed Pace 3s, generated starter clips, and clicked the rail's -1/+1 frame controls with no console errors.
+- Replaced the oversized loupe handle bar with a compact Edge Map that selects Start/End focus while leaving frame movement to the nudge rail.
+- Tightened the nudge rail layout so it fits inside the narrow Precision Trimmer column.
+- Browser screenshot-checked the compact Edge Map and nudge rail with `jubjubthai trim.mp4`; no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -56,7 +59,7 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
-- Have the user feel-test the new inline nudge rail on desktop/mobile and decide whether it should replace or inform the older precision modal controls too.
+- Have the user feel-test the compact Edge Map plus nudge rail on desktop/mobile and decide whether the older precision modal should get the same treatment.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

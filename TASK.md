@@ -22,4 +22,5 @@ in progress
 - Dev music buttons now load `vlog-beat-background-349853.mp3` and `retro-lounge-389644.mp3` from `Desktop/TestClips`.
 - Quick Gen now defaults Pace to 3 seconds.
 - The inline Precision Trimmer now uses a focused frame nudge rail for Start/End edge adjustments.
+- The former oversized loupe handle bar is now a compact Edge Map for Start/End focus selection.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
