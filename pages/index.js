@@ -272,6 +272,7 @@ const ReelForge = () => {
   // Web Audio API refs for mixing
   const audioContextRef = useRef(null);
   const videoSourceRef = useRef(null);
+  const videoBSourceRef = useRef(null);
   const musicSourceRef = useRef(null);
   const videoGainRef = useRef(null);
   const musicGainRef = useRef(null);
@@ -471,6 +472,43 @@ const dismissRestoreToast = () => {
   }, [historyIndex, history]);
 
   // Web Audio API functions for audio mixing
+  const getMixVolumes = useCallback(() => {
+    const clampedBalance = Math.max(0, Math.min(100, audioBalance));
+    return {
+      videoVolume: music ? (100 - clampedBalance) / 100 : 1,
+      musicVolume: music ? clampedBalance / 100 : 0
+    };
+  }, [audioBalance, music]);
+
+  const applyElementAudioVolumes = useCallback(() => {
+    const { videoVolume, musicVolume } = getMixVolumes();
+    const mixMutesSource = music && videoVolume <= 0.001;
+
+    if (videoRef.current) {
+      videoRef.current.volume = mixMutesSource ? 0 : 1;
+      videoRef.current.muted = mixMutesSource || (isPreviewMode && activeVideoRef.current !== 'A');
+    }
+
+    if (videoBRef.current) {
+      videoBRef.current.volume = mixMutesSource ? 0 : 1;
+      videoBRef.current.muted = mixMutesSource || !isPreviewMode || activeVideoRef.current !== 'B';
+    }
+
+    if (previewVideoRef.current) {
+      previewVideoRef.current.volume = mixMutesSource ? 0 : 1;
+      previewVideoRef.current.muted = mixMutesSource || previewMuted;
+    }
+
+    if (precisionVideoRef.current) {
+      precisionVideoRef.current.volume = mixMutesSource ? 0 : 1;
+      precisionVideoRef.current.muted = mixMutesSource;
+    }
+
+    if (musicRef.current) {
+      musicRef.current.volume = musicVolume;
+    }
+  }, [getMixVolumes, isPreviewMode, music, previewMuted]);
+
   const setupAudioMixer = useCallback((videoElement, musicElement) => {
     if (!videoElement || !musicElement) return;
 
@@ -490,6 +528,11 @@ const dismissRestoreToast = () => {
         videoGainRef.current.connect(ctx.destination);
       }
 
+      if (!videoBSourceRef.current && videoBRef.current) {
+        videoBSourceRef.current = ctx.createMediaElementSource(videoBRef.current);
+        videoBSourceRef.current.connect(videoGainRef.current);
+      }
+
       if (!musicSourceRef.current && musicElement.src) {
         musicSourceRef.current = ctx.createMediaElementSource(musicElement);
         musicGainRef.current = ctx.createGain();
@@ -499,22 +542,24 @@ const dismissRestoreToast = () => {
 
       // Set initial volumes based on audioBalance
       updateAudioMixerVolumes();
+      applyElementAudioVolumes();
 
     } catch (error) {
       console.error('Error setting up audio mixer:', error);
     }
-  }, [audioBalance]);
+  }, [applyElementAudioVolumes]);
 
   const updateAudioMixerVolumes = useCallback(() => {
-    if (videoGainRef.current && musicGainRef.current) {
-      // audioBalance: 0 = all video, 50 = balanced, 100 = all music
-      const musicVolume = audioBalance / 100;
-      const videoVolume = 1 - (audioBalance / 100);
+    const { videoVolume, musicVolume } = getMixVolumes();
 
+    if (videoGainRef.current) {
       videoGainRef.current.gain.value = videoVolume;
+    }
+    if (musicGainRef.current) {
       musicGainRef.current.gain.value = musicVolume;
     }
-  }, [audioBalance]);
+    applyElementAudioVolumes();
+  }, [applyElementAudioVolumes, getMixVolumes]);
 
   const setupPrecisionAudioMixer = useCallback((videoElement, musicElement) => {
     if (!videoElement || !musicElement) return;
@@ -544,28 +589,31 @@ const dismissRestoreToast = () => {
 
       // Set initial volumes based on audioBalance
       updatePrecisionAudioMixerVolumes();
+      applyElementAudioVolumes();
 
     } catch (error) {
       console.error('Error setting up precision audio mixer:', error);
     }
-  }, [audioBalance]);
+  }, [applyElementAudioVolumes]);
 
   const updatePrecisionAudioMixerVolumes = useCallback(() => {
-    if (precisionVideoGainRef.current && precisionMusicGainRef.current) {
-      // audioBalance: 0 = all video, 50 = balanced, 100 = all music
-      const musicVolume = audioBalance / 100;
-      const videoVolume = 1 - (audioBalance / 100);
+    const { videoVolume, musicVolume } = getMixVolumes();
 
+    if (precisionVideoGainRef.current) {
       precisionVideoGainRef.current.gain.value = videoVolume;
+    }
+    if (precisionMusicGainRef.current) {
       precisionMusicGainRef.current.gain.value = musicVolume;
     }
-  }, [audioBalance]);
+    applyElementAudioVolumes();
+  }, [applyElementAudioVolumes, getMixVolumes]);
 
   // Update volumes when audioBalance changes
   useEffect(() => {
     updateAudioMixerVolumes();
     updatePrecisionAudioMixerVolumes();
-  }, [audioBalance, updateAudioMixerVolumes, updatePrecisionAudioMixerVolumes]);
+    applyElementAudioVolumes();
+  }, [audioBalance, music, updateAudioMixerVolumes, updatePrecisionAudioMixerVolumes, applyElementAudioVolumes]);
 
   // Save/Load functions
   const saveConfiguration = () => {
@@ -2918,6 +2966,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Reset opacity state — A visible, B hidden (standby)
     if (videoRef.current) videoRef.current.style.opacity = '1';
     if (videoBRef.current) videoBRef.current.style.opacity = '0';
+    applyElementAudioVolumes();
 
     // Reset transition flags
     transitioningRef.current = false;
@@ -2978,7 +3027,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
 
     console.log('✅ Dual-video preview initialized (Video A active, Video B standby)');
-  }, [anchors, buildPreviewTimeline, music, audioBalance]);
+  }, [anchors, applyElementAudioVolumes, buildPreviewTimeline, music, setupAudioMixer]);
 
   // Stop enhanced preview
   const stopEnhancedPreview = useCallback(() => {
@@ -3011,13 +3060,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     standbyReadyRef.current = false;
     if (videoRef.current) {
       videoRef.current.style.opacity = '1';
-      videoRef.current.muted = false;
     }
     if (videoBRef.current) {
       videoBRef.current.style.opacity = '0';
-      videoBRef.current.muted = true;
     }
-  }, [musicStartTime]);
+    applyElementAudioVolumes();
+  }, [applyElementAudioVolumes, musicStartTime]);
 
   // Toggle preview playback
   const togglePreviewPlayback = useCallback(() => {
@@ -3273,8 +3321,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
             activeVideoRef.current = newActiveVideo;
 
             // Audio ownership — only the active video is unmuted (music has its own element)
-            standbyVideoEl.muted = false;
-            activeVideoEl.muted = true;
+            applyElementAudioVolumes();
 
             // Clip index + preview-card selection track the currently-playing clip
             previewAnchorIndexRef.current = nextIndex;
@@ -4705,8 +4752,9 @@ const exportVideo = async () => {
     if (music) {
       await ffmpeg.writeFile('music.mp3', await fetchFile(music));
 
-      const videoVolume = (100 - audioBalance) / 100;
-      const musicVolume = audioBalance / 100;
+      const clampedAudioBalance = Math.max(0, Math.min(100, audioBalance));
+      const videoVolume = (100 - clampedAudioBalance) / 100;
+      const musicVolume = clampedAudioBalance / 100;
 
       // Trim music with stream copy
       const selectedMusicDuration = (musicEndTime || musicDuration) - musicStartTime;
@@ -4719,20 +4767,45 @@ const exportVideo = async () => {
         'trimmed_music.mp3'
       ]);
 
-      // Mix audio (must re-encode audio here, but video stays copied)
-      await ffmpeg.exec([
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', 'concat.txt',
-        '-i', 'trimmed_music.mp3',
-        '-filter_complex',
-        `[0:a]volume=${videoVolume}[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]`,
-        '-map', '0:v',
-        '-map', '[aout]',
-        '-c:v', 'copy',  // Still stream copy video!
-        '-c:a', 'aac',   // Only re-encode audio for mixing
-        'output.mp4'
-      ]);
+      if (clampedAudioBalance >= 100) {
+        // All music means the original audio stream is not mapped at all.
+        await ffmpeg.exec([
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', 'concat.txt',
+          '-i', 'trimmed_music.mp3',
+          '-map', '0:v',
+          '-map', '1:a',
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          'output.mp4'
+        ]);
+      } else if (clampedAudioBalance <= 0) {
+        // All source video audio; ignore the music file entirely.
+        await ffmpeg.exec([
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', 'concat.txt',
+          '-c:v', 'copy',
+          '-c:a', 'copy',
+          'output.mp4'
+        ]);
+      } else {
+        // Mix audio (must re-encode audio here, but video stays copied)
+        await ffmpeg.exec([
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', 'concat.txt',
+          '-i', 'trimmed_music.mp3',
+          '-filter_complex',
+          `[0:a]volume=${videoVolume}[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]`,
+          '-map', '0:v',
+          '-map', '[aout]',
+          '-c:v', 'copy',  // Still stream copy video!
+          '-c:a', 'aac',   // Only re-encode audio for mixing
+          'output.mp4'
+        ]);
+      }
     } else {
       // No music - pure stream copy concatenation (fastest path)
       await ffmpeg.exec([
@@ -5175,7 +5248,7 @@ const exportVideo = async () => {
 		                    <div className="mb-2 flex items-center justify-between gap-3">
 		                      <div>
 		                        <div className="text-xs font-bold uppercase tracking-wide text-cyan-300">Dev test clips</div>
-		                        <div className="text-xs text-slate-500">Loaded from Desktop/testclips</div>
+		                        <div className="text-xs text-slate-500">Loaded from Desktop/TestClips</div>
 		                      </div>
 		                      {isLoadingDevClip && <div className="text-xs text-slate-400">Loading...</div>}
 		                    </div>

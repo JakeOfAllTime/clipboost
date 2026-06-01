@@ -15,4 +15,6 @@ in progress
 - Added a local-dev-only test clip loader for `/Users/littlemac/Desktop/testclips`.
 - Added exclusive beat-sync targets for Music vs Original sound and fixed lazy beat-grid analysis for both.
 - Browser smoke-tested Quick Gen with Original sound sync using `d79mAGVzZVM.mp4`; Pro tools opened with the Precision Trimmer active.
+- Fixed the Music 100% audio-balance path so source audio is hard-muted in preview and not mapped into exports.
+- The dev test clip panel now reads `Desktop/TestClips` and pins the five preferred test files first.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const TEST_CLIPS_DIR = path.join(os.homedir(), 'Desktop', 'testclips');
+const TEST_CLIPS_DIRS = [
+  path.join(os.homedir(), 'Desktop', 'TestClips'),
+  path.join(os.homedir(), 'Desktop', 'testclips')
+];
 const MIME_BY_EXTENSION = {
   '.mp4': 'video/mp4',
   '.mov': 'video/quicktime',
@@ -30,8 +33,16 @@ export default function handler(req, res) {
     return res.status(400).json({ error: 'Invalid test clip name' });
   }
 
-  const filePath = path.join(TEST_CLIPS_DIR, safeName);
-  if (!filePath.startsWith(TEST_CLIPS_DIR + path.sep) || !fs.existsSync(filePath)) {
+  const filePath = TEST_CLIPS_DIRS
+    .map(clipsDir => ({
+      clipsDir,
+      candidate: path.join(clipsDir, safeName)
+    }))
+    .find(({ clipsDir, candidate }) => (
+      candidate.startsWith(clipsDir + path.sep) && fs.existsSync(candidate)
+    ))?.candidate;
+
+  if (!filePath) {
     return res.status(404).json({ error: 'Test clip not found' });
   }
 
