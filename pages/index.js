@@ -134,7 +134,7 @@ const ReelForge = () => {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisPhase, setAnalysisPhase] = useState('');
   const [targetDuration, setTargetDuration] = useState(20);
-  const [maxClipLength, setMaxClipLength] = useState(8); // 2-15s per clip (Quick Gen)
+  const [maxClipLength, setMaxClipLength] = useState(3); // 2-15s per clip (Quick Gen)
   const [musicAnalysis, setMusicAnalysis] = useState(null);
   const [originalSoundAnalysis, setOriginalSoundAnalysis] = useState(null);
   const [motionSensitivity, setMotionSensitivity] = useState(0.5); // 0-1 range
@@ -3689,12 +3689,12 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const FRAME_STEP = 1 / 30;
-  const nudgeAnchor = useCallback((handle, direction) => {
+  const nudgeAnchor = useCallback((handle, direction, frames = 1) => {
     if (!selectedAnchor) return;
     let focusedTime = null;
     const updated = anchors.map(a => {
       if (a.id !== selectedAnchor) return a;
-      const delta = direction * FRAME_STEP;
+      const delta = direction * frames * FRAME_STEP;
       if (handle === 'start') {
         const newStart = Math.max(0, Math.min(a.start + delta, a.end - FRAME_STEP));
         focusedTime = newStart;
@@ -3712,6 +3712,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (updatedAnchor) {
       setPreviewAnchor(updatedAnchor);
       setPreviewHandle(handle);
+    }
+    if (cardVideoRef.current && focusedTime !== null) {
+      cardVideoRef.current.currentTime = focusedTime;
     }
   }, [selectedAnchor, duration, anchors, saveToHistory]);
 
@@ -6239,41 +6242,68 @@ const exportVideo = async () => {
 	                                </button>
 	                              </div>
 
-	                              {/* Frame nudge buttons */}
-	                              <div className="mt-2 grid grid-cols-2 gap-2">
-	                                <div className="rounded-md border border-green-400/20 bg-green-500/5 p-1.5">
-	                                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-green-300">Start frame</div>
-	                                  <div className="grid grid-cols-2 gap-1">
-	                                    <button
-	                                      onMouseDown={(e) => e.stopPropagation()}
-	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', -1); }}
-	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-green-200 transition hover:bg-green-500/15"
-	                                      title="Start: back 1 frame"
-	                                    >-1f</button>
-	                                    <button
-	                                      onMouseDown={(e) => e.stopPropagation()}
-	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('start', 1); }}
-	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-green-200 transition hover:bg-green-500/15"
-	                                      title="Start: forward 1 frame"
-	                                    >+1f</button>
+	                              {/* Frame nudge rail */}
+	                              <div
+	                                className={`mt-2 rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/30 bg-green-500/5' : 'border-red-400/30 bg-red-500/5'}`}
+	                                onMouseDown={(e) => e.stopPropagation()}
+	                              >
+	                                <div className="mb-2 flex items-center justify-between gap-2">
+	                                  <div className={`text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'text-green-300' : 'text-red-300'}`}>
+	                                    {focusHandle === 'start' ? 'Start edge' : 'End edge'}
+	                                  </div>
+	                                  <div className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-0.5 font-mono text-[10px] text-slate-300 tabular-nums">
+	                                    1 frame = 0.03s
 	                                  </div>
 	                                </div>
-	                                <div className="rounded-md border border-red-400/20 bg-red-500/5 p-1.5">
-	                                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-300">End frame</div>
-	                                  <div className="grid grid-cols-2 gap-1">
-	                                    <button
-	                                      onMouseDown={(e) => e.stopPropagation()}
-	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', -1); }}
-	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/15"
-	                                      title="End: back 1 frame"
-	                                    >-1f</button>
-	                                    <button
-	                                      onMouseDown={(e) => e.stopPropagation()}
-	                                      onClick={(e) => { e.stopPropagation(); nudgeAnchor('end', 1); }}
-	                                      className="min-h-10 rounded bg-slate-900/80 px-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/15"
-	                                      title="End: forward 1 frame"
-	                                    >+1f</button>
+	                                <div className="grid grid-cols-[44px_1fr_44px_44px_1fr_44px] items-center gap-1.5">
+	                                  <button
+	                                    type="button"
+	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1, 5); }}
+	                                    className="min-h-11 rounded-md border border-slate-700 bg-slate-900/80 text-[11px] font-bold text-slate-300 transition hover:border-cyan-400/40 hover:text-white"
+	                                    title={`${focusHandleLabel}: back 5 frames`}
+	                                  >
+	                                    -5
+	                                  </button>
+	                                  <button
+	                                    type="button"
+	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, -1); }}
+	                                    className={`min-h-12 rounded-md border px-2 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+	                                    title={`${focusHandleLabel}: back 1 frame`}
+	                                  >
+	                                    -1 frame
+	                                  </button>
+	                                  <div className="h-px bg-slate-700" />
+	                                  <div className={`flex h-10 items-center justify-center rounded-full border text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'border-green-400/50 bg-green-500/20 text-green-200' : 'border-red-400/50 bg-red-500/20 text-red-200'}`}>
+	                                    {focusHandle === 'start' ? 'S' : 'E'}
 	                                  </div>
+	                                  <button
+	                                    type="button"
+	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, 1); }}
+	                                    className={`min-h-12 rounded-md border px-2 text-sm font-bold transition ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
+	                                    title={`${focusHandleLabel}: forward 1 frame`}
+	                                  >
+	                                    +1 frame
+	                                  </button>
+	                                  <button
+	                                    type="button"
+	                                    onClick={(e) => { e.stopPropagation(); nudgeAnchor(focusHandle, 1, 5); }}
+	                                    className="min-h-11 rounded-md border border-slate-700 bg-slate-900/80 text-[11px] font-bold text-slate-300 transition hover:border-cyan-400/40 hover:text-white"
+	                                    title={`${focusHandleLabel}: forward 5 frames`}
+	                                  >
+	                                    +5
+	                                  </button>
+	                                </div>
+	                                <div
+	                                  className="mt-2 grid gap-px"
+	                                  style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
+	                                  aria-hidden="true"
+	                                >
+	                                  {Array.from({ length: 15 }).map((_, tickIndex) => (
+	                                    <div
+	                                      key={tickIndex}
+	                                      className={`mx-auto rounded-full ${tickIndex === 7 ? 'h-3 w-0.5 bg-cyan-300' : tickIndex % 2 === 0 ? 'h-2 w-px bg-slate-500' : 'h-1.5 w-px bg-slate-700'}`}
+	                                    />
+	                                  ))}
 	                                </div>
 	                              </div>
 

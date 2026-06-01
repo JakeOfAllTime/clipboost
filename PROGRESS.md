@@ -44,6 +44,9 @@
 - Reduced Play Clips transition flashing by making the dual-video layer swap a true hard cut and waiting for the standby video's presented frame before marking it ready.
 - Added dev-only music loading from `Desktop/TestClips` for `vlog-beat-background-349853.mp3` and `retro-lounge-389644.mp3`.
 - Browser smoke-tested the user's reported path: loaded `jubjubthai trim.mp4`, loaded `vlog-beat-background-349853.mp3`, set Length 24s and Pace 3s, generated starter clips, played Play Clips, and saw no console errors.
+- Changed Quick Gen's default Pace to 3 seconds.
+- Reworked the inline Precision Trimmer frame controls into a focused nudge rail with active Start/End edge selection, one-frame buttons, five-frame jump buttons, and a tick strip.
+- Browser smoke-tested the nudge rail: loaded `jubjubthai trim.mp4`, opened Pro tools, confirmed Pace 3s, generated starter clips, and clicked the rail's -1/+1 frame controls with no console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -53,6 +56,7 @@
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 
 ## Next Logical Step
+- Have the user feel-test the new inline nudge rail on desktop/mobile and decide whether it should replace or inform the older precision modal controls too.
 - Have the user visually re-test Play Clips with Length 24s and Pace 3s to confirm the flash is gone or identify what kind of frame is flashing.
 - Test Music 100% preview/export with one of the five preferred clips and an added music file to confirm source audio is fully gone by ear.
 - Validate the redesigned Precision Trimmer on mobile with a real uploaded video.

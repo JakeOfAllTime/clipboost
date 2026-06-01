@@ -20,4 +20,6 @@ in progress
 - The active refactor repo and backups now live under `/Users/littlemac/Desktop/Clipboost Refactor Work`.
 - Play Clips now hard-cuts between dual video layers and waits for the standby frame to be presented before swapping, reducing the brief flash between clips.
 - Dev music buttons now load `vlog-beat-background-349853.mp3` and `retro-lounge-389644.mp3` from `Desktop/TestClips`.
+- Quick Gen now defaults Pace to 3 seconds.
+- The inline Precision Trimmer now uses a focused frame nudge rail for Start/End edge adjustments.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
