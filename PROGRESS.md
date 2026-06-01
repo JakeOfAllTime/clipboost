@@ -96,6 +96,8 @@
 - Browser smoke-tested with `freecompress-videoplayback.mp4`: generated clips, opened Pro tools, confirmed the current Precision Trimmer/Boundary Strip/Timeline render, confirmed no old Trim/Apply Trim controls or modal overlays remain, and double-clicked the timeline lane to add one manual clip with no console errors.
 - Fixed repeated anchor deletion on phone/desktop by clearing pending hold-to-drag timers, resetting double-tap state, auto-selecting the nearest remaining clip, and restoring scroll position after delete.
 - Browser-tested repeated timeline anchor deletion with `freecompress-videoplayback.mp4`: 7 clips deleted down to 4 in sequence, the Precision Trimmer stayed active on the next clip, scroll stayed stable, and no console errors appeared.
+- Reduced the mobile Pro timeline height from 124px to 112px and shortened the mobile seek track so phone anchors feel less oversized while desktop remains 160px.
+- Restarted localhost from a clean `.next`; `http://localhost:3002/` returns 200 and the dev test clip API returns the `Desktop/TestClips` list.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -119,6 +121,7 @@
 - User feel-test needed on phone for the shorter mobile timeline, double-tap delete, 1s manual clip creation, and smoother Play Clips fallback.
 - Next engineering pass should focus on Story vs Deep auto-generation behavior now that the UI cleanup/refactor surface is leaner.
 - User phone re-test needed for repeated double-tap anchor deletion after the timer/selection fix.
+- User phone feel-test needed for the slightly shorter Pro timeline anchors.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?

@@ -6222,7 +6222,7 @@ const exportVideo = async () => {
                       </div>
 
                       {/* Layered Timeline: Top = Playhead Track, Bottom = Clips Lane */}
-                      <div className="relative h-[124px] overflow-visible rounded-lg border border-slate-700/50 bg-gradient-to-b from-slate-800/60 to-slate-900/80 sm:h-[160px]">
+                      <div className="relative h-[112px] overflow-visible rounded-lg border border-slate-700/50 bg-gradient-to-b from-slate-800/60 to-slate-900/80 sm:h-[160px]">
 
                         {/* Top Layer: Playhead Track (30% height) - Click to seek */}
                         <div
@@ -6252,7 +6252,7 @@ const exportVideo = async () => {
                           onTouchMove={(e) => {
                             e.preventDefault();
                           }}
-                          className="absolute top-0 left-0 right-0 h-12 cursor-pointer hover:bg-slate-800/40 transition-colors border-b border-slate-700/50"
+                          className="absolute top-0 left-0 right-0 h-10 cursor-pointer hover:bg-slate-800/40 transition-colors border-b border-slate-700/50 sm:h-12"
                           style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                           title="Click to seek video"
                         >
@@ -6268,7 +6268,7 @@ const exportVideo = async () => {
                           {/* Playhead - spans full height of timeline */}
                           <div
                             ref={playheadRef}
-                            className="absolute top-0 h-[124px] w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none sm:h-[160px]"
+                            className="absolute top-0 h-[112px] w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,0.6)] pointer-events-none sm:h-[160px]"
                             style={{
                               display: currentTime >= timelineView.start && currentTime <= timelineView.end ? 'block' : 'none',
                               left: `${getTimelinePercent(currentTime)}%`,

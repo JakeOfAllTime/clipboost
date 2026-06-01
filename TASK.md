@@ -35,4 +35,5 @@ in progress
 - Cleanup refactor removed the old global Trim modal, the older standalone Precision modal, stale precision modal state/refs/audio mixer code, and obsolete precision-modal shortcut help.
 - Manual timeline clip creation now goes through one shared helper for desktop double-click and mobile double-tap, preserving 1s defaults and overlap prevention.
 - Repeated anchor deletion now clears pending touch/hold timers, selects the nearest remaining clip, and preserves scroll position so the Precision Trimmer does not jump away after deleting.
+- Mobile Pro timeline anchors are slightly shorter now; desktop timeline sizing is unchanged.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.
