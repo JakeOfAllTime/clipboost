@@ -29,4 +29,6 @@ in progress
 - Boundary Map pills now free-drag the selected start/end boundary directly; frame nudging lives in the spring puck and nudge buttons.
 - Frame nudges now clamp against previous/next clip boundaries so adjacent clips can touch but cannot overlap by accident.
 - GitHub `main` now points at this refactor; previous GitHub `main` is backed up as `backup/pre-refactor-main-20260601-133245`; Vercel production is live at `https://clipboost-ten.vercel.app`.
+- The Precision Trimmer now uses one consolidated editor card: preview and frame rail on top, compact Boundary Strip below, then local Prev/Loop/Next controls before the main Timeline.
+- Export defaults to `Fast Original`, with `Draft Vertical` and polished social render options labeled by speed/format tradeoff.
 - Build passes. Initial screen was visually checked at `http://localhost:3002`.

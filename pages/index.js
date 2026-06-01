@@ -130,7 +130,7 @@ const ReelForge = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [selectedPlatforms, setSelectedPlatforms] = useState(['vertical']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['original']);
   const [videoAnalysis, setVideoAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -326,34 +326,48 @@ const ReelForge = () => {
 
   // Platform configurations
 const platforms = {
-  vertical: {
-    name: '9:16 Vertical',
-    subtitle: 'TikTok • Reels • Shorts',
+  original: {
+    name: 'Fast Original',
+    subtitle: 'Quickest download',
+    note: 'No resize; copies video where possible',
+    aspect: 'original',
+    color: 'from-cyan-500 to-blue-500'
+  },
+  draftVertical: {
+    name: 'Draft Vertical',
+    subtitle: 'Faster 9:16 test',
+    note: 'Lower-res render for checking the edit',
     aspect: '9:16',
-    color: 'from-cyan-500 to-blue-500',  // Matches accent-cyan/accent-blue
+    color: 'from-blue-500 to-cyan-400',
+    width: 540,
+    height: 960
+  },
+  vertical: {
+    name: 'Polished 9:16',
+    subtitle: 'TikTok • Reels • Shorts',
+    note: 'Full-size social render',
+    aspect: '9:16',
+    color: 'from-pink-500 to-purple-600',
     width: 1080,
     height: 1920
   },
   instagram: {
     name: '4:5 Instagram Feed',
+    subtitle: 'Feed post',
+    note: 'Full-size formatted render',
     aspect: '4:5',
-    color: 'from-pink-500 to-purple-600',  // Matches accent-pink/accent-purple
+    color: 'from-purple-500 to-fuchsia-600',
     width: 1080,
     height: 1350
   },
   horizontal: {
     name: '16:9 Horizontal',
     subtitle: 'Twitter/X',
+    note: 'Full-size formatted render',
     aspect: '16:9',
-    color: 'from-blue-500 to-cyan-400',  // Matches accent-blue/accent-cyan
+    color: 'from-sky-500 to-blue-600',
     width: 1920,
     height: 1080
-  },
-  original: {
-    name: 'Original',
-    subtitle: 'No crop',
-    aspect: 'original',
-    color: 'from-purple-500 to-purple-700'  // Matches accent-purple
   }
 };
 
@@ -6467,21 +6481,22 @@ const exportVideo = async () => {
 	                          )}
 	                        </div>
 
-	                        <div className="flex flex-col gap-2 lg:flex-row">
+		                        <div className="flex flex-col gap-2">
 
-	                        {/* LEFT: Active clip preview and frame controls */}
-	                        <div
-	                          className="w-full flex-shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-64"
-	                          style={{
-	                            background: 'rgba(8, 12, 28, 0.97)',
-	                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
-	                          }}
-	                          onMouseDown={(e) => e.stopPropagation()}
-	                        >
-	                          {active ? (
-	                            <div className="p-2">
-	                              {/* Video with play/pause */}
-	                              <div className="relative aspect-video overflow-hidden rounded-md bg-black">
+		                        {/* Active clip preview, frame controls, and compact boundary strip */}
+		                        <div
+		                          className="w-full overflow-hidden rounded-lg border transition-colors"
+		                          style={{
+		                            background: 'rgba(8, 12, 28, 0.97)',
+		                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
+		                          }}
+		                          onMouseDown={(e) => e.stopPropagation()}
+		                        >
+		                          {active ? (
+		                            <div className="p-2 lg:grid lg:grid-cols-[minmax(240px,320px)_minmax(280px,1fr)] lg:gap-3">
+		                              <div className="min-w-0">
+		                              {/* Video with play/pause */}
+		                              <div className="relative aspect-video overflow-hidden rounded-md bg-black">
 	                                <video
 	                                  ref={cardVideoRef}
 	                                  src={videoUrl}
@@ -6537,15 +6552,17 @@ const exportVideo = async () => {
 	                                  className={`min-h-11 rounded-md border px-2 py-1.5 text-left transition ${focusHandle === 'end' ? 'border-red-400/60 bg-red-500/15 text-red-200' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-red-400/40'}`}
 	                                >
 	                                  <div className="text-[10px] font-bold uppercase tracking-wide">End</div>
-	                                  <div className="font-mono text-xs tabular-nums">{formatTime(anchor.end)}</div>
-	                                </button>
-	                              </div>
+		                                  <div className="font-mono text-xs tabular-nums">{formatTime(anchor.end)}</div>
+		                                </button>
+		                              </div>
+		                              </div>
 
-	                              {/* Frame nudge rail */}
-	                              <div
-	                                className={`mt-2 rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/30 bg-green-500/5' : 'border-red-400/30 bg-red-500/5'}`}
-	                                onMouseDown={(e) => e.stopPropagation()}
-	                              >
+		                              {/* Frame nudge rail */}
+		                              <div className="min-w-0">
+		                              <div
+		                                className={`mt-2 rounded-lg border p-2 lg:mt-0 ${focusHandle === 'start' ? 'border-green-400/30 bg-green-500/5' : 'border-red-400/30 bg-red-500/5'}`}
+		                                onMouseDown={(e) => e.stopPropagation()}
+		                              >
 	                                <div className="mb-2 flex items-center justify-between gap-2">
 	                                  <div className={`text-[10px] font-bold uppercase tracking-wide ${focusHandle === 'start' ? 'text-green-300' : 'text-red-300'}`}>
 	                                    {focusHandle === 'start' ? 'Start edge' : 'End edge'}
@@ -6649,14 +6666,74 @@ const exportVideo = async () => {
 	                                              : 'h-1.5 w-px bg-slate-700'
 	                                      }`}
 	                                    />
-	                                  ))}
-	                                </div>
-	                              </div>
+		                                  ))}
+		                                </div>
+		                              </div>
+		                              </div>
 
-	                              <div className="mt-2 flex items-center justify-between">
-	                                <span className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(anchor.start)} - {formatTime(anchor.end)}</span>
-	                                <button
-	                                  className="inline-flex min-h-9 items-center gap-1 rounded-full border px-3 text-[10px] font-bold uppercase tracking-wide transition-all"
+		                              <div
+		                                ref={loupeRef}
+		                                className="mt-2 rounded-lg border border-slate-700/70 bg-slate-950/60 p-2 lg:col-span-2"
+		                              >
+		                                <div className="mb-1.5 flex items-center justify-between gap-2">
+		                                  <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Boundary strip</div>
+		                                  <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(edgeWindowStart)} - {formatTime(edgeWindowEnd)}</div>
+		                                </div>
+		                                <div data-boundary-map="true" className="relative h-[72px] rounded-md border border-slate-800 bg-slate-950/80 px-3 py-3 sm:h-20">
+		                                  <div className="absolute inset-x-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slate-800" />
+		                                  <div
+		                                    className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-full ${colors.bg} ${colors.glow}`}
+		                                    style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%` }}
+		                                  />
+		                                  <button
+		                                    type="button"
+		                                    className={`absolute z-10 min-h-12 w-10 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
+		                                    style={{ left: `${startMarkerLeft}%`, top: startMarkerTop }}
+		                                    aria-label={`Drag start boundary — ${formatTime(anchor.start)}`}
+		                                    onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'start', edgeWindowStart, edgeWindowEnd)}
+		                                    onKeyDown={(e) => {
+		                                      if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
+		                                      else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
+		                                    }}
+		                                  >
+		                                    S
+		                                  </button>
+		                                  <button
+		                                    type="button"
+		                                    className={`absolute z-10 min-h-12 w-10 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
+		                                    style={{ left: `${endMarkerLeft}%`, top: endMarkerTop }}
+		                                    aria-label={`Drag end boundary — ${formatTime(anchor.end)}`}
+		                                    onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'end', edgeWindowStart, edgeWindowEnd)}
+		                                    onKeyDown={(e) => {
+		                                      if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
+		                                      else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
+		                                    }}
+		                                  >
+		                                    E
+		                                  </button>
+		                                  <div
+		                                    className={`absolute top-3 bottom-3 z-[1] w-0.5 rounded-full pointer-events-none ${focusHandle === 'start' ? 'bg-green-200/35 shadow-[0_0_8px_rgba(34,197,94,0.2)]' : 'bg-red-200/35 shadow-[0_0_8px_rgba(239,68,68,0.2)]'}`}
+		                                    style={{ left: `${focusLeft}%` }}
+		                                  />
+		                                </div>
+		                              </div>
+
+		                              <div className="mt-2 grid grid-cols-3 items-center gap-2 lg:col-span-2">
+		                                <button
+		                                  type="button"
+		                                  onClick={(e) => {
+		                                    e.stopPropagation();
+		                                    focusInlineAnchor(previousAnchor, 'end');
+		                                  }}
+		                                  disabled={!previousAnchor}
+		                                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+		                                  title="Previous clip"
+		                                >
+		                                  <ChevronLeft size={14} />
+		                                  Prev
+		                                </button>
+			                                <button
+			                                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border px-3 text-[10px] font-bold uppercase tracking-wide transition-all"
 	                                  aria-pressed={previewCardLooping}
 	                                  title={previewCardLooping ? 'Loop is ON — click to disable' : 'Loop is OFF — click to enable'}
 	                                  onMouseDown={(e) => e.stopPropagation()}
@@ -6667,153 +6744,31 @@ const exportVideo = async () => {
                                     boxShadow: previewCardLooping ? '0 0 8px rgba(0, 212, 255, 0.4)' : 'none',
 	                                    border: previewCardLooping ? '1px solid rgba(0, 212, 255, 0.5)' : '1px solid rgba(100, 116, 139, 0.3)'
 	                                  }}
-	                                >
-	                                  {previewCardLooping ? 'Loop on' : 'Loop off'}
-	                                </button>
-	                              </div>
-	                            </div>
-	                          ) : (
+		                                >
+		                                  {previewCardLooping ? 'Loop on' : 'Loop off'}
+		                                </button>
+			                                <button
+			                                  type="button"
+		                                  onClick={(e) => {
+		                                    e.stopPropagation();
+		                                    focusInlineAnchor(nextAnchor, 'start');
+		                                  }}
+		                                  disabled={!nextAnchor}
+			                                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+			                                  title="Next clip"
+			                                >
+			                                  Next
+			                                  <ChevronRight size={14} />
+			                                </button>
+			                                <span className="col-span-3 text-center font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(anchor.start)} - {formatTime(anchor.end)}</span>
+		                              </div>
+		                            </div>
+		                          ) : (
 	                            <div className="flex min-h-36 items-center justify-center">
 	                              <span className="text-slate-700 text-[10px] uppercase tracking-widest select-none">Preview</span>
 	                            </div>
 	                          )}
 	                        </div>
-
-                        {/* RIGHT: Boundary Map — visual orientation plus Start/End focus */}
-	                        <div
-	                          ref={loupeRef}
-	                          className="relative flex-1 self-start overflow-hidden rounded-lg border p-3 transition-colors"
-                          style={{
-                            background: 'rgba(8, 12, 28, 0.95)',
-                            borderColor: active ? 'rgba(100,116,139,0.6)' : 'rgba(100,116,139,0.15)',
-                          }}
-                        >
-                          {active ? (
-                            <div className="flex min-h-32 flex-col gap-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">⌕ Boundary map</div>
-                                <div className="font-mono text-[10px] text-slate-400 tabular-nums">{formatTime(edgeWindowStart)} - {formatTime(edgeWindowEnd)}</div>
-                              </div>
-
-                              <div data-boundary-map="true" className="relative h-24 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-4">
-                                <div className="absolute inset-x-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slate-800" />
-                                <div
-                                  className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-full ${colors.bg} ${colors.glow}`}
-                                  style={{ left: `${clampedLeft}%`, width: `${clampedWidth}%` }}
-                                />
-                                <button
-                                  type="button"
-                                  className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'start' ? 'border-green-300 bg-green-500 text-slate-950 shadow-[0_0_18px_rgba(34,197,94,0.45)]' : 'border-green-400/50 bg-green-500/20 text-green-200 hover:bg-green-500/30'}`}
-                                  style={{ left: `${startMarkerLeft}%`, top: startMarkerTop }}
-                                  aria-label={`Drag start boundary — ${formatTime(anchor.start)}`}
-                                  onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'start', edgeWindowStart, edgeWindowEnd)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('start', -1); }
-                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('start', 1); }
-                                  }}
-                                >
-                                  S
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`absolute z-10 min-h-14 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-full border text-[10px] font-bold transition ${focusHandle === 'end' ? 'border-red-300 bg-red-500 text-white shadow-[0_0_18px_rgba(239,68,68,0.45)]' : 'border-red-400/50 bg-red-500/20 text-red-200 hover:bg-red-500/30'}`}
-                                  style={{ left: `${endMarkerLeft}%`, top: endMarkerTop }}
-                                  aria-label={`Drag end boundary — ${formatTime(anchor.end)}`}
-                                  onPointerDown={(e) => startBoundaryMapHandleDrag(e, 'end', edgeWindowStart, edgeWindowEnd)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeAnchor('end', -1); }
-                                    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeAnchor('end', 1); }
-                                  }}
-                                >
-                                  E
-                                </button>
-                                <div
-                                  className={`absolute top-3 bottom-3 z-[1] w-0.5 rounded-full pointer-events-none ${focusHandle === 'start' ? 'bg-green-200/40 shadow-[0_0_8px_rgba(34,197,94,0.25)]' : 'bg-red-200/40 shadow-[0_0_8px_rgba(239,68,68,0.25)]'}`}
-                                  style={{ left: `${focusLeft}%` }}
-                                />
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-2 text-[10px]">
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('start'); }}
-                                  className={`min-h-10 rounded-md border px-2 text-left transition ${focusHandle === 'start' ? 'border-green-400/60 bg-green-500/15 text-green-200' : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-green-400/40'}`}
-                                >
-                                  <span className="block font-bold uppercase tracking-wide">Start</span>
-                                  <span className="font-mono tabular-nums">{formatTime(anchor.start)}</span>
-                                </button>
-                                <div className="flex min-h-10 items-center justify-center rounded-md border border-slate-700 bg-slate-900/40 px-2 text-center font-mono text-slate-300 tabular-nums">
-                                  {formatTime(focusTime)}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setFocusToHandle('end'); }}
-                                  className={`min-h-10 rounded-md border px-2 text-left transition ${focusHandle === 'end' ? 'border-red-400/60 bg-red-500/15 text-red-200' : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-red-400/40'}`}
-                                >
-                                  <span className="block font-bold uppercase tracking-wide">End</span>
-                                  <span className="font-mono tabular-nums">{formatTime(anchor.end)}</span>
-                                </button>
-                              </div>
-
-                              <div className={`rounded-lg border p-2 ${focusHandle === 'start' ? 'border-green-400/20 bg-green-500/5' : 'border-red-400/20 bg-red-500/5'}`}>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {[1, 5, 10].map((frameCount) => (
-                                    <React.Fragment key={frameCount}>
-                                      <button
-                                        type="button"
-                                        onPointerDown={(e) => startNudgeHold(e, focusHandle, -1, frameCount)}
-                                        className={`min-h-11 rounded-md border px-3 text-sm font-bold transition ${frameCount === 1 ? '' : 'text-xs'} ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
-                                        title={`${focusHandleLabel}: hold to nudge backward ${frameCount} frame${frameCount === 1 ? '' : 's'}`}
-                                      >
-                                        ← -{frameCount}f
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onPointerDown={(e) => startNudgeHold(e, focusHandle, 1, frameCount)}
-                                        className={`min-h-11 rounded-md border px-3 text-sm font-bold transition ${frameCount === 1 ? '' : 'text-xs'} ${focusHandle === 'start' ? 'border-green-400/40 bg-green-500/15 text-green-100 hover:bg-green-500/25' : 'border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25'}`}
-                                        title={`${focusHandleLabel}: hold to nudge forward ${frameCount} frame${frameCount === 1 ? '' : 's'}`}
-                                      >
-                                        +{frameCount}f →
-                                      </button>
-                                    </React.Fragment>
-                                  ))}
-                                </div>
-                                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-700/60 pt-2">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      focusInlineAnchor(previousAnchor, 'end');
-                                    }}
-                                    disabled={!previousAnchor}
-                                    className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
-                                    title="Previous clip"
-                                  >
-                                    <ChevronLeft size={14} />
-                                    Prev clip
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      focusInlineAnchor(nextAnchor, 'start');
-                                    }}
-                                    disabled={!nextAnchor}
-                                    className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-900/75 px-3 text-xs font-bold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
-                                    title="Next clip"
-                                  >
-                                    Next clip
-                                    <ChevronRight size={14} />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex h-full min-h-32 items-center justify-center">
-                              <span className="text-slate-700 text-[10px] uppercase tracking-widest pointer-events-none select-none">⌕ select a clip</span>
-                            </div>
-                          )}
-                        </div>
 
 	                      </div>
 	                    </div>
@@ -8355,11 +8310,14 @@ const exportVideo = async () => {
             </div>
 
             <div className="space-y-4 mb-6">
-              <h3 className="font-semibold text-lg" style={{ color: 'var(--text-primary)' }}>Select Platforms:</h3>
+              <div>
+                <h3 className="font-semibold text-lg" style={{ color: 'var(--text-primary)' }}>Choose export speed:</h3>
+                <p className="mt-1 text-sm text-slate-400">Fast Original downloads quickest. Social formats render resized video for posting.</p>
+              </div>
               {Object.entries(platforms).map(([key, platform]) => (
                 <label
                   key={key}
-                  className="flex items-center gap-4 p-4 btn-secondary rounded-lg cursor-pointer"
+                  className="flex items-center gap-4 p-4 btn-secondary rounded-lg cursor-pointer transition hover:border-cyan-400/40"
                 >
                   <input
                     type="checkbox"
@@ -8373,10 +8331,14 @@ const exportVideo = async () => {
                     }}
                     className="w-5 h-5 rounded border-2 border-cyan-500/40"
                   />
-                  <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
-                    {platform.name}
-                    {platform.subtitle && (
-                      <div className="text-sm opacity-80">{platform.subtitle}</div>
+                  <div className={`min-w-28 px-3 py-2 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
+                    <div>{platform.name}</div>
+                    {platform.subtitle && <div className="text-xs opacity-80">{platform.subtitle}</div>}
+                  </div>
+                  <div className="flex-1 text-sm text-slate-300">
+                    {platform.note}
+                    {platform.aspect !== 'original' && platform.width && (
+                      <span className="ml-2 font-mono text-xs text-slate-500">{platform.width}x{platform.height}</span>
                     )}
                   </div>
                 </label>
@@ -8410,7 +8372,8 @@ const exportVideo = async () => {
 {showExportModal && (
   <div className="fixed inset-0 glass-modal-overlay flex items-center justify-center z-50">
     <div className="glass-panel p-8 rounded-2xl max-w-lg w-full mx-4">
-      <h3 className="text-xl font-semibold mb-6 text-center">Select Export Platforms</h3>
+              <h3 className="text-xl font-semibold mb-2 text-center">Choose Export Speed</h3>
+              <p className="mb-6 text-center text-sm text-slate-400">Fast Original is quickest. Social formats render resized video.</p>
 
       <div className="space-y-3 mb-6">
         {Object.entries(platforms).map(([key, platform]) => (
@@ -8429,10 +8392,14 @@ const exportVideo = async () => {
                 }
               }}
             className="w-5 h-5 rounded border-2 border-cyan-500/40 bg-slate-800 checked:bg-white checked:border-amber-600 focus:ring-2 focus:ring-amber-500 cursor-pointer"/>
-            <div className={`flex-1 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
-              <div className="text-lg">{platform.name}</div>
-              {platform.subtitle && (
-                <div className="text-sm opacity-90 mt-1">{platform.subtitle}</div>
+            <div className={`min-w-32 px-4 py-3 bg-gradient-to-r ${platform.color} rounded-lg font-semibold text-center`}>
+              <div className="text-base">{platform.name}</div>
+              {platform.subtitle && <div className="text-xs opacity-90 mt-1">{platform.subtitle}</div>}
+            </div>
+            <div className="flex-1 text-sm text-slate-300">
+              {platform.note}
+              {platform.aspect !== 'original' && platform.width && (
+                <span className="ml-2 font-mono text-xs text-slate-500">{platform.width}x{platform.height}</span>
               )}
             </div>
           </label>

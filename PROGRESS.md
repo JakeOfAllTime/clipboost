@@ -73,6 +73,13 @@
 - Pushed the refactor branch to GitHub and promoted it to `main` for `JakeOfAllTime/clipboost`.
 - Preserved the previous GitHub `main` as `backup/pre-refactor-main-20260601-133245` before replacement.
 - Vercel production deployment for `clipboost` completed successfully; production alias `https://clipboost-ten.vercel.app` returned HTTP 200.
+- Consolidated the Pro Precision Trimmer so the Boundary Map is now a compact Boundary Strip inside the same editor card instead of a second stacked control panel.
+- Removed duplicate Boundary Map nudge controls; frame nudging stays in the preview-side rail/spring puck, while the Boundary Strip handles coarse direct dragging of `S`/`E`.
+- Moved local `Prev` / `Loop` / `Next` controls into a compact trimmer footer below the Boundary Strip.
+- Added clearer export speed choices: `Fast Original` is now the default stream-copy-oriented export, `Draft Vertical` provides a lower-resolution 9:16 test render, and polished social formats remain available.
+- Verified `npm run build` succeeds after the mobile/desktop trimmer and export changes.
+- Browser-checked the refactored Pro Precision Trimmer with `Cooking_Mushrooms.mp4`: generated 8 starter clips at the 3s default pace, opened Pro tools, confirmed one consolidated trimmer, compact Boundary Strip, local clip navigation, and timeline ordering.
+- Browser-checked the Export section: `Fast Original` is selected by default and the Draft/Polished render choices communicate their speed/format tradeoff.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -80,6 +87,7 @@
 - The Precision Trimmer redesign has been browser-tested with one real local test video; broader mobile and alternate-video testing is still useful.
 - The 100% Music audio fix is code/build/browser-smoke verified; final confirmation still needs a real music export or hands-on playback test with music selected.
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
+- The in-app browser viewport did not shrink for a true phone-size screenshot; mobile validation used DOM ordering plus desktop visual checks. The new order is preview, frame rail, Boundary Strip, Prev/Loop/Next, then Timeline.
 
 ## Next Logical Step
 - Have the user feel-test direct Boundary Map dragging, the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
@@ -91,6 +99,7 @@
 - Audit the auto-generator pipeline for timestamp distribution, frame manifest usage, and how beat-sync target selection affects generated clips.
 - Consider a future finishing/effects tab between Edit and Export for explicit fades, graphics, slow motion, and any intentional transition overlap behavior.
 - Next high-impact UX pass: polish the Simple mode post-upload hierarchy around one primary "Make Clips" action and a clearer export-ready state.
+- User feel-test needed on phone for the consolidated Boundary Strip and export defaults after the next Vercel deployment.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
