@@ -2841,7 +2841,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (anchors.length === 0) {
       setPreviewTimeline([]);
       setPreviewTotalDuration(0);
-      return;
+      return [];
     }
 
     const timeline = [];
@@ -2869,6 +2869,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     setPreviewTimeline(timeline);
     setPreviewTotalDuration(previewTime);
+    return timeline;
   }, [anchors, musicStartTime]);
 
   // Find which segment contains the preview time
@@ -3040,9 +3041,17 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    buildPreviewTimeline();
+    const timeline = buildPreviewTimeline();
+    const firstSegment = timeline[0];
+    if (!firstSegment) {
+      showToast('Create some clips first to enable preview', 'warning');
+      return;
+    }
+
+    setPlaybackMode('clips');
     setIsPreviewMode(true);
     setPreviewCurrentTime(0);
+    previewCurrentTimeRef.current = 0;
 
     // Initialize refs and state for dual-video system
     previewAnchorIndexRef.current = 0;
@@ -3067,25 +3076,28 @@ const refineWithSpeechPauses = (cuts, pauses) => {
       return;
     }
 
-    // Use anchors directly (timeline will be built from these)
-    const firstAnchor = anchors[0];
-    const secondAnchor = anchors.length > 1 ? anchors[1] : null;
-
     // Pre-seek both videos for gapless transitions
-    videoA.currentTime = firstAnchor.start;
-    if (secondAnchor) {
-      standbyReadyRef.current = false;
-      videoB.currentTime = secondAnchor.start;
-    }
-
-    // Wait for Video A to be seeked and ready
-    await new Promise((resolve) => {
-      const onSeeked = () => {
-        videoA.removeEventListener('seeked', onSeeked);
+    const seekVideoTo = (element, time) => new Promise((resolve) => {
+      if (!element) return resolve();
+      const target = Math.max(0, time);
+      const finish = () => {
+        element.removeEventListener('seeked', finish);
         resolve();
       };
-      videoA.addEventListener('seeked', onSeeked);
+      element.addEventListener('seeked', finish, { once: true });
+      element.currentTime = target;
+      if (Math.abs(element.currentTime - target) < FRAME_STEP) {
+        requestAnimationFrame(finish);
+      }
+      setTimeout(finish, 400);
     });
+
+    await seekVideoTo(videoA, firstSegment.sourceStart);
+    if (timeline[1]) {
+      standbyReadyRef.current = false;
+      await seekVideoTo(videoB, timeline[1].sourceStart);
+      markStandbyReadyAfterFrame(videoB);
+    }
 
     // Set up Web Audio API mixer
     if (videoA && musicRef.current) {
@@ -3113,7 +3125,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     }
 
     console.log('✅ Dual-video preview initialized (Video A active, Video B standby)');
-  }, [anchors, applyElementAudioVolumes, buildPreviewTimeline, music, setupAudioMixer]);
+  }, [anchors.length, applyElementAudioVolumes, buildPreviewTimeline, music, setupAudioMixer, markStandbyReadyAfterFrame]);
 
   // Stop enhanced preview
   const stopEnhancedPreview = useCallback(() => {
@@ -4351,23 +4363,25 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     lastTapTimeRef.current = 0;
 
     const startedOnHandle = e.target?.closest?.('[data-anchor-handle="true"]');
-    const activeDrag = dragDataRef.current.dragState.active;
+    const touch = e.changedTouches?.[0];
+    if (!touch) return;
 
+    const activeDragState = dragDataRef.current.dragState;
+    const activeDrag = activeDragState.active;
     if (activeDrag) {
-      lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
       handleMouseUp();
-      return;
+      const tinyHandleTap =
+        startedOnHandle &&
+        (activeDragState.type === 'anchor-left' || activeDragState.type === 'anchor-right') &&
+        Math.abs(touch.clientX - activeDragState.startX) < 10;
+
+      if (!tinyHandleTap) {
+        lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+        return;
+      }
     }
 
     clearAnchorTouchTimers();
-
-    if (startedOnHandle) {
-      lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
-      return;
-    }
-
-    const touch = e.changedTouches?.[0];
-    if (!touch) return;
 
     const now = Date.now();
     const previousTap = lastAnchorTapRef.current;
@@ -5024,27 +5038,27 @@ const exportVideo = async () => {
 	          }
 	        </p>
 	      </div>
-	      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 sm:mb-6 px-2 sm:px-0">
+	      <div className="grid grid-cols-3 gap-1 mb-2 px-2 sm:grid-cols-3 sm:gap-2 sm:mb-6 sm:px-0">
 	        {workflowSteps.map((step, index) => (
 	          <div
 	            key={step.label}
-	            className={`rounded-lg border p-3 transition-all ${
+	            className={`pointer-events-none rounded-md border px-2 py-1.5 transition-all sm:rounded-lg sm:p-3 ${
 	              step.active
-	                ? 'border-cyan-400/60 bg-cyan-500/10 shadow-[0_0_18px_rgba(0,212,255,0.18)]'
+	                ? 'border-cyan-400/60 bg-cyan-500/10 sm:shadow-[0_0_18px_rgba(0,212,255,0.18)]'
 	                : step.done
 	                  ? 'border-emerald-400/40 bg-emerald-500/10'
 	                  : 'border-slate-700/70 bg-slate-900/30'
 	            }`}
 	          >
-	            <div className="flex items-center gap-2">
-	              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+	            <div className="flex items-center gap-1.5 sm:gap-2">
+	              <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold sm:h-6 sm:w-6 sm:text-xs ${
 	                step.done ? 'bg-emerald-400 text-slate-950' : step.active ? 'bg-cyan-400 text-slate-950' : 'bg-slate-700 text-slate-300'
 	              }`}>
 	                {step.done ? 'OK' : index + 1}
 	              </div>
 	              <div className="min-w-0">
-	                <div className="text-sm font-semibold text-white">{step.label}</div>
-	                <div className="truncate text-xs text-slate-400">{step.value}</div>
+	                <div className="truncate text-[10px] font-semibold leading-tight text-white sm:text-sm">{step.label}</div>
+	                <div className="hidden truncate text-xs text-slate-400 sm:block">{step.value}</div>
 	              </div>
 	            </div>
 	          </div>
@@ -7164,9 +7178,12 @@ const exportVideo = async () => {
                             // === MODE 3: PRO GEN (Full Narrative Analysis) ===
                             else if (autoGenMode === 'pro') {
                               console.log('💎 Pro Gen: Full Narrative Analysis (~$1.20-$2.00)');
+                              setAnalysisProgress(8);
+                              setAnalysisPhase('Extracting frames for Deep...');
 
                               // Similar to Smart Gen but with more comprehensive analysis
                               const { frames: allFrames, zones } = await gatherComprehensiveFrames(video, duration);
+                              setAnalysisProgress(25);
 
                               if (allFrames.length === 0) {
                                 showToast('Failed to extract frames from video — please try again', 'error');
@@ -7174,7 +7191,9 @@ const exportVideo = async () => {
                               }
 
                               // Run full narrative analysis with pro settings
+                              setAnalysisPhase('Deep is reading the footage...');
                               const narrativeResult = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'pro', brief: deepBrief });
+                              setAnalysisProgress(50);
 
                               if (!narrativeResult) {
                                 showToast('Narrative analysis failed — please try again', 'error');
@@ -7215,7 +7234,9 @@ const exportVideo = async () => {
                                 ...deepBriefTargets
                               ];
 
+                              setAnalysisProgress(60);
                               if (deepMissingMoments.length > 0) {
+                                setAnalysisPhase('Checking for brief moments...');
                                 const { newFrames } = await seekMissingMoments(
                                   video,
                                   duration,
@@ -7242,6 +7263,8 @@ const exportVideo = async () => {
                               }
 
                               // Deep also gets motion candidates so it is not less complete than Story.
+                              setAnalysisProgress(72);
+                              setAnalysisPhase('Scanning movement and scene changes...');
                               let videoAnalysisResult = videoAnalysis;
                               if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
                                 videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
@@ -7262,6 +7285,8 @@ const exportVideo = async () => {
                               allMoments = allMoments.concat(motionMoments);
 
                               // Final selection with pro quality
+                              setAnalysisProgress(86);
+                              setAnalysisPhase('Choosing the best cut...');
                               const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video', { mode: 'pro', brief: deepBrief });
 
                               if (!finalSelection || !finalSelection.selectedClips) {
@@ -7287,6 +7312,8 @@ const exportVideo = async () => {
                                 anchorsCreated: newAnchors.length,
                                 totalDuration: newAnchors.reduce((sum, a) => sum + (a.end - a.start), 0).toFixed(1)
                               });
+                              setAnalysisProgress(100);
+                              setAnalysisPhase('Complete!');
 
 	                              setAnchors(newAnchors);
 	                              saveToHistory(newAnchors);

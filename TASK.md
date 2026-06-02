@@ -49,3 +49,4 @@ in progress
 - Added an optional Deep brief field for creator direction; it feeds Deep prompt guidance and targeted missing-moment search.
 - Build passes and browser smoke check confirmed the Deep brief appears after selecting Deep.
 - Fixed the Deep brief keyboard conflict: global Space/playback shortcuts now ignore text-editing fields, and browser testing confirmed spaces type normally without toggling video playback.
+- Applied a small mobile learner-friction pass: compacted the workflow strip, hardened Play Clips startup into clips mode, made anchor-handle double taps count for delete when not dragged, and added visible Deep progress phases.
