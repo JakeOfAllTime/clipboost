@@ -260,6 +260,7 @@ const ReelForge = () => {
   const lastTapTimeRef = useRef(0);
   const lastTapPositionRef = useRef({ x: 0, y: 0 });
   const lastAnchorTapRef = useRef({ id: null, time: 0, x: 0, y: 0 });
+  const suppressTimelineTapUntilRef = useRef(0);
   const loadConfigInputRef = useRef(null);
 
   // Magnifier lens refs (Phase 5A) — updated via direct DOM mutation inside RAF, no setState
@@ -3576,6 +3577,18 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     seekToPosition(e);
   }, [seekToPosition]);
 
+  const clearAnchorTouchTimers = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (upgradeTimerRef.current) {
+      clearTimeout(upgradeTimerRef.current);
+      upgradeTimerRef.current = null;
+    }
+    setHoldingAnchor(null);
+  }, []);
+
   const createAnchorAtTime = useCallback((time, options = {}) => {
     const {
       durationSeconds = 1,
@@ -3624,16 +3637,9 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
   const deleteAnchor = useCallback((anchorId) => {
     const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    if (upgradeTimerRef.current) {
-      clearTimeout(upgradeTimerRef.current);
-      upgradeTimerRef.current = null;
-    }
+    clearAnchorTouchTimers();
     lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
-    setHoldingAnchor(null);
+    suppressTimelineTapUntilRef.current = Date.now() + 500;
     setDragState({ active: false, type: null, startX: 0, anchorSnapshot: null });
 
     const sortedAnchors = [...anchors].sort((a, b) => a.start - b.start);
@@ -3669,7 +3675,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
 
     // Mark delete hint as seen
     setHasSeenDeleteHint(true);
-  }, [anchors, saveToHistory, selectedAnchor, previewAnchor, syncPreviewIndexForAnchor]);
+  }, [anchors, saveToHistory, selectedAnchor, previewAnchor, syncPreviewIndexForAnchor, clearAnchorTouchTimers]);
 
   // Nudge selected anchor start or end by one video frame (1/30s)
   const nudgeAnchor = useCallback((handle, direction, frames = 1, options = {}) => {
@@ -4031,25 +4037,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   const handleAnchorTouchStart = useCallback((e, anchor, dragType) => {
     e.stopPropagation();
     e.preventDefault();
-
-    const touch = e.touches?.[0];
-    if (dragType === 'anchor-move' && touch) {
-      const now = Date.now();
-      const previousTap = lastAnchorTapRef.current;
-      const distance = Math.sqrt(
-        Math.pow(touch.clientX - previousTap.x, 2) +
-        Math.pow(touch.clientY - previousTap.y, 2)
-      );
-
-      if (previousTap.id === anchor.id && now - previousTap.time < 350 && distance < 40) {
-        lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
-        deleteAnchor(anchor.id);
-        if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
-        return;
-      }
-
-      lastAnchorTapRef.current = { id: anchor.id, time: now, x: touch.clientX, y: touch.clientY };
-    }
+    suppressTimelineTapUntilRef.current = Date.now() + 500;
 
     if (navigator.vibrate) navigator.vibrate(10);
 
@@ -4095,7 +4083,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
         });
       }, HOLD_DURATION_MS);
     }
-  }, [deleteAnchor, syncPreviewIndexForAnchor]);
+  }, [syncPreviewIndexForAnchor]);
 
   // Persistent drag handlers with 60fps throttling (optimized)
   const rafIdRef = useRef(null);
@@ -4267,6 +4255,54 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     // Phase 5A: hide magnifier lens on drag end
     if (lensRef.current) lensRef.current.style.display = 'none';
   }, []);
+
+  const handleAnchorTouchEnd = useCallback((e, anchor) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    suppressTimelineTapUntilRef.current = Date.now() + 500;
+    lastTapTimeRef.current = 0;
+
+    const startedOnHandle = e.target?.closest?.('[data-anchor-handle="true"]');
+    const activeDrag = dragDataRef.current.dragState.active;
+
+    if (activeDrag) {
+      lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+      handleMouseUp();
+      return;
+    }
+
+    clearAnchorTouchTimers();
+
+    if (startedOnHandle) {
+      lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+      return;
+    }
+
+    const touch = e.changedTouches?.[0];
+    if (!touch) return;
+
+    const now = Date.now();
+    const previousTap = lastAnchorTapRef.current;
+    const distance = Math.sqrt(
+      Math.pow(touch.clientX - previousTap.x, 2) +
+      Math.pow(touch.clientY - previousTap.y, 2)
+    );
+
+    if (previousTap.id === anchor.id && now - previousTap.time < 450 && distance < 44) {
+      lastAnchorTapRef.current = { id: null, time: 0, x: 0, y: 0 };
+      deleteAnchor(anchor.id);
+      if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+      return;
+    }
+
+    lastAnchorTapRef.current = {
+      id: anchor.id,
+      time: now,
+      x: touch.clientX,
+      y: touch.clientY
+    };
+  }, [clearAnchorTouchTimers, deleteAnchor, handleMouseUp]);
 
   const handleTouchMove = useCallback((e) => {
     e.preventDefault();
@@ -6311,6 +6347,14 @@ const exportVideo = async () => {
                             // Handle double-tap for mobile
                             e.preventDefault();
                             const now = Date.now();
+                            if (
+                              now < suppressTimelineTapUntilRef.current ||
+                              e.target?.closest?.('[data-anchor-element="true"]')
+                            ) {
+                              lastTapTimeRef.current = 0;
+                              return;
+                            }
+
                             const timeSinceLastTap = now - lastTapTimeRef.current;
                             const touch = e.changedTouches[0];
                             const tapPosition = { x: touch.clientX, y: touch.clientY };
@@ -6392,12 +6436,8 @@ const exportVideo = async () => {
                                         deleteAnchor(anchor.id);
                                       }}
                                       onMouseDown={(e) => handleAnchorMouseDown(e, anchor, 'anchor-move')}
-                                      onTouchStart={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setSelectedAnchor(anchor.id);
-                                        handleAnchorTouchStart(e, anchor, 'anchor-move');
-                                      }}
+                                      onTouchStart={(e) => handleAnchorTouchStart(e, anchor, 'anchor-move')}
+                                      onTouchEnd={(e) => handleAnchorTouchEnd(e, anchor)}
                                       onMouseEnter={() => {
                                         if (!previewAnchor) {
                                           setHoveredAnchor(anchor);
@@ -6431,6 +6471,7 @@ const exportVideo = async () => {
                                         <>
                                           {/* Left handle */}
                                           <div
+                                            data-anchor-handle="true"
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleAnchorMouseDown(e, anchor, 'anchor-left');
@@ -6447,6 +6488,7 @@ const exportVideo = async () => {
                                           </div>
                                           {/* Right handle */}
                                           <div
+                                            data-anchor-handle="true"
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleAnchorMouseDown(e, anchor, 'anchor-right');

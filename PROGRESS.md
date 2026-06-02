@@ -98,6 +98,11 @@
 - Browser-tested repeated timeline anchor deletion with `freecompress-videoplayback.mp4`: 7 clips deleted down to 4 in sequence, the Precision Trimmer stayed active on the next clip, scroll stayed stable, and no console errors appeared.
 - Reduced the mobile Pro timeline height from 124px to 112px and shortened the mobile seek track so phone anchors feel less oversized while desktop remains 160px.
 - Restarted localhost from a clean `.next`; `http://localhost:3002/` returns 200 and the dev test clip API returns the `Desktop/TestClips` list.
+- Fixed the mobile double-tap delete gesture leaking into the parent timeline create handler. Anchor touches now suppress timeline clip creation, anchor touch-end stops propagation, and delete suppresses timeline creation briefly so the overlap warning should not appear after a delete.
+- Verified `npm run build` passes after the touch suppression fix and restarted localhost cleanly on port 3002 for phone testing.
+- Corrected the mobile double-tap delete path so it behaves like desktop: anchor touch-start now only selects/prepares drag, while anchor touch-end handles the second tap and deletes the touched clip before the parent timeline can create a new one.
+- Restarted the dev server with LAN binding (`-H 0.0.0.0 -p 3002`) so phone testing can use the Mac Wi-Fi URL instead of `localhost`.
+- Verified `npm run build` passes after the corrected mobile gesture patch; `http://localhost:3002/` and `/api/dev-testclips` return healthy responses, and the in-app browser loads with no captured console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -122,6 +127,8 @@
 - Next engineering pass should focus on Story vs Deep auto-generation behavior now that the UI cleanup/refactor surface is leaner.
 - User phone re-test needed for repeated double-tap anchor deletion after the timer/selection fix.
 - User phone feel-test needed for the slightly shorter Pro timeline anchors.
+- User phone re-test needed specifically for deleting several anchors in a row without seeing the "Clip overlaps" warning.
+- User phone re-test needed at the LAN URL to confirm anchor double-tap delete now matches desktop behavior across several consecutive deletions.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?

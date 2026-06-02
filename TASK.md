@@ -36,4 +36,6 @@ in progress
 - Manual timeline clip creation now goes through one shared helper for desktop double-click and mobile double-tap, preserving 1s defaults and overlap prevention.
 - Repeated anchor deletion now clears pending touch/hold timers, selects the nearest remaining clip, and preserves scroll position so the Precision Trimmer does not jump away after deleting.
 - Mobile Pro timeline anchors are slightly shorter now; desktop timeline sizing is unchanged.
-- Build passes. Initial screen was visually checked at `http://localhost:3002`.
+- Mobile anchor touches now suppress the parent timeline's create-clip double-tap handler, preventing the post-delete "Clip overlaps" warning.
+- Corrected mobile anchor delete to match desktop more closely: touch-start selects/prepares drag, touch-end detects the double tap on the anchor body, and handle touches stay reserved for resizing.
+- Build passes. The dev server is running on port 3002 with LAN binding for phone testing.
