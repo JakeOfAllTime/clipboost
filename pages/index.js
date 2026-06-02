@@ -28,6 +28,20 @@ const isLocalDev =
   process.env.NODE_ENV !== 'production' ||
   (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
 
+const isTextEditingTarget = (target) => {
+  const element = target?.nodeType === 1 ? target : target?.parentElement;
+  if (!element) return false;
+
+  const tagName = element.tagName?.toLowerCase();
+  return (
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select' ||
+    element.isContentEditable ||
+    Boolean(element.closest?.('[contenteditable="true"], input, textarea, select'))
+  );
+};
+
 const ReelForge = () => {
   const FRAME_STEP = 1 / 30;
 
@@ -3271,6 +3285,8 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (!isPreviewMode) return;
 
     const handleKeyDown = (e) => {
+      if (isTextEditingTarget(e.target)) return;
+
       // Prevent default behavior if we're handling the key
       switch (e.key) {
         case ' ':
@@ -3594,8 +3610,7 @@ const refineWithSpeechPauses = (cuts, pauses) => {
     if (!selectedMusicHandle || !music) return;
 
     const handleKeyDown = (e) => {
-      // Prevent if typing in input field
-      if (e.target.tagName === 'INPUT') return;
+      if (isTextEditingTarget(e.target)) return;
 
       let delta = 0;
 
@@ -4817,7 +4832,7 @@ const exportVideo = async () => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!video) return;
-      if (e.target.tagName === 'INPUT') return;
+      if (isTextEditingTarget(e.target)) return;
 
       // AUDIT P2 #12: "?" toggles the keyboard-shortcut overlay anywhere in the app.
       if (e.key === '?' || (e.shiftKey && e.code === 'Slash')) {

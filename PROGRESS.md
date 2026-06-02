@@ -112,6 +112,8 @@
 - Added a visible "Why this clip" layer for AI-generated clips using each anchor's `_narrativeReason`, including a selected-clip explanation panel and compact reason chips on wider clips in the preview strip.
 - Added an optional Deep brief field that feeds creator direction into Deep frame analysis and final clip selection, and also seeds targeted missing-moment search.
 - Verified `npm run build` passes after the Why/Deep brief patch; browser-checked that the Deep brief appears after loading a dev test clip and selecting Deep, with no captured console errors.
+- Fixed global keyboard shortcuts so text-editing fields are respected across inputs, textareas, selects, and contenteditable surfaces.
+- Browser-tested the Deep brief with typed spaces and a direct Space keypress; the textarea kept `alpha beta`, focus stayed in the brief, and the video remained paused.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -141,6 +143,7 @@
 - User phone re-test needed at the LAN URL to confirm anchor double-tap delete now matches desktop behavior across several consecutive deletions.
 - Run Story and Deep against the five preferred TestClips videos to compare timeline quality now that the API key, model routing, visible reasons, and Deep brief work.
 - Continue differentiating Deep as a professional editor mode, including better brief interpretation, duplicate avoidance, and payoff protection.
+- Next Story/Deep pass can proceed after the Deep brief keyboard fix is pushed/deployed.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?

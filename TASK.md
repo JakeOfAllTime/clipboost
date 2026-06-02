@@ -48,3 +48,4 @@ in progress
 - Added visible AI reasoning: selected generated clips show a "Why this clip" panel, and wider clips in the preview strip show compact reason chips.
 - Added an optional Deep brief field for creator direction; it feeds Deep prompt guidance and targeted missing-moment search.
 - Build passes and browser smoke check confirmed the Deep brief appears after selecting Deep.
+- Fixed the Deep brief keyboard conflict: global Space/playback shortcuts now ignore text-editing fields, and browser testing confirmed spaces type normally without toggling video playback.
