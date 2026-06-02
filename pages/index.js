@@ -1388,10 +1388,23 @@ const gatherComprehensiveFrames = async (videoFile, videoDuration) => {
 };
 
 // PHASE 2: Single comprehensive analysis with all frames
-const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones) => {
+const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones, options = {}) => {
   console.log(`🧠 PHASE 2: Analyzing ${allFrames.length} frames with complete context...`);
 
   try {
+    const mode = options.mode === 'pro' ? 'deep' : 'story';
+    const modeGuidance = mode === 'deep'
+      ? `DEEP MODE: Act like a professional short-form editor making a deliberate cut for a creator.
+- Identify more candidate moments than you think you need, then rank them.
+- Watch for hook, development, contrast, payoff, reaction, and final reveal.
+- Penalize repetitive-looking clips even if they have motion.
+- Prefer clips that would make a viewer understand why this content matters.
+- Treat missing finale/payoff/reaction moments as important search targets.`
+      : `STORY MODE: Build a clear, balanced visual story from the strongest moments.
+- Prioritize moments that communicate what happened without requiring much explanation.
+- Keep the result accessible for casual creators who want a useful first draft.
+- Favor obvious visual beats: setup, process, change, reaction, and payoff.`;
+
     // Build frame manifest with exact timestamps
     const frameManifest = allFrames.map((frame, idx) =>
       `Frame ${idx + 1}: ${formatTime(frame.timestamp)} (${frame.timestamp.toFixed(2)}s) - ${frame.zone} zone`
@@ -1436,6 +1449,8 @@ ${zoneSummary}
 This gives you complete visibility from start to finish.
 
 TARGET DURATION: ${targetDuration} seconds
+
+${modeGuidance}
 
 YOUR ANALYSIS PROCESS:
 
@@ -1783,7 +1798,7 @@ const analyzeNewFrames = async (originalFrames, newFrames, targetDuration, zones
     ).join('\n');
 
     const promptText = `
-You are analyzing ADDITIONAL frames from a cooking video to find missing moments.
+You are analyzing ADDITIONAL frames from a video to find missing moments.
 
 CONTEXT - What you previously found:
 Your initial analysis of 100 frames found these key moments:
@@ -1986,11 +2001,58 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   }
 };
 
+const normalizeSupplementalMoments = (seekAnalysis, newFrames = []) => {
+  const supplementalMoments = Array.isArray(seekAnalysis?.newMoments)
+    ? seekAnalysis.newMoments
+    : Array.isArray(seekAnalysis?.suggestedCuts)
+      ? seekAnalysis.suggestedCuts.map(cut => ({
+          frameReference: cut.frameReference,
+          timestamp: cut.startTime,
+          description: cut.reason,
+          importance: cut.importance,
+          category: cut.category || cut.narrativeRole || 'searched'
+        }))
+      : [];
+
+  return supplementalMoments
+    .map(moment => {
+      const frameIndex = Number(moment.frameReference);
+      const referencedFrame = Number.isFinite(frameIndex) ? newFrames[frameIndex - 1] : null;
+      const timestamp = Number.isFinite(referencedFrame?.timestamp)
+        ? referencedFrame.timestamp
+        : Number(moment.timestamp);
+
+      if (!Number.isFinite(timestamp)) return null;
+
+      return {
+        timestamp,
+        importance: Number.isFinite(Number(moment.importance)) ? Number(moment.importance) : 0.72,
+        description: moment.description || moment.reason || 'Recovered missing moment',
+        category: moment.category || 'searched',
+        source: 'seek'
+      };
+    })
+    .filter(Boolean);
+};
+
 // PHASE 5: Final clip selection with ALL moments known
-const selectFinalClips = async (allMoments, targetDuration, storyType) => {
+const selectFinalClips = async (allMoments, targetDuration, storyType, options = {}) => {
   console.log(`📝 PHASE 5: Selecting final clips from ${allMoments.length} total moments...`);
 
   try {
+    const mode = options.mode === 'pro' ? 'deep' : 'story';
+    const selectionGuidance = mode === 'deep'
+      ? `DEEP SELECTION MODE:
+- Think like a professional editor cutting for retention and creator intent.
+- Choose a strong first clip even if it is not chronological, then keep the final output chronological unless a later hook is clearly better.
+- Avoid near-duplicate actions, repeated angles, and filler transitions.
+- Include at least one payoff/reveal/reaction if such a moment exists.
+- Use narrativeRole honestly: hook, build, climax, payoff.`
+      : `STORY SELECTION MODE:
+- Create a clear visual story that feels coherent on first watch.
+- Prefer reliable, easy-to-understand moments over subtle ones.
+- Keep pacing varied but not overly aggressive.`;
+
     // Build moment inventory with zone information
     const momentsList = allMoments.map((m, idx) =>
       `Moment ${idx + 1}: ${m.description} @ ${m.timestamp}s [zone: ${m.zone}, ${m.category}, importance: ${m.importance}]`
@@ -2013,6 +2075,8 @@ ZONE DISTRIBUTION:
 ${Object.entries(zoneDistribution).map(([zone, count]) => `- ${zone}: ${count} moments`).join('\n')}
 
 TARGET: ${targetDuration} seconds total duration
+
+${selectionGuidance}
 
 Your job: Select the best moments and assign appropriate clip lengths (2-10s each).
 Aim for 8-12 clips total, but prioritize quality over hitting exact counts.
@@ -6905,7 +6969,7 @@ const exportVideo = async () => {
                               // PHASE 2: Identify moments (no clip lengths yet)
                               setAnalysisPhase('AI analyzing frames...');
                               console.log('📤 Sending', allFrames.length, 'frames to Claude API...');
-                              const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones);
+                              const initialAnalysis = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'story' });
                               setAnalysisProgress(50);
 
                               if (!initialAnalysis) {
@@ -6917,7 +6981,9 @@ const exportVideo = async () => {
                               const enrichMomentsWithZones = (moments, zones) => {
                                 return moments.map(moment => {
                                   const frameIndex = Number(moment.frameReference);
-                                  const referencedFrame = Number.isFinite(frameIndex)
+                                  const referencedFrame = moment.source === 'seek' || moment.source === 'motion'
+                                    ? null
+                                    : Number.isFinite(frameIndex)
                                     ? allFrames[frameIndex - 1]
                                     : null;
                                   const timestamp = Number.isFinite(referencedFrame?.timestamp)
@@ -6956,14 +7022,8 @@ const exportVideo = async () => {
                                     initialAnalysis.missingMoments,
                                     initialAnalysis.suggestedCuts || []
                                   );
-                                  if (seekAnalysis && seekAnalysis.suggestedCuts) {
-                                    // Convert suggestedCuts to moment format and add to allMoments
-                                    const newMoments = seekAnalysis.suggestedCuts.map(cut => ({
-                                      timestamp: cut.startTime,
-                                      importance: cut.importance || 0.7,
-                                      description: cut.reason,
-                                      source: 'seek'
-                                    }));
+                                  const newMoments = normalizeSupplementalMoments(seekAnalysis, newFrames);
+                                  if (newMoments.length > 0) {
                                     allMoments = allMoments.concat(enrichMomentsWithZones(newMoments, zones));
                                   }
                                 }
@@ -6993,7 +7053,7 @@ const exportVideo = async () => {
                               // PHASE 5: Final selection
                               setAnalysisProgress(85);
                               setAnalysisPhase('Selecting best clips...');
-                              const finalSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType || 'video');
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, initialAnalysis.storyType || 'video', { mode: 'story' });
 
                               if (!finalSelection || !finalSelection.selectedClips) {
                                 showToast('Clip selection failed — please try again', 'error');
@@ -7058,7 +7118,9 @@ const exportVideo = async () => {
                               const enrichMomentsWithZones = (moments, zones) => {
                                 return moments.map(moment => {
                                   const frameIndex = Number(moment.frameReference);
-                                  const referencedFrame = Number.isFinite(frameIndex)
+                                  const referencedFrame = moment.source === 'seek' || moment.source === 'motion'
+                                    ? null
+                                    : Number.isFinite(frameIndex)
                                     ? allFrames[frameIndex - 1]
                                     : null;
                                   const timestamp = Number.isFinite(referencedFrame?.timestamp)
@@ -7095,20 +7157,35 @@ const exportVideo = async () => {
                                     narrativeResult.missingMoments,
                                     narrativeResult.suggestedCuts || []
                                   );
-                                  if (seekAnalysis && seekAnalysis.suggestedCuts) {
-                                    const newMoments = seekAnalysis.suggestedCuts.map(cut => ({
-                                      timestamp: cut.startTime,
-                                      importance: cut.importance || 0.7,
-                                      description: cut.reason,
-                                      source: 'seek'
-                                    }));
+                                  const newMoments = normalizeSupplementalMoments(seekAnalysis, newFrames);
+                                  if (newMoments.length > 0) {
                                     allMoments = allMoments.concat(enrichMomentsWithZones(newMoments, zones));
                                   }
                                 }
                               }
 
+                              // Deep also gets motion candidates so it is not less complete than Story.
+                              let videoAnalysisResult = videoAnalysis;
+                              if (!videoAnalysisResult || videoAnalysisResult.length === 0) {
+                                videoAnalysisResult = await analyzeVideo(video, motionSensitivity);
+                                setVideoAnalysis(videoAnalysisResult);
+                              }
+
+                              const motionMoments = videoAnalysisResult
+                                .filter(m => m.motionScore > 0.7 || m.sceneChange)
+                                .map(m => ({
+                                  timestamp: m.time,
+                                  importance: m.motionScore * 0.55,
+                                  description: m.sceneChange ? 'Scene change (motion)' : 'High motion',
+                                  source: 'motion',
+                                  category: m.sceneChange ? 'scene_change' : 'motion',
+                                  zone: zones.find(z => m.time >= z.start && m.time <= z.end)?.name || 'unknown'
+                                }));
+
+                              allMoments = allMoments.concat(motionMoments);
+
                               // Final selection with pro quality
-                              const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video');
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video', { mode: 'pro' });
 
                               if (!finalSelection || !finalSelection.selectedClips) {
                                 showToast('Clip selection failed — please try again', 'error');

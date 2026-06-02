@@ -39,3 +39,7 @@ in progress
 - Mobile anchor touches now suppress the parent timeline's create-clip double-tap handler, preventing the post-delete "Clip overlaps" warning.
 - Corrected mobile anchor delete to match desktop more closely: touch-start selects/prepares drag, touch-end detects the double tap on the anchor body, and handle touches stay reserved for resizing.
 - Build passes. The dev server is running on port 3002 with LAN binding for phone testing.
+- Pushed the tested mobile-delete version to GitHub `main` and deployed production on Vercel.
+- Story/Deep foundation pass started: the modes now receive distinct prompt guidance, supplemental missing-moment results are normalized correctly, and Deep includes motion candidates.
+- `npm run build` passes after the Story/Deep foundation patch.
+- Current blocker: neither local dev nor the Vercel project has `ANTHROPIC_API_KEY` configured, so Story/Deep cannot complete API analysis until an AI provider key is added.

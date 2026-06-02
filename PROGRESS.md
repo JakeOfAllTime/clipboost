@@ -103,6 +103,9 @@
 - Corrected the mobile double-tap delete path so it behaves like desktop: anchor touch-start now only selects/prepares drag, while anchor touch-end handles the second tap and deletes the touched clip before the parent timeline can create a new one.
 - Restarted the dev server with LAN binding (`-H 0.0.0.0 -p 3002`) so phone testing can use the Mac Wi-Fi URL instead of `localhost`.
 - Verified `npm run build` passes after the corrected mobile gesture patch; `http://localhost:3002/` and `/api/dev-testclips` return healthy responses, and the in-app browser loads with no captured console errors.
+- Pushed the polished mobile-delete state to GitHub `main` and ran a direct Vercel production deploy. The deployment is ready and aliased to `https://clipboost-loupe-refactor.vercel.app`; `https://clipboost-ten.vercel.app` also returns a fresh 200 after the push.
+- Began the Story/Deep auto-gen foundation pass: Story and Deep now send different guidance into the analysis and final-selection prompts, supplemental search results are normalized from `newMoments`/`suggestedCuts`, and Deep now includes motion candidates so it is not less complete than Story.
+- Verified `npm run build` passes after the Story/Deep foundation patch.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -111,6 +114,7 @@
 - The 100% Music audio fix is code/build/browser-smoke verified; final confirmation still needs a real music export or hands-on playback test with music selected.
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 - The in-app browser viewport did not shrink for a true phone-size screenshot; mobile validation used DOM ordering plus desktop visual checks. The new order is preview, frame rail, Boundary Strip, Prev/Loop/Next, then Timeline.
+- Local and Vercel Story/Deep API checks are blocked because `ANTHROPIC_API_KEY` is not configured locally or in the Vercel project environment.
 
 ## Next Logical Step
 - Have the user feel-test direct Boundary Map dragging, the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
@@ -129,6 +133,8 @@
 - User phone feel-test needed for the slightly shorter Pro timeline anchors.
 - User phone re-test needed specifically for deleting several anchors in a row without seeing the "Clip overlaps" warning.
 - User phone re-test needed at the LAN URL to confirm anchor double-tap delete now matches desktop behavior across several consecutive deletions.
+- Add/configure an AI provider key for production and local dev, then run Story and Deep against the five preferred TestClips videos to compare timeline quality.
+- Continue differentiating Deep as a professional editor mode, including a visible "why this clip" layer and possibly a guided creative brief after the basic audio/video foundation is reliable.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
