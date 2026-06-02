@@ -45,3 +45,6 @@ in progress
 - Anthropic API key is configured locally and in Vercel Production/Development env storage.
 - Story now routes to Haiku 4.5 (`claude-haiku-4-5-20251001`) and Deep routes to Sonnet 4.6 (`claude-sonnet-4-6`).
 - Local API smoke tests pass for both Story and Deep. Next validation is full video runs against the preferred TestClips videos.
+- Added visible AI reasoning: selected generated clips show a "Why this clip" panel, and wider clips in the preview strip show compact reason chips.
+- Added an optional Deep brief field for creator direction; it feeds Deep prompt guidance and targeted missing-moment search.
+- Build passes and browser smoke check confirmed the Deep brief appears after selecting Deep.

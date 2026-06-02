@@ -109,6 +109,9 @@
 - Added the Anthropic provider key to local `.env.local` and Vercel Production/Development environment storage.
 - Routed Story analysis to Haiku 4.5 (`claude-haiku-4-5-20251001`) and Deep analysis to Sonnet 4.6 (`claude-sonnet-4-6`), with server-side env overrides.
 - Local API smoke tests now pass for both modes: Story returns through Haiku and Deep returns through Sonnet.
+- Added a visible "Why this clip" layer for AI-generated clips using each anchor's `_narrativeReason`, including a selected-clip explanation panel and compact reason chips on wider clips in the preview strip.
+- Added an optional Deep brief field that feeds creator direction into Deep frame analysis and final clip selection, and also seeds targeted missing-moment search.
+- Verified `npm run build` passes after the Why/Deep brief patch; browser-checked that the Deep brief appears after loading a dev test clip and selecting Deep, with no captured console errors.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -136,8 +139,8 @@
 - User phone feel-test needed for the slightly shorter Pro timeline anchors.
 - User phone re-test needed specifically for deleting several anchors in a row without seeing the "Clip overlaps" warning.
 - User phone re-test needed at the LAN URL to confirm anchor double-tap delete now matches desktop behavior across several consecutive deletions.
-- Run Story and Deep against the five preferred TestClips videos to compare timeline quality now that the API key and model routing work.
-- Continue differentiating Deep as a professional editor mode, including a visible "why this clip" layer and possibly a guided creative brief after the basic audio/video foundation is reliable.
+- Run Story and Deep against the five preferred TestClips videos to compare timeline quality now that the API key, model routing, visible reasons, and Deep brief work.
+- Continue differentiating Deep as a professional editor mode, including better brief interpretation, duplicate avoidance, and payoff protection.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?

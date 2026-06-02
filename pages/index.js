@@ -198,6 +198,7 @@ const ReelForge = () => {
   // Auto-generate V3 state
   const [autoGenMode, setAutoGenMode] = useState('quick'); // 'quick' | 'smart' | 'pro'
   const [beatSyncTarget, setBeatSyncTarget] = useState('none'); // 'none' | 'music' | 'original'
+  const [deepBrief, setDeepBrief] = useState('');
   const [userApiKey, setUserApiKey] = useState('');
   const [devTestClips, setDevTestClips] = useState([]);
   const [devTestMusic, setDevTestMusic] = useState([]);
@@ -1393,13 +1394,15 @@ const analyzeNarrativeComprehensive = async (allFrames, targetDuration, zones, o
 
   try {
     const mode = options.mode === 'pro' ? 'deep' : 'story';
+    const directorBrief = typeof options.brief === 'string' ? options.brief.trim() : '';
     const modeGuidance = mode === 'deep'
       ? `DEEP MODE: Act like a professional short-form editor making a deliberate cut for a creator.
 - Identify more candidate moments than you think you need, then rank them.
 - Watch for hook, development, contrast, payoff, reaction, and final reveal.
 - Penalize repetitive-looking clips even if they have motion.
 - Prefer clips that would make a viewer understand why this content matters.
-- Treat missing finale/payoff/reaction moments as important search targets.`
+- Treat missing finale/payoff/reaction moments as important search targets.
+${directorBrief ? `\nCREATOR BRIEF:\n${directorBrief}\nUse this as editorial direction. Specifically look for requested people, objects, actions, steps, or payoff moments when they appear in the sampled frames.` : ''}`
       : `STORY MODE: Build a clear, balanced visual story from the strongest moments.
 - Prioritize moments that communicate what happened without requiring much explanation.
 - Keep the result accessible for casual creators who want a useful first draft.
@@ -2043,13 +2046,15 @@ const selectFinalClips = async (allMoments, targetDuration, storyType, options =
 
   try {
     const mode = options.mode === 'pro' ? 'deep' : 'story';
+    const directorBrief = typeof options.brief === 'string' ? options.brief.trim() : '';
     const selectionGuidance = mode === 'deep'
       ? `DEEP SELECTION MODE:
 - Think like a professional editor cutting for retention and creator intent.
 - Choose a strong first clip even if it is not chronological, then keep the final output chronological unless a later hook is clearly better.
 - Avoid near-duplicate actions, repeated angles, and filler transitions.
 - Include at least one payoff/reveal/reaction if such a moment exists.
-- Use narrativeRole honestly: hook, build, climax, payoff.`
+- Use narrativeRole honestly: hook, build, climax, payoff.
+${directorBrief ? `\nCREATOR BRIEF:\n${directorBrief}\nWhen matching moments exist, prioritize clips that satisfy this brief without sacrificing watchability.` : ''}`
       : `STORY SELECTION MODE:
 - Create a clear visual story that feels coherent on first watch.
 - Prefer reliable, easy-to-understand moments over subtle ones.
@@ -5846,6 +5851,8 @@ const exportVideo = async () => {
                             const colors = getAnchorColor(idx, isCurrentSegment || isSelectedSegment);
 
                             const thumb = clipThumbnails[segment.anchorId];
+                            const segmentAnchor = anchors.find(a => a.id === segment.anchorId);
+                            const segmentReason = segmentAnchor?._narrativeReason;
                             return (
                               <div
                                 key={idx}
@@ -5862,7 +5869,7 @@ const exportVideo = async () => {
                                       : undefined,
                                   zIndex: isCurrentSegment || isSelectedSegment ? 2 : 1
                                 }}
-                                title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s — click to jump`}
+                                title={`Clip ${idx + 1}: ${segment.duration.toFixed(1)}s${segmentReason ? ` — ${segmentReason}` : ' — click to jump'}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setPlaybackMode('clips');
@@ -5900,6 +5907,11 @@ const exportVideo = async () => {
                                 {segmentWidth > 7 && (
                                   <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-white/70 pointer-events-none leading-none drop-shadow">
                                     {segment.duration.toFixed(1)}s
+                                  </div>
+                                )}
+                                {segmentReason && segmentWidth > 18 && (
+                                  <div className="absolute left-1 right-1 top-1 truncate rounded bg-black/55 px-1.5 py-0.5 text-[9px] font-medium leading-none text-cyan-100/90 pointer-events-none">
+                                    {segmentReason}
                                   </div>
                                 )}
                               </div>
@@ -6674,6 +6686,20 @@ const exportVideo = async () => {
 	                      </>
 	                    )}
 
+	                    {selectedTimelineAnchor?._narrativeReason && (
+	                      <div className="mb-3 rounded-lg border border-cyan-400/20 bg-cyan-500/5 p-3">
+	                        <div className="mb-1 flex items-center justify-between gap-2">
+	                          <div className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">Why this clip</div>
+	                          <div className="font-mono text-[10px] text-slate-500">
+	                            {formatTime(selectedTimelineAnchor.start)} - {formatTime(selectedTimelineAnchor.end)}
+	                          </div>
+	                        </div>
+	                        <div className="text-xs leading-relaxed text-slate-200">
+	                          {selectedTimelineAnchor._narrativeReason}
+	                        </div>
+	                      </div>
+	                    )}
+
 	                    {/* Auto-Generator Controls */}
 	                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-slate-700/60">
 	                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -6779,6 +6805,27 @@ const exportVideo = async () => {
 		                              </label>
 		                            </div>
 		                          </div>
+
+	                          {autoGenMode === 'pro' && (
+	                            <div className="rounded-lg border border-pink-400/25 bg-pink-500/5 p-2">
+	                              <label htmlFor="deep-brief" className="mb-1 block text-xs font-semibold text-pink-200">
+	                                Deep brief
+	                              </label>
+	                              <textarea
+	                                id="deep-brief"
+	                                value={deepBrief}
+	                                onChange={(e) => setDeepBrief(e.target.value)}
+	                                rows={3}
+	                                maxLength={500}
+	                                placeholder="Example: find the food coming out of the oven, each mushroom type, chopping, frying, baking, and the final result."
+	                                className="min-h-20 w-full resize-y rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs leading-relaxed text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-pink-400/60 focus:ring-2 focus:ring-pink-500/20"
+	                              />
+	                              <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+	                                <span>Optional direction for the editor.</span>
+	                                <span>{deepBrief.length}/500</span>
+	                              </div>
+	                            </div>
+	                          )}
 		                        </div>
 
                       {/* Auto-Generate Button */}
@@ -7112,7 +7159,7 @@ const exportVideo = async () => {
                               }
 
                               // Run full narrative analysis with pro settings
-                              const narrativeResult = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'pro' });
+                              const narrativeResult = await analyzeNarrativeComprehensive(allFrames, targetDuration, zones, { mode: 'pro', brief: deepBrief });
 
                               if (!narrativeResult) {
                                 showToast('Narrative analysis failed — please try again', 'error');
@@ -7143,11 +7190,21 @@ const exportVideo = async () => {
                               let allMoments = enrichMomentsWithZones(narrativeResult.keyMoments || [], zones);
 
                               // Pro mode: More aggressive seeking
-                              if (narrativeResult.missingMoments && narrativeResult.missingMoments.length > 0) {
+                              const deepBriefTargets = deepBrief
+                                .split(/[.,;\n]+/)
+                                .map(part => part.trim())
+                                .filter(part => part.length > 6)
+                                .slice(0, 4);
+                              const deepMissingMoments = [
+                                ...(narrativeResult.missingMoments || []),
+                                ...deepBriefTargets
+                              ];
+
+                              if (deepMissingMoments.length > 0) {
                                 const { newFrames } = await seekMissingMoments(
                                   video,
                                   duration,
-                                  narrativeResult.missingMoments,
+                                  deepMissingMoments,
                                   allFrames,
                                   zones
                                 );
@@ -7158,7 +7215,7 @@ const exportVideo = async () => {
                                     newFrames,
                                     targetDuration,
                                     zones,
-                                    narrativeResult.missingMoments,
+                                    deepMissingMoments,
                                     narrativeResult.suggestedCuts || [],
                                     { mode: 'pro' }
                                   );
@@ -7190,7 +7247,7 @@ const exportVideo = async () => {
                               allMoments = allMoments.concat(motionMoments);
 
                               // Final selection with pro quality
-                              const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video', { mode: 'pro' });
+                              const finalSelection = await selectFinalClips(allMoments, targetDuration, narrativeResult.storyType || 'video', { mode: 'pro', brief: deepBrief });
 
                               if (!finalSelection || !finalSelection.selectedClips) {
                                 showToast('Clip selection failed — please try again', 'error');
