@@ -42,4 +42,6 @@ in progress
 - Pushed the tested mobile-delete version to GitHub `main` and deployed production on Vercel.
 - Story/Deep foundation pass started: the modes now receive distinct prompt guidance, supplemental missing-moment results are normalized correctly, and Deep includes motion candidates.
 - `npm run build` passes after the Story/Deep foundation patch.
-- Current blocker: neither local dev nor the Vercel project has `ANTHROPIC_API_KEY` configured, so Story/Deep cannot complete API analysis until an AI provider key is added.
+- Anthropic API key is configured locally and in Vercel Production/Development env storage.
+- Story now routes to Haiku 4.5 (`claude-haiku-4-5-20251001`) and Deep routes to Sonnet 4.6 (`claude-sonnet-4-6`).
+- Local API smoke tests pass for both Story and Deep. Next validation is full video runs against the preferred TestClips videos.

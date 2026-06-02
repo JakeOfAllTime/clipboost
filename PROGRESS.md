@@ -106,6 +106,9 @@
 - Pushed the polished mobile-delete state to GitHub `main` and ran a direct Vercel production deploy. The deployment is ready and aliased to `https://clipboost-loupe-refactor.vercel.app`; `https://clipboost-ten.vercel.app` also returns a fresh 200 after the push.
 - Began the Story/Deep auto-gen foundation pass: Story and Deep now send different guidance into the analysis and final-selection prompts, supplemental search results are normalized from `newMoments`/`suggestedCuts`, and Deep now includes motion candidates so it is not less complete than Story.
 - Verified `npm run build` passes after the Story/Deep foundation patch.
+- Added the Anthropic provider key to local `.env.local` and Vercel Production/Development environment storage.
+- Routed Story analysis to Haiku 4.5 (`claude-haiku-4-5-20251001`) and Deep analysis to Sonnet 4.6 (`claude-sonnet-4-6`), with server-side env overrides.
+- Local API smoke tests now pass for both modes: Story returns through Haiku and Deep returns through Sonnet.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -114,7 +117,7 @@
 - The 100% Music audio fix is code/build/browser-smoke verified; final confirmation still needs a real music export or hands-on playback test with music selected.
 - The Play Clips flash fix is code/build/browser-smoke verified, but still needs human visual confirmation because the issue is a one-frame perceptual artifact.
 - The in-app browser viewport did not shrink for a true phone-size screenshot; mobile validation used DOM ordering plus desktop visual checks. The new order is preview, frame rail, Boundary Strip, Prev/Loop/Next, then Timeline.
-- Local and Vercel Story/Deep API checks are blocked because `ANTHROPIC_API_KEY` is not configured locally or in the Vercel project environment.
+- Vercel Preview env could not be configured because the Vercel project reports no connected Git repository for preview branch scoping; Production and Development envs are configured.
 
 ## Next Logical Step
 - Have the user feel-test direct Boundary Map dragging, the spring nudge puck, local clip arrows, and timeline magnifier on desktop/mobile.
@@ -133,7 +136,7 @@
 - User phone feel-test needed for the slightly shorter Pro timeline anchors.
 - User phone re-test needed specifically for deleting several anchors in a row without seeing the "Clip overlaps" warning.
 - User phone re-test needed at the LAN URL to confirm anchor double-tap delete now matches desktop behavior across several consecutive deletions.
-- Add/configure an AI provider key for production and local dev, then run Story and Deep against the five preferred TestClips videos to compare timeline quality.
+- Run Story and Deep against the five preferred TestClips videos to compare timeline quality now that the API key and model routing work.
 - Continue differentiating Deep as a professional editor mode, including a visible "why this clip" layer and possibly a guided creative brief after the basic audio/video foundation is reliable.
 
 ## Open Questions

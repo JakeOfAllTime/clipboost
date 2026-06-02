@@ -1622,7 +1622,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
           ...imagePayload
         ]
       }],
-      videoType: 'visual-only'
+      videoType: 'visual-only',
+      analysisMode: mode
     };
     const payloadSize = JSON.stringify(fullPayload).length;
     console.log(`📦 API payload: ${(payloadSize / (1024 * 1024)).toFixed(2)}MB (${allFrames.length} frames)`);
@@ -1781,7 +1782,7 @@ const seekMissingMoments = async (videoFile, videoDuration, missingMoments, exis
 };
 
 // PHASE 4: Focused analysis of new frames only (avoids re-sending all 100+ frames)
-const analyzeNewFrames = async (originalFrames, newFrames, targetDuration, zones, missingMoments, originalCuts) => {
+const analyzeNewFrames = async (originalFrames, newFrames, targetDuration, zones, missingMoments, originalCuts, options = {}) => {
   console.log(`🔄 PHASE 4: Analyzing ${newFrames.length} new frames for missing moments...`);
 
   // Only analyze NEW frames to avoid API limits
@@ -1959,7 +1960,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
             }))
           ]
         }],
-        videoType: 'supplemental-analysis'
+        videoType: 'supplemental-analysis',
+        analysisMode: options.mode === 'pro' ? 'deep' : 'story'
       })
     });
 
@@ -2120,7 +2122,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
           role: "user",
           content: [{ type: "text", text: promptText }]
         }],
-        videoType: 'final-clip-selection'
+        videoType: 'final-clip-selection',
+        analysisMode: mode
       })
     });
 
@@ -7020,7 +7023,8 @@ const exportVideo = async () => {
                                     targetDuration,
                                     zones,
                                     initialAnalysis.missingMoments,
-                                    initialAnalysis.suggestedCuts || []
+                                    initialAnalysis.suggestedCuts || [],
+                                    { mode: 'story' }
                                   );
                                   const newMoments = normalizeSupplementalMoments(seekAnalysis, newFrames);
                                   if (newMoments.length > 0) {
@@ -7155,7 +7159,8 @@ const exportVideo = async () => {
                                     targetDuration,
                                     zones,
                                     narrativeResult.missingMoments,
-                                    narrativeResult.suggestedCuts || []
+                                    narrativeResult.suggestedCuts || [],
+                                    { mode: 'pro' }
                                   );
                                   const newMoments = normalizeSupplementalMoments(seekAnalysis, newFrames);
                                   if (newMoments.length > 0) {

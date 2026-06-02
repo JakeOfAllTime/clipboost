@@ -18,6 +18,9 @@ const RATE_STATE = globalThis.__clipboost_rate_state__ || (globalThis.__clipboos
 const BUCKET_SIZE = 10;           // max burst
 const REFILL_PER_MS = 1 / 30_000; // one token every 30s
 
+const STORY_MODEL = process.env.ANTHROPIC_STORY_MODEL || 'claude-haiku-4-5-20251001';
+const DEEP_MODEL = process.env.ANTHROPIC_DEEP_MODEL || 'claude-sonnet-4-6';
+
 function clientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0].trim();
@@ -49,7 +52,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, videoType } = req.body;
+    const { messages, videoType, analysisMode } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Invalid request format.' });
@@ -57,7 +60,9 @@ export default async function handler(req, res) {
 
     const payloadSize = JSON.stringify(req.body).length;
     const payloadMB = (payloadSize / (1024 * 1024)).toFixed(2);
-    console.log(`📸 API: Analyzing video [${videoType || 'visual-only'}]`);
+    const model = analysisMode === 'deep' || analysisMode === 'pro' ? DEEP_MODEL : STORY_MODEL;
+    console.log(`📸 API: Analyzing video [${videoType || 'visual-only'}:${analysisMode || 'story'}]`);
+    console.log(`🧠 API model: ${model}`);
     console.log(`📦 Payload size: ${payloadMB}MB (${payloadSize} bytes)`);
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -74,7 +79,7 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model,
         max_tokens: 2000,
         temperature: 0.5,
         messages
