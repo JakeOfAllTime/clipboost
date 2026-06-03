@@ -35,7 +35,7 @@ const sortPreferredFirst = (items, preferredNames) => {
 };
 
 export default async function handler(req, res) {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.VERCEL) {
     return res.status(404).json({ error: 'Not available in production' });
   }
 

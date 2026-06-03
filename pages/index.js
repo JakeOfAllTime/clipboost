@@ -4438,10 +4438,10 @@ const refineWithSpeechPauses = (cuts, pauses) => {
   // AUDIT P1 #5: the loupe is undiscoverable from the main timeline. Surface a one-time
   // toast the first time the user selects an anchor so they learn the loupe strip is live.
   useEffect(() => {
-    if (!selectedAnchor || hasSeenLoupeHint) return;
+    if (workspaceMode !== 'pro' || !selectedAnchor || hasSeenLoupeHint) return;
     showToast('Loupe strip active — drag the green/red handles for frame-accurate edits', 'info');
     setHasSeenLoupeHint(true);
-  }, [selectedAnchor, hasSeenLoupeHint, showToast]);
+  }, [workspaceMode, selectedAnchor, hasSeenLoupeHint, showToast]);
 
   // Phase 5B: Drive card video playback — plays & loops the clip segment in the mini player.
   // AUDIT P0 #4: previously, rapid anchor switching stacked play()/seeked listeners, and
@@ -5038,7 +5038,7 @@ const exportVideo = async () => {
 	          }
 	        </p>
 	      </div>
-	      <div className="grid grid-cols-3 gap-1 mb-2 px-2 sm:grid-cols-3 sm:gap-2 sm:mb-6 sm:px-0">
+	      <div className={`${video ? 'hidden' : 'grid'} grid-cols-3 gap-1 mb-2 px-2 sm:grid-cols-3 sm:gap-2 sm:mb-6 sm:px-0`}>
 	        {workflowSteps.map((step, index) => (
 	          <div
 	            key={step.label}
@@ -5198,20 +5198,47 @@ const exportVideo = async () => {
 	                <div className="mb-2 sm:mb-4 rounded-xl border border-slate-700/60 bg-slate-950/30 p-2 sm:p-3">
 	                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 	                    <div>
-	                      <div className="text-sm font-bold text-white">Workspace</div>
+	                      <div className="text-sm font-bold text-white">Setup</div>
 	                      <div className="text-xs text-slate-400">
-	                        {isProMode ? 'Exact timeline tools are visible.' : 'Simple view keeps only the main editing loop in front.'}
+	                        {video.name} • {formatTime(duration)}
 	                      </div>
-	                      <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-cyan-400/50 hover:text-white">
-	                        <Upload size={12} />
-	                        Change video
-	                        <input
-	                          type="file"
-	                          accept="video/*"
-	                          onChange={handleVideoUpload}
-	                          className="hidden"
-	                        />
-	                      </label>
+	                      <div className="mt-2 flex flex-wrap gap-2">
+	                        <label className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-cyan-400/50 hover:text-white">
+	                          <Upload size={12} />
+	                          Change video
+	                          <input
+	                            type="file"
+	                            accept="video/*"
+	                            onChange={handleVideoUpload}
+	                            className="hidden"
+	                          />
+	                        </label>
+	                        {!music ? (
+	                          <label className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-green-400/50 hover:text-white">
+	                            🎵 Add music
+	                            <input
+	                              type="file"
+	                              accept="audio/*"
+	                              onChange={handleMusicUpload}
+	                              className="hidden"
+	                            />
+	                          </label>
+	                        ) : (
+	                          <button
+	                            type="button"
+	                            onClick={() => {
+	                              setMusic(null);
+	                              setMusicUrl(null);
+	                              setMusicAnalysis(null);
+	                              if (beatSyncTarget === 'music') setBeatSyncTarget('none');
+	                            }}
+	                            className="inline-flex min-h-9 max-w-[180px] items-center gap-1.5 truncate rounded-md border border-green-400/30 bg-green-500/10 px-2.5 py-1.5 text-xs font-semibold text-green-100 transition hover:bg-green-500/20"
+	                            title={music.name}
+	                          >
+	                            🎵 <span className="truncate">{music.name}</span> <X size={12} />
+	                          </button>
+	                        )}
+	                      </div>
 	                    </div>
 	                    <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-900/80 p-1 text-sm">
 	                      <button
@@ -5616,14 +5643,14 @@ const exportVideo = async () => {
 
                 {/* Video Editor - Unified Panel */}
                 <div
-                  className={`panel rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full border-0 sm:border ${
+                  className={`panel flex flex-col gap-1 rounded-none sm:rounded-xl p-0 sm:p-6 transition-all w-full border-0 sm:border ${
                     playbackMode === 'clips'
                       ? 'ring-0 sm:ring-2 ring-blue-500/50 shadow-none sm:shadow-[0_0_20px_rgba(59,130,246,0.3)]'
                       : 'ring-0 sm:ring-2 ring-cyan-500/50 shadow-none sm:shadow-[0_0_20px_rgba(0,212,255,0.3)]'
                   }`}
                 >
                   {/* Video Player Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
+                  <div className="order-2 bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3 relative group w-full">
                     {/* Dual-video Play Clips system — see PROJECT_PRINCIPLES.md
                         ("Play Clips transition: dual-video hot swap").
@@ -5775,13 +5802,9 @@ const exportVideo = async () => {
                   {/* End Video Player Section */}
 
 	                  {/* Contextual Hints - Progressive Disclosure */}
-	                  {!hasCreatedFirstClip && anchors.length === 0 && (
+	                  {isProMode && !hasCreatedFirstClip && anchors.length === 0 && (
 	                    <div className="hint-toast mb-2">
-	                      {isProMode ? (
-	                        <><strong>Pro tip:</strong> Double-tap the timeline below to mark exact moments yourself</>
-	                      ) : (
-	                        <><strong>Get started:</strong> create starter clips, then preview and adjust only what needs it</>
-	                      )}
+	                      <><strong>Pro tip:</strong> Double-tap the timeline below to mark exact moments yourself</>
 	                    </div>
 	                  )}
 	                  {isProMode && anchors.length > 0 && anchors.length <= 3 && (!hasSeenDeleteHint || !hasSeenPrecisionHint) && (
@@ -5793,7 +5816,7 @@ const exportVideo = async () => {
                   )}
 
                   {/* Playback Controls + Clips Preview Section */}
-                  <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
+                  <div className="order-3 bg-slate-900/30 rounded-lg p-1 sm:p-3 mb-1 sm:mb-4">
                     {/* Controls Row - always visible */}
                     {anchors.length > 0 ? (
                       <div className="flex items-center justify-center gap-2 mb-3">
@@ -5981,7 +6004,7 @@ const exportVideo = async () => {
                   </div>
                   {/* End Playback Controls + Clips Preview Section */}
 
-	                  {isProMode ? (
+	                  {(
 	                    <>
 	                  {/* ═══ Loupe Strip — always visible, no layout pop ═══ */}
 	                  {(() => {
@@ -6029,7 +6052,7 @@ const exportVideo = async () => {
 	                    };
 
 	                    return (
-	                      <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-950/30 p-2 sm:p-3">
+	                      <div className={`order-5 mt-2 rounded-xl border border-slate-700/60 bg-slate-950/30 p-2 sm:p-3 ${isProMode ? '' : 'hidden'}`}>
 	                        <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 	                          <div>
 	                            <div className="text-sm font-bold text-white">Precision Trimmer</div>
@@ -6340,7 +6363,7 @@ const exportVideo = async () => {
                   {/* ═══ End Loupe Strip ═══ */}
 
                   {/* Unified Layered Timeline - Option B */}
-                  <div className="mb-1 sm:mb-4">
+                  <div className="order-4 mb-1 sm:mb-4">
                     {/* Unified Timeline Container - Layered Design (Option B) */}
                     <div className="bg-slate-900/30 rounded-lg p-1 sm:p-3">
                       <div className="flex items-center justify-between gap-3 mb-3">
@@ -6634,22 +6657,10 @@ const exportVideo = async () => {
                   </div>
 	                  {/* End Timeline Section */}
 	                    </>
-	                  ) : (
-	                    <div className="mb-1 sm:mb-4 rounded-lg border border-slate-700/60 bg-slate-900/30 p-3 text-center">
-	                      <div className="text-sm font-semibold text-white">Need exact cuts?</div>
-	                      <div className="mt-1 text-xs text-slate-400">Switch to Pro tools for manual timeline clips, handle dragging, loupe trimming, undo history, and source/music controls.</div>
-	                      <button
-	                        type="button"
-	                        onClick={() => setWorkspaceMode('pro')}
-	                        className="mt-3 min-h-11 rounded-lg border border-pink-400/40 bg-pink-500/10 px-4 py-2 text-sm font-semibold text-pink-200 transition hover:bg-pink-500/20"
-	                      >
-	                        Open Pro Tools
-	                      </button>
-	                    </div>
 	                  )}
 
 	                  {/* Action Toolbar Section */}
-	                  <div className="bg-slate-900/30 rounded-lg p-2 sm:p-3">
+	                  <div className="order-1 bg-slate-900/30 rounded-lg p-2 sm:p-3">
 	                    {isProMode && (
 	                      <>
 	                    {/* Toolbar Buttons Row */}
@@ -6715,7 +6726,7 @@ const exportVideo = async () => {
 	                      </>
 	                    )}
 
-	                    {selectedTimelineAnchor?._narrativeReason && (
+	                    {isProMode && selectedTimelineAnchor?._narrativeReason && (
 	                      <div className="mb-3 rounded-lg border border-cyan-400/20 bg-cyan-500/5 p-3">
 	                        <div className="mb-1 flex items-center justify-between gap-2">
 	                          <div className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">Why this clip</div>

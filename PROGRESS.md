@@ -117,6 +117,12 @@
 - Started a mobile learner-friction pass after user/brother feedback: compacted the workflow status strip on mobile so it reads less like three large clickable cards, hardened Play Clips startup to force clips mode and seek from the first generated clip, allowed mobile double-tap delete from anchor handles when the tap is not a drag, and added visible Deep progress phases.
 - Verified `npm run build` passes after the mobile learner-friction patch.
 - Browser smoke-tested with `freecompress-videoplayback.mp4`: loaded via dev harness, generated starter clips, pressed Play Clips, and saw no captured browser errors.
+- Created a separate experimental folder at `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` for a mobile-first simple workbench without changing the current refactor folder.
+- Reworked the loaded-video Simple screen in the experiment so the first visible stack is Setup (change video/add music), Make Clips, main player, Play Clips/clip strip, then the main anchor timeline with zoom still available.
+- Kept Precision Trimmer, loupe-specific hints, and the AI "Why this clip" panel behind Pro tools in the experiment so Simple feels calmer.
+- Hid the three-step workflow cards after a video is loaded in the experiment because they looked like large clickable actions on mobile.
+- Adjusted the dev-only test clip API in the experiment to disable by Vercel deployment rather than `NODE_ENV`, keeping localhost test clips available after local builds.
+- Verified `npm run build` passes in the experimental folder and restarted the experimental dev server on `localhost:3002`.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -148,6 +154,7 @@
 - Continue differentiating Deep as a professional editor mode, including better brief interpretation, duplicate avoidance, and payoff protection.
 - Next Story/Deep pass can proceed after the Deep brief keyboard fix is pushed/deployed.
 - Next UX strategy pass should rethink mobile as a calmer guided flow: fewer persistent panels, one visible "draft/edit/export" path, and Pro controls as focused drawers rather than always-present stacked tools.
+- Have the user feel-test `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` on desktop and phone as a possible new Simple-mode direction before merging any of it back to the main refactor.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
