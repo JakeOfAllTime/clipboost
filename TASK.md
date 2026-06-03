@@ -2,7 +2,7 @@
 Publish the mobile-simple workbench experiment as the easier-to-use current version.
 
 ## Status
-in progress
+done
 
 ## Notes
 - Working copy: `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-loupe-refactor`
@@ -52,3 +52,4 @@ in progress
 - Applied a small mobile learner-friction pass: compacted the workflow strip, hardened Play Clips startup into clips mode, made anchor-handle double taps count for delete when not dragged, and added visible Deep progress phases.
 - Forked this work into the separate `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` experiment and reshaped Simple mode into a mobile-first workbench: setup controls, Make Clips, main player, Play Clips/clip strip, then the zoomable anchor timeline; Pro keeps the extra precision/why/loupe surfaces.
 - User approved the mobile-simple experiment as easier to use; pushing it to GitHub `main` and deploying production on Vercel next.
+- Published commit `3d83566` to GitHub `main` and deployed production at `https://clipboost-loupe-refactor.vercel.app`.
