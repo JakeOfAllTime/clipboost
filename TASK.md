@@ -1,5 +1,5 @@
 ## Current Task
-Duplicate the existing Clipboost/ReelForge folder and begin a UX-focused refactor that makes the editor easier for amateurs to use.
+Publish the mobile-simple workbench experiment as the easier-to-use current version.
 
 ## Status
 in progress
@@ -51,3 +51,4 @@ in progress
 - Fixed the Deep brief keyboard conflict: global Space/playback shortcuts now ignore text-editing fields, and browser testing confirmed spaces type normally without toggling video playback.
 - Applied a small mobile learner-friction pass: compacted the workflow strip, hardened Play Clips startup into clips mode, made anchor-handle double taps count for delete when not dragged, and added visible Deep progress phases.
 - Forked this work into the separate `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` experiment and reshaped Simple mode into a mobile-first workbench: setup controls, Make Clips, main player, Play Clips/clip strip, then the zoomable anchor timeline; Pro keeps the extra precision/why/loupe surfaces.
+- User approved the mobile-simple experiment as easier to use; pushing it to GitHub `main` and deploying production on Vercel next.

@@ -123,6 +123,7 @@
 - Hid the three-step workflow cards after a video is loaded in the experiment because they looked like large clickable actions on mobile.
 - Adjusted the dev-only test clip API in the experiment to disable by Vercel deployment rather than `NODE_ENV`, keeping localhost test clips available after local builds.
 - Verified `npm run build` passes in the experimental folder and restarted the experimental dev server on `localhost:3002`.
+- User approved the mobile-simple experiment as the version to push and deploy.
 
 ## Attempted But Failed
 - Tried to upload a local test video through the in-app browser automation, but the available browser API does not expose file selection for hidden file inputs.
@@ -154,7 +155,7 @@
 - Continue differentiating Deep as a professional editor mode, including better brief interpretation, duplicate avoidance, and payoff protection.
 - Next Story/Deep pass can proceed after the Deep brief keyboard fix is pushed/deployed.
 - Next UX strategy pass should rethink mobile as a calmer guided flow: fewer persistent panels, one visible "draft/edit/export" path, and Pro controls as focused drawers rather than always-present stacked tools.
-- Have the user feel-test `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` on desktop and phone as a possible new Simple-mode direction before merging any of it back to the main refactor.
+- Push `/Users/littlemac/Desktop/Clipboost Refactor Work/clipboost-mobile-simple` to GitHub `main`, deploy production on Vercel, and verify the live URL.
 
 ## Open Questions
 - Should the default automatic mode stay Fast/free, or should Story become the recommended default for users who expect the AI experience?
